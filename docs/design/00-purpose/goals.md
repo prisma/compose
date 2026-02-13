@@ -5,6 +5,7 @@ This document captures the **high-level aims** of MakerKit as currently understo
 ## Project goals
 
 - **TypeScript-first applications**: Enable application developers to write applications in TypeScript for the Prisma Platform.
+- **React framework compatible**: Work well when embedded into existing React frameworks (Next.js, TanStack Start, etc.) via helper libraries (like Convex), so teams can adopt MakerKit without replacing their UI stack.
 - **Code-first topology**: Let the structure of the TypeScript application define the service topology and allow MakerKit to infer infrastructure requirements (IaC) from that structure.
 - **Control/execution split**: Support a control-plane mode (inspect/plan/emit/provision) and an execution-plane mode (DI/graph satisfaction/run entrypoints).
 - **Agent-friendly by design**: Make applications easy for AI agents to scaffold and evolve by using explicit, statically analyzable primitives and predictable composition points.
