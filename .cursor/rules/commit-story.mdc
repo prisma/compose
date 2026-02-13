@@ -1,0 +1,12 @@
+---
+description: Keep commits small, intentional, and reviewable
+alwaysApply: true
+---
+
+# Commit Storytelling
+
+- Commit continuously in small, logical increments.
+- Make each commit easy to review in isolation.
+- Write commit messages that explain intent and rationale, not just the diff.
+- Never use placeholder commit messages like "WIP".
+- Structure the full commit sequence so it tells a coherent, end-to-end story.
