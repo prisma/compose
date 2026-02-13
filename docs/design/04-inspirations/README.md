@@ -15,7 +15,7 @@ Each document should answer:
 
 ## Current inspirations
 
-- `tanstack-db.md`
+- `TanStack/` (research library + MakerKit takeaways)
 - `cloudflare.md`
 - `cloudflare-wrangler.md`
 - `convex.md`
