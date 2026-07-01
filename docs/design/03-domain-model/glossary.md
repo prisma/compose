@@ -30,13 +30,22 @@ distinct type, with composition behaviours a Service doesn't have.
 - **Nesting.** A wrapped node's Inputs/Outputs connect either to the parent Hex's
   Inputs/Outputs or to a sibling (Service, Resource, or Hex) inside the same Hex; a
   wrapped node reaches outside the Hex only through the parent's boundary.
+- **Composite, not atomic.** Where a Service is a leaf (opaque), a Hex is
+  transparent: MakerKit sees its ports *and* the internal topology it owns. The Hex
+  decides how the Services, Resources, and Hexes it wraps connect; its knowledge
+  ends at its boundary.
+- **The implicit root Hex.** The whole system is itself a Hex — the implicit root —
+  that owns the top-level topology: the Hex-to-Hex wiring and any shared Resources.
+  A shared database, for instance, is owned by the root Hex, which wires it to each
+  consumer's Data Input (and owns its migration — see Aggregate Contract).
 
 ### Service
 
 A **provisioned compute unit that runs your code** — an HTTP API, a web app, a
-worker. The atomic *runnable*. Lowers to a compute unit on the chosen deployment
-target — Prisma Compute on Prisma Cloud, or another target's equivalent (Alchemy
-calls it a Platform).
+worker. It exposes typed **Inputs** and **Outputs** — the same ports a Hex has —
+but it is **atomic**: MakerKit sees those ports and nothing inside. Lowers to a
+compute unit on the chosen deployment target — Prisma Compute on Prisma Cloud, or
+another target's equivalent (Alchemy calls it a Platform).
 
 ### Resource
 
@@ -89,8 +98,10 @@ Configuration, not a node.
 ## Connections
 
 A **connection** is an edge that wires one node's **Output** to another node's
-**Input**. Every node — Hex or Resource — can have Inputs and Outputs. There are
-two families of connection.
+**Input**. Every node — Hex, Service, or Resource — carries typed Inputs and
+Outputs, and the wiring rule is uniform at every level: an Input must be connected
+to something that satisfies it — a sibling's Output, a Resource's Output, or the
+enclosing Hex's boundary Input. There are two families of connection.
 
 ### Input
 
@@ -101,7 +112,7 @@ Data Output).
 ### Output
 
 A connection point where a node **provides** something. Communication Outputs are
-served by Hexes; Data Outputs are served by Resources.
+served by Services and Hexes; Data Outputs are served by Resources.
 
 ### Communication connection — style: request/response | stream
 
@@ -143,11 +154,20 @@ A **Prisma Next** contract — a deterministic, hashable description of the sche
 slice a Hex may access (identified by its `storageHash`). A Hex's Data Input
 declares the contract it requires; this is also the per-Hex least-privilege scope.
 
+Whoever **owns** a database owns the migration that makes it satisfy the contract —
+*who owns the wiring owns the migration*. A database that belongs to no Hex has no
+migration owner, which is why every database is owned by exactly one Hex (the
+implicit root Hex when it is shared; see Aggregate Contract).
+
 ### Aggregate Contract
 
-When several Hexes share one Postgres, the Resource must satisfy the **aggregate**
-of their contracts. Ownership overlap is **prohibited** (a Prisma Next concept).
-The cloud can verify the live DB satisfies the aggregate via the marker/ledger.
+A database has exactly **one owning Hex** — the Hex it lives inside, or, when it is
+shared, the enclosing **implicit root Hex** that wires it to its consumers. The
+owner owns the schema and the migration; each consumer connects via a Data Input
+declaring the contract slice it needs. The owner's schema must satisfy the
+**aggregate** — the union of every consumer's contract — and consumer slices must
+not overlap (a Prisma Next concept). The cloud can verify the live DB satisfies the
+aggregate via the marker/ledger.
 
 ## Planes & process
 
@@ -181,9 +201,10 @@ Service.
 - **Connection-method taxonomy** — only `TCP` and `HTTP` for now. "Pooled" is a
   URL param on TCP, not its own method; WebSocket and others are deferred until we
   work more examples.
-- **Encapsulation as convention** — "one Hex owns a Data Resource" and "a Hex
-  never exposes raw data to peers (front it behind communication)" are
-  *conventions/policy* we may layer on, not enforced primitives.
+- **Encapsulation as convention** — "a Hex never exposes raw data to peers (front
+  it behind communication)" is a *convention/policy* we may layer on, not an
+  enforced primitive. (That every database has exactly one owning Hex is now
+  settled, driven by migration ownership — see Aggregate Contract.)
 - **Input/Output type set** — deliberate and curated, added consciously; not an
   open plugin surface, but not sealed forever either.
 
