@@ -69,7 +69,7 @@ own a private Resource alongside their Service.
 | **Delivery** | Delivery API | Redis (live updates) | `data` (TCP · *delivery* contract); `order-placed` (stream) | `delivery` API (r/r · internal) |
 | **Auth** | Auth API | — | `data` (TCP · *auth* contract) | `auth` API (r/r) |
 
-Plus one shared **Resource**:
+Plus one shared **Resource**, owned by the implicit root Hex (not by any of the four):
 
 | Resource | Output |
 | --- | --- |
@@ -83,10 +83,12 @@ Plus one shared **Resource**:
 - **Both connection styles.** Storefront → Sales and Storefront → Auth are
   **request/response**; Sales → Delivery (*order-placed*) is a **stream**. Not
   everything is a stream.
-- **The shared Postgres is carved by contracts.** Sales, Delivery, and Auth each
-  hold their own Data Contract over the one Postgres. Its Data Output must satisfy
-  the **aggregate** of the three; ownership overlap is prohibited; the cloud can
-  verify it. Shared instance, but every data dependency is a visible edge.
+- **The shared Postgres has one owner — the root Hex.** It isn't owned by Sales,
+  Delivery, or Auth; it's owned by the **implicit root Hex** (the system topology),
+  which wires it to each consumer's Data Input and owns its migration. Sales,
+  Delivery, and Auth each declare only the contract slice they need; the owner's
+  schema satisfies the **aggregate** (the union), and consumer slices don't overlap.
+  Shared instance, single migration owner, every data dependency still a visible edge.
 - **Private Resources stay inside.** The invoices bucket and the Redis are owned
   within their Hex, so they never become cross-Hex edges — only the shared Postgres
   does. Boundaries live at the authoring plane.
@@ -107,8 +109,9 @@ Plus one shared **Resource**:
 ## How it lowers (sketch)
 
 Per `layering.md`: each Service → a Compute service (bundle + manifest, an Alchemy
-Platform); the shared Postgres → one Database (Environment:Database is 1:1) whose
-schema satisfies the aggregate contract; the invoices bucket and the Redis → their
+Platform); the shared Postgres → one Database (Environment:Database is 1:1) owned
+and migrated by the root Hex, its schema satisfying the aggregate contract; the
+invoices bucket and the Redis → their
 own Alchemy Resources (provider create/update/delete), provisioned per environment;
 the `order-placed` stream → a Stream; each request/response edge → an endpoint +
 injected typed client; each Data Input → a contract-scoped connection injected at
