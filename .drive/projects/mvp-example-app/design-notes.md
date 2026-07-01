@@ -47,12 +47,29 @@ against real Prisma Cloud primitives.
   an all-Alchemy path (operator's call).
 - **Use the v1 Postgres provider.** Rejected — see above.
 
+## Slice 1 findings (Compute Management API)
+
+- **The deploy payload carries no manifest and no env.** Create-version takes only
+  `{ portMapping?, skipCodeUpload? }`. So the `{ manifestVersion, entrypoint }`
+  manifest rides *inside* the tar.gz artifact (a bundling concern for Slices 2–3),
+  and **env vars are a separate branch-scoped resource** (`/v1/environment-variables`),
+  not part of deploy. Wiring a Postgres connection string into a service is
+  therefore its own step in Slice 4 (an EnvironmentVariable resource/call), not a
+  `Deployment` prop.
+- **Deploy sequence:** create version → PUT tar.gz to `uploadUrl` → start →
+  promote. Version identity is the version's `id` (not `foundryVersionId`).
+- Modelled as **two resources**: `ComputeService` (stable identity) + `Deployment`
+  (one deploy). `Deployment.delete` is a no-op (versions are torn down with the
+  service).
+
 ## Open questions
 
 - Next.js → Compute artifact bundling (operator has prior art).
 - Direct vs pooled connection string from the Connection resource (currently using
   the connection's top-level `url`).
-- Whether the Compute service+deployment is one resource or two.
+- **Deployment redeploy-on-change** — does a changed artifact produce a new version
+  + promote, or does the resource short-circuit on the existing `versionId`? Under
+  review in Slice 1.
 
 ## References
 

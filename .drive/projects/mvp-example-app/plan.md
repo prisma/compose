@@ -19,6 +19,7 @@ Typechecks, smoke-covered, folded into `Prisma.providers()`.
 
 - **builds on:** the committed Postgres provider.
 - **hands to:** a `Prisma.providers()` bundle that provisions Compute *and* Postgres.
+- **status:** ✅ delivered — implemented (Sonnet) + reviewed (Opus) + reworked; `tsc` clean.
 
 ### Slice 2 — Example workspace + Auth service + build-to-artifact pipeline
 

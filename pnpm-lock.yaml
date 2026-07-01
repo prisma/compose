@@ -81,6 +81,9 @@ importers:
         specifier: 4.0.0-beta.92
         version: 4.0.0-beta.92
     devDependencies:
+      '@types/node':
+        specifier: ^24.10.13
+        version: 24.10.13
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
