@@ -45,7 +45,10 @@ complete class/data-structure design is
 - **Framework-hosted services (Next.js/`use()`), local emulation, runtime name
   resolution** — later projects.
 - **Shipping a DB driver or fixing a JS runtime** — the client factory is app-supplied.
-- **Migrating `examples/storefront-auth`** — it stays on its hand-wired path.
+- **Completely migrating `examples/storefront-auth`** — the migration is deliberately
+  partial: nodes the current primitives can express (the auth service + its Postgres)
+  move to the pack vocabulary; the rest (the Next.js storefront, the auth connection)
+  stays hand-wired, to be filled in by later projects.
 - Production DX polish (versioning, publishing, docs sites).
 
 ## Place in the larger world
@@ -70,22 +73,32 @@ test approach) survive restructuring, its architecture does not.
   bundle lean (no alchemy/effect/prisma/SQL tokens); importing runs nothing;
   `process.env` appears exactly once (the `runHost` default); no Bun/Node coupling in
   any shipped entry — even type-only.
-- **Proven on real Prisma Cloud.** The example deploys, serves a live DB query, and
-  tears down clean — not only unit tests.
-- **The example owns its build**: tsdown (or similar) bundles `main.ts`; the app's
+- **Proven on real Prisma Cloud.** The minimal example deploys, serves a live DB
+  query, and tears down clean — not only unit tests.
+- **The real example app proves the work end to end.** `examples/storefront-auth`
+  is partially migrated: the auth service is authored via the pack vocabulary; the
+  storefront stays hand-wired; the combined system deploys and the storefront→auth
+  round trip works live. A mixed topology (MakerKit-authored nodes beside hand-wired
+  Alchemy resources in one deploy) is therefore a supported shape, not an accident.
+- **The examples own their builds**: tsdown (or similar) bundles `main.ts`; the app's
   script writes `compute.manifest.json` and tars.
 
 ## Transitional-shape constraints
 
-- `examples/storefront-auth` stays deployable on its hand-wired path throughout.
+- `examples/storefront-auth` stays deployable throughout; it ends **partially
+  migrated** — a mixed topology is the accepted end state for this project, with the
+  remaining nodes migrating as later projects deliver their primitives.
 - The rework happens on the existing branch; intermediate commits keep typecheck and
   tests green (the old `makerkit-hello` may be broken mid-rework, but not at any
   PR-ready point).
 
 ## Project-DoD
 
-- [ ] The example above deploys via `lower(service, prismaCloud(...))`, returns a
+- [ ] The minimal example deploys via `lower(service, prismaCloud(...))`, returns a
       live `select 1` over HTTP, and destroys clean — verified against real Prisma Cloud.
+- [ ] `examples/storefront-auth`'s auth service is authored via
+      `@makerkit/prisma-cloud`; the two-service system deploys (storefront still
+      hand-wired) and the live storefront→auth round trip works.
 - [ ] App code contains no `process.env` (service module and `main.ts`); the deploy
       script reads only `PRISMA_WORKSPACE_ID` + artifact inputs.
 - [ ] All five invariant tests pass; `@makerkit/core`'s `package.json` names no
@@ -97,6 +110,12 @@ test approach) survive restructuring, its architecture does not.
 
 ## Open questions
 
+- **Mixed-topology composition** — the partial migration puts a MakerKit-authored
+  service and hand-wired Alchemy resources in one deploy. `lower()` as specced owns a
+  whole Stack; the mixed case needs the lowering exposed in a composable form a
+  hand-written stack can yield alongside its own resources (with `lower()` as the
+  whole-stack wrapper around it). Small `core-model.md` addition — to settle at
+  re-plan, before build.
 - **PR mechanics** — rework in place on PR #6 (retitle when done) vs close and open
   fresh. Default: rework in place; one PR delivers the corrected layer.
 - **Pack package naming** — `packages/prisma-cloud` vs `packages/makerkit-prisma-cloud`
