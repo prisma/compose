@@ -198,6 +198,9 @@ class LowerError extends Error {}
 // hand-wired Alchemy resources in one stack. Runs the same Load → route walk
 // inside the caller's stack effect and returns the root's LoweredNode, whose
 // outputs (e.g. the deployed URL) hand-wired resources may consume.
+// Error channel: LowerError from routing, PLUS whatever a pack lowering fails
+// with (their error type is open) — a mixed-stack caller treats failures as
+// deploy-fatal or inspects; it must not assume LowerError is the only inhabitant.
 function lowering(root: ServiceNode, target: Target, opts: LowerOptions):
   Effect.Effect<LoweredNode, LowerError, unknown>
 ```
@@ -284,7 +287,11 @@ export interface PrismaCloudOptions {
 
 export const prismaCloud = (o: PrismaCloudOptions): Target => ({
   name: "prisma-cloud",
-  providers: () => Prisma.providers(),
+  // One commented cast: prisma-alchemy's providers() satisfies Stack's provider
+  // requirements at runtime but not structurally (pre-existing upstream typings
+  // gap; same error exists untypechecked in the hand-written examples). The cast
+  // lives here in the pack — never in core — until fixed in prisma-alchemy.
+  providers: () => Prisma.providers() as unknown as Layer.Layer<never>,
   lower: {
     // For now the postgres input is served by the project's default database
     // (Compute auto-injects DATABASE_URL), so it provisions nothing itself.
