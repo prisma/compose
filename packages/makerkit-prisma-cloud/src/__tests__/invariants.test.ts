@@ -31,7 +31,8 @@ describe("invariant 2: authoring imports stay lean (core + pack)", () => {
     expect(out.success).toBe(true);
 
     const js = await out.outputs[0].text();
-    expect(js.length).toBeGreaterThan(0);
+    // Positive marker: the probe genuinely bundled the pack's vocabulary.
+    expect(js).toContain("prisma-cloud/postgres");
     for (const token of [
       "alchemy",
       "effect",
@@ -48,8 +49,11 @@ describe("invariant 2: authoring imports stay lean (core + pack)", () => {
 
 describe("invariant 4: the pack reads no ambient environment", () => {
   test("the process-env token appears nowhere in the pack's src", () => {
+    const sources = shippedSources();
+    expect(sources.length).toBeGreaterThan(0);
+
     const token = ["process", "env"].join(".");
-    for (const { file, text } of shippedSources()) {
+    for (const { file, text } of sources) {
       expect({ file, count: text.split(token).length - 1 }).toEqual({ file, count: 0 });
     }
   });
@@ -57,11 +61,27 @@ describe("invariant 4: the pack reads no ambient environment", () => {
 
 describe("invariant 5: no runtime coupling in shipped surface", () => {
   test("src contains no bun or node imports, type-only included", () => {
+    const sources = shippedSources();
+    expect(sources.length).toBeGreaterThan(0);
+
     const importPattern = /(from\s+|import\s*\(\s*|require\s*\(\s*)["'](bun|bun:[^"']*|node:[^"']*)["']/;
-    for (const { file, text } of shippedSources()) {
+    for (const { file, text } of sources) {
       expect({ file, hasRuntimeImport: importPattern.test(text) }).toEqual({
         file,
         hasRuntimeImport: false,
+      });
+    }
+  });
+
+  test("src uses no ambient runtime globals (Bun./Deno.)", () => {
+    const sources = shippedSources();
+    expect(sources.length).toBeGreaterThan(0);
+
+    const globalPattern = /\b(Bun|Deno)\./;
+    for (const { file, text } of sources) {
+      expect({ file, usesRuntimeGlobal: globalPattern.test(text) }).toEqual({
+        file,
+        usesRuntimeGlobal: false,
       });
     }
   });

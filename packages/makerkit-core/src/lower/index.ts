@@ -5,7 +5,9 @@
  * deployment target.
  */
 import * as Alchemy from "alchemy";
+import type { StackServices } from "alchemy";
 import { localState } from "alchemy/State/LocalState";
+import type { State } from "alchemy/State/State";
 import * as Effect from "effect/Effect";
 import type * as Layer from "effect/Layer";
 import { Load, type Graph, type NodeId } from "../graph.ts";
@@ -49,6 +51,8 @@ export interface LowerOptions {
   /** App-built bundle — the artifact is an input, not a product. */
   readonly artifact: { readonly path: string; readonly sha256: string };
   readonly stage?: string;
+  /** Alchemy state store for the stack. Defaults to local state. */
+  readonly state?: Layer.Layer<State, never, StackServices>;
 }
 
 export class LowerError extends Error {
@@ -106,7 +110,7 @@ export function lower(root: ServiceNode, target: Target, opts: LowerOptions) {
 
   return Alchemy.Stack(
     opts.name,
-    { providers: target.providers(), state: localState() },
+    { providers: target.providers(), state: opts.state ?? localState() },
     stackEffect,
   );
 }

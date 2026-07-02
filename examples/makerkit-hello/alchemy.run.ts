@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { lower } from "@makerkit/core/lower";
 import { prismaCloud } from "@makerkit/prisma-cloud/target";
@@ -21,10 +21,13 @@ const artifact = fileURLToPath(new URL("./dist/hello.tar.gz", import.meta.url));
 const workspaceId = process.env.PRISMA_WORKSPACE_ID;
 if (!workspaceId) throw new Error("PRISMA_WORKSPACE_ID is required");
 
+// `alchemy destroy` never uploads the artifact, so it must not require a
+// prior build; deploy always builds first (see the `deploy` script).
+const sha256 = existsSync(artifact)
+  ? createHash("sha256").update(readFileSync(artifact)).digest("hex")
+  : "absent";
+
 export default lower(service, prismaCloud({ workspaceId }), {
   name: "makerkit-hello",
-  artifact: {
-    path: artifact,
-    sha256: createHash("sha256").update(readFileSync(artifact)).digest("hex"),
-  },
+  artifact: { path: artifact, sha256 },
 });

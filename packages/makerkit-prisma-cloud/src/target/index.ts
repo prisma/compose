@@ -9,7 +9,7 @@ import type { Target } from "@makerkit/core/lower";
 
 export interface PrismaCloudOptions {
   workspaceId: string;
-  region?: string;
+  region?: Prisma.ComputeRegion;
 }
 
 export const prismaCloud = (o: PrismaCloudOptions): Target => ({
@@ -38,7 +38,7 @@ export const prismaCloud = (o: PrismaCloudOptions): Target => ({
         const svc = yield* Prisma.ComputeService(`${id}-svc`, {
           projectId: project.id,
           name: id,
-          region: (o.region ?? "us-east-1") as Prisma.ComputeRegion,
+          region: o.region ?? "us-east-1",
         });
         const deploy = yield* Prisma.Deployment(`${id}-deploy`, {
           computeServiceId: svc.id,

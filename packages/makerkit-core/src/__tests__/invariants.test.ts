@@ -53,7 +53,8 @@ describe("invariant 2: the '.' authoring entry bundles lean", () => {
     expect(out.success).toBe(true);
 
     const js = await out.outputs[0].text();
-    expect(js.length).toBeGreaterThan(0);
+    // Positive marker: the probe genuinely bundled core's factories.
+    expect(js).toContain("makerkit:node");
     for (const token of [
       "alchemy",
       "effect",
@@ -70,8 +71,11 @@ describe("invariant 2: the '.' authoring entry bundles lean", () => {
 
 describe("invariant 4: the ambient environment is read exactly once", () => {
   test("the process-env token appears exactly once in src, in runtime/index.ts", () => {
+    const sources = shippedSources();
+    expect(sources.length).toBeGreaterThan(0);
+
     const token = ["process", "env"].join(".");
-    const hits = shippedSources().flatMap(({ file, text }) => {
+    const hits = sources.flatMap(({ file, text }) => {
       const count = text.split(token).length - 1;
       return count > 0 ? [{ file, count }] : [];
     });
@@ -82,11 +86,27 @@ describe("invariant 4: the ambient environment is read exactly once", () => {
 
 describe("invariant 5: no runtime coupling in shipped surface", () => {
   test("src contains no bun or node imports, type-only included", () => {
+    const sources = shippedSources();
+    expect(sources.length).toBeGreaterThan(0);
+
     const importPattern = /(from\s+|import\s*\(\s*|require\s*\(\s*)["'](bun|bun:[^"']*|node:[^"']*)["']/;
-    for (const { file, text } of shippedSources()) {
+    for (const { file, text } of sources) {
       expect({ file, hasRuntimeImport: importPattern.test(text) }).toEqual({
         file,
         hasRuntimeImport: false,
+      });
+    }
+  });
+
+  test("src uses no ambient runtime globals (Bun./Deno.)", () => {
+    const sources = shippedSources();
+    expect(sources.length).toBeGreaterThan(0);
+
+    const globalPattern = /\b(Bun|Deno)\./;
+    for (const { file, text } of sources) {
+      expect({ file, usesRuntimeGlobal: globalPattern.test(text) }).toEqual({
+        file,
+        usesRuntimeGlobal: false,
       });
     }
   });

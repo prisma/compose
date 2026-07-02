@@ -101,7 +101,7 @@ export function service<D extends Deps>(def: {
   return Object.freeze(node);
 }
 
-/** Internal: true if `value` carries the node brand. */
+/** True if `value` is a node constructed by the service()/resource() factories. */
 export function isNode(value: unknown): value is NodeBase {
   return (
     typeof value === "object" &&
