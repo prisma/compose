@@ -27,6 +27,14 @@ not restate it, it points to it and captures only build-specific shape decisions
 - **Descriptor duality.** `postgres()` / connection types are one value read twice —
   by the control plane at deploy (provision + wire config) and by the shim at runtime
   (hydrate a typed client). Env-var names by convention (services are isolated).
+  **Confirmed in slice 1a:** descriptors are **pure tagged data** (`{ kind: "postgres" }`);
+  the control plane exposes a factory (`postgres()`) and the execution plane a
+  `kind`-keyed hydrator (`hydratePostgres(descriptor, env)`) — *not* a `hydrate()`
+  method on the object, which would pull `Bun.SQL`/runtime code into the control-plane
+  import graph and break the tree-shaking split. Cost: each new descriptor kind adds a
+  control-plane factory + a runtime hydrator branch — the same shape as `prisma-alchemy`
+  (data resources + separately-registered providers). Generalizes to a
+  `kind → hydrator` registry if/when descriptors need to be extensible.
 - **Start on URL baking.** Hex-to-hex addressing uses deploy-time URL baking (as the
   MVP does) until a slice proves it painful enough to justify runtime name resolution.
 

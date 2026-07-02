@@ -20,9 +20,12 @@ will be re-boundaried into their own projects as we reach them.
 
 ## Current position
 
-Nothing built. **Slice 1 is next** (the agreed thin start). Design is recorded;
-`packages/prisma-alchemy` providers and the `examples/storefront-auth` deploy already
-work and are the foundation.
+**Slice 1 ✅ complete.** `@makerkit/core`
+(defineService/postgres/Load/lower/host-shim/build) + `examples/makerkit-hello`;
+commits `ea5eee3`, `9047410`, `b470fd0`; 29 tests green; service module has zero
+`process.env`. Opus review accepted (5 fixes applied). **1c proof:** deployed to real
+Compute → `200 [{"ok":1}]` (live `select 1`) → destroyed clean (404 after, no dangling
+resources). **PR open off `main`. Slice 2 is next.**
 
 ## Legend
 
@@ -32,7 +35,7 @@ work and are the foundation.
 
 ## Near-term project — a service with typed dependencies (slices 1–3)
 
-### [ ] Slice 1 — Service + DB dependency (no contract)
+### [x] Slice 1 — Service + DB dependency (no contract)
 
 **Capability:** `defineService({ db: postgres() }, ({ db }) => …)` — MakerKit
 provisions Prisma Postgres + Compute and injects a typed `db` handle; the handler has
@@ -112,6 +115,23 @@ Define an async/ordered **stream** connection between services on Compute
 - **Inspectable / queryable topology** — Load → emit a queryable artifact (agent-first goal).
 - **Configuration & secrets / egress** — a service declaring config + an external egress.
 - **BYO resources** — non-Postgres (object storage, cache, queue) via capability layers.
+
+### Follow-ups surfaced during Slice 1 (out of this PR's scope)
+
+- **`prisma-alchemy` `providers()` typing gap** — `Prisma.providers()` returns a
+  `ProviderCollection` that satisfies `Alchemy.Stack`'s `providers` field at runtime but
+  not structurally; `lower()` casts `as never` to bridge it. Fix the typing in
+  `prisma-alchemy` (or upstream Alchemy) and drop the cast. The same error exists,
+  untypechecked, in the hand-written `storefront-auth/alchemy.run.ts`.
+- **`storefront-auth` latent type bug** — `EnvironmentVariable` receives `deployedUrl`
+  (`string | undefined`) where `Input<string>` is required; currently unnoticed (no
+  typecheck script on the example). Will bite when the two-service lowering (Slice 2/4)
+  is typechecked.
+- **Host-entry generation** — 1b writes a transient `.makerkit-host-entry.<pid>.ts`
+  beside the user service at build time (resolution requires it sit next to the file). A
+  persistent generated entry (Next-style) may be cleaner; revisit if it causes friction.
+- **`name`/`region` authoring** — currently passed to `lower()` via opts; consider
+  authoring them on the service handle instead in a later slice.
 
 ---
 
