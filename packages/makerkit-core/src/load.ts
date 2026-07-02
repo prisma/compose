@@ -51,6 +51,14 @@ export function Load(service: ServiceHandle): ServiceGraph {
 function describe(value: unknown): string {
   if (value === undefined) return "undefined";
   if (value === null) return "null";
-  if (typeof value === "object") return JSON.stringify(value);
+  if (typeof value === "object") {
+    // JSON.stringify throws on BigInt or circular values; fall back so the
+    // clear LoadError is never masked by an opaque TypeError.
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return Object.prototype.toString.call(value);
+    }
+  }
   return String(value);
 }

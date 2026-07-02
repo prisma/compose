@@ -5,8 +5,22 @@ export type HydratedDeps<D extends Dependencies> = {
   [K in keyof D]: Hydrated<D[K]>;
 };
 
+/**
+ * Serving context the host shim resolves at its env boundary and provides to
+ * the handler — so the handler never reads `process.env` for host concerns
+ * like the port. Minimal for now; the Output/serving model will formalize
+ * this in a later slice.
+ */
+export interface RuntimeContext {
+  /** HTTP port the shim resolved for this service to listen on. */
+  readonly port: number;
+}
+
 /** A service's wiring body: hydrated Inputs in, Outputs out. */
-export type ServiceHandler<D extends Dependencies> = (deps: HydratedDeps<D>) => unknown;
+export type ServiceHandler<D extends Dependencies> = (
+  deps: HydratedDeps<D>,
+  ctx: RuntimeContext,
+) => unknown;
 
 const SERVICE_HANDLE = Symbol("makerkit.serviceHandle");
 
@@ -19,7 +33,7 @@ const SERVICE_HANDLE = Symbol("makerkit.serviceHandle");
 export interface ServiceHandle<D extends Dependencies = Dependencies> {
   readonly [SERVICE_HANDLE]: true;
   readonly dependencies: D;
-  run(deps: HydratedDeps<D>): unknown;
+  run(deps: HydratedDeps<D>, ctx: RuntimeContext): unknown;
 }
 
 /**
@@ -34,8 +48,8 @@ export function defineService<D extends Dependencies>(
   return {
     [SERVICE_HANDLE]: true,
     dependencies: deps,
-    run(hydrated) {
-      return handler(hydrated);
+    run(hydrated, ctx) {
+      return handler(hydrated, ctx);
     },
   };
 }

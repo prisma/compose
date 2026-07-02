@@ -84,7 +84,6 @@ export async function buildServiceArtifact(
   } finally {
     await fs.promises.rm(staging, { recursive: true, force: true });
     await fs.promises.rm(entryFile, { force: true });
-    await fs.promises.rm(`${entryFile}.map`, { force: true });
   }
 }
 

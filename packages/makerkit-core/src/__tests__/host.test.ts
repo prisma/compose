@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { defineService } from "../service.ts";
+import { defineService, type RuntimeContext } from "../service.ts";
 import { postgres } from "../postgres.ts";
 import { runHost } from "../runtime/host.ts";
 
@@ -19,6 +19,31 @@ describe("runHost", () => {
     const deps = received as { db: unknown };
     expect(typeof deps.db).toBe("function");
     expect(typeof (deps.db as { close?: unknown }).close).toBe("function");
+  });
+
+  test("resolves PORT at the env boundary and passes it in the serving context", () => {
+    let ctx: RuntimeContext | undefined;
+    const service = defineService({ db: postgres() }, (_deps, c) => {
+      ctx = c;
+    });
+
+    runHost(service, {
+      DATABASE_URL: "postgres://user:pass@localhost:5432/db",
+      PORT: "8080",
+    });
+
+    expect(ctx).toEqual({ port: 8080 });
+  });
+
+  test("defaults the serving port when PORT is unset", () => {
+    let ctx: RuntimeContext | undefined;
+    const service = defineService({ db: postgres() }, (_deps, c) => {
+      ctx = c;
+    });
+
+    runHost(service, { DATABASE_URL: "postgres://user:pass@localhost:5432/db" });
+
+    expect(ctx).toEqual({ port: 3000 });
   });
 
   test("passes one hydrated client per declared dependency, keyed by name", () => {

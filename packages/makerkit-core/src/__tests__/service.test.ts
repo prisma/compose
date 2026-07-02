@@ -19,7 +19,7 @@ describe("defineService", () => {
     );
 
     const fakeDb = { query: () => "fake" } as never;
-    const result = service.run({ db: fakeDb });
+    const result = service.run({ db: fakeDb }, { port: 3000 });
 
     expect(result).toEqual({ echoed: fakeDb });
   });
@@ -42,7 +42,7 @@ describe("importing a service module", () => {
     expect(fixture.handlerCallCount).toBe(0);
     expect(isServiceHandle(fixture.default)).toBe(true);
 
-    fixture.default.run({ db: {} as never });
+    fixture.default.run({ db: {} as never }, { port: 3000 });
     expect(fixture.handlerCallCount).toBe(1);
   });
 });

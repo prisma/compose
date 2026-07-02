@@ -1,14 +1,13 @@
 import { defineService, postgres } from "@makerkit/core";
 
-const port = Number(process.env.PORT ?? 3000);
-
 /**
  * A single MakerKit service: it declares a Postgres dependency and receives a
- * typed `db` client, injected by the host shim. The handler never reads
- * `process.env` for its database — the shim hydrates `DATABASE_URL` and hands
- * over `db`. The handler owns its own server (no Output/serving model yet).
+ * typed `db` client, injected by the host shim. The handler reads nothing from
+ * the environment — the shim hydrates `DATABASE_URL` into `db` and resolves the
+ * serving `port`, handing both over. The handler owns its own server; the
+ * Output/serving model will formalize the port/server wiring in a later slice.
  */
-export default defineService({ db: postgres() }, ({ db }) =>
+export default defineService({ db: postgres() }, ({ db }, { port }) =>
   Bun.serve({
     port,
     hostname: "0.0.0.0",
