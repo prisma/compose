@@ -3,7 +3,7 @@ import * as path from "node:path";
 
 /**
  * The most foundational property of the package: bundling the `.` authoring
- * entry (what a user service imports for `defineService`/`postgres`) must not
+ * entry (what a user service imports for `service`/`postgres`) must not
  * drag in the control-plane provisioning stack (Alchemy/Effect/prisma-alchemy)
  * or execution-plane runtime code (`Bun.SQL`). A stray value import — e.g.
  * turning an `import type` into a value import — would silently reintroduce it.

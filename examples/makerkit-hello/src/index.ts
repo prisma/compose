@@ -1,4 +1,4 @@
-import { defineService, postgres } from "@makerkit/core";
+import { service, postgres } from "@makerkit/core";
 
 /**
  * A single MakerKit service: it declares a Postgres dependency and receives a
@@ -7,7 +7,7 @@ import { defineService, postgres } from "@makerkit/core";
  * serving `port`, handing both over. The handler owns its own server; the
  * Output/serving model will formalize the port/server wiring in a later slice.
  */
-export default defineService({ db: postgres() }, ({ db }, { port }) =>
+export default service({ db: postgres() }, ({ db }, { port }) =>
   Bun.serve({
     port,
     hostname: "0.0.0.0",

@@ -1,5 +1,5 @@
-import { defineService, postgres } from "../../index.ts";
+import { service, postgres } from "../../index.ts";
 
-export default defineService({ db: postgres() }, ({ db }) => {
+export default service({ db: postgres() }, ({ db }) => {
   return { marker: "ARTIFACT_FIXTURE_MARKER", db };
 });

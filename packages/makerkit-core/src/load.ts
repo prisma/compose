@@ -31,7 +31,7 @@ export class LoadError extends Error {
  */
 export function Load(service: ServiceHandle): ServiceGraph {
   if (!isServiceHandle(service)) {
-    throw new LoadError("Load expects a service handle returned by defineService.");
+    throw new LoadError("Load expects a service handle returned by service().");
   }
 
   const inputs: InputNode[] = [];

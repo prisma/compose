@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { defineService } from "../service.ts";
+import { service } from "../service.ts";
 import { postgres } from "../postgres.ts";
 import { toResourcePlan, type LowerOptions } from "../lower.ts";
 
@@ -12,9 +12,9 @@ const baseOpts: LowerOptions = {
 
 describe("toResourcePlan", () => {
   test("maps a single postgres-backed service to Project + ComputeService + Deployment", () => {
-    const service = defineService({ db: postgres() }, () => null);
+    const svc = service({ db: postgres() }, () => null);
 
-    const plan = toResourcePlan(service, baseOpts);
+    const plan = toResourcePlan(svc, baseOpts);
 
     expect(plan.project).toEqual({
       id: "hello-project",
@@ -37,44 +37,44 @@ describe("toResourcePlan", () => {
   });
 
   test("routes postgres() Inputs to the project's default database (no extra resource)", () => {
-    const service = defineService({ db: postgres() }, () => null);
+    const svc = service({ db: postgres() }, () => null);
 
-    const plan = toResourcePlan(service, baseOpts);
+    const plan = toResourcePlan(svc, baseOpts);
 
     expect(plan.defaultDatabaseInputs).toEqual(["db"]);
   });
 
   test("honors region and port overrides", () => {
-    const service = defineService({ db: postgres() }, () => null);
+    const svc = service({ db: postgres() }, () => null);
 
-    const plan = toResourcePlan(service, { ...baseOpts, region: "eu-west-3", port: 8080 });
+    const plan = toResourcePlan(svc, { ...baseOpts, region: "eu-west-3", port: 8080 });
 
     expect(plan.computeService.region).toBe("eu-west-3");
     expect(plan.deployment.port).toBe(8080);
   });
 
   test("validates the graph before mapping (malformed descriptor rejected)", () => {
-    const service = defineService({ db: { nope: true } as never }, () => null);
+    const svc = service({ db: { nope: true } as never }, () => null);
 
-    expect(() => toResourcePlan(service, baseOpts)).toThrow(/db/);
+    expect(() => toResourcePlan(svc, baseOpts)).toThrow(/db/);
   });
 
   test("rejects an unknown dependency kind", () => {
-    const service = defineService(
+    const svc = service(
       { cache: { kind: "redis" } as never },
       () => null,
     );
 
-    expect(() => toResourcePlan(service, baseOpts)).toThrow(/cache/);
+    expect(() => toResourcePlan(svc, baseOpts)).toThrow(/cache/);
   });
 
   test("runs no handler", () => {
     let calls = 0;
-    const service = defineService({ db: postgres() }, () => {
+    const svc = service({ db: postgres() }, () => {
       calls += 1;
     });
 
-    toResourcePlan(service, baseOpts);
+    toResourcePlan(svc, baseOpts);
 
     expect(calls).toBe(0);
   });

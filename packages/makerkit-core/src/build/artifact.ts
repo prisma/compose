@@ -6,13 +6,13 @@ import * as path from "node:path";
 /**
  * Builds a Prisma Compute deploy artifact whose entrypoint is the MakerKit
  * host shim. Generates a small entry that imports the user service's default
- * export (the `defineService` handle) and hands it to `runHost`, bundles that
+ * export (the `service()` handle) and hands it to `runHost`, bundles that
  * for the `bun` target, writes `compute.manifest.json` pointing at it, and
  * packs the result into a `.tar.gz`. The user service is bundled in; the shim
  * wraps it.
  */
 export interface BuildServiceArtifactOptions {
-  /** Path to the user service module (default export = the defineService handle). */
+  /** Path to the user service module (default export = the service() handle). */
   service: string;
   /** Path the final `.tar.gz` artifact should be written to. */
   outFile: string;

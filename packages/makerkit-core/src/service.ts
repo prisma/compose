@@ -25,7 +25,7 @@ export type ServiceHandler<D extends Dependencies> = (
 const SERVICE_HANDLE = Symbol("makerkit.serviceHandle");
 
 /**
- * The handle `defineService` returns: inspectable (the control plane reads
+ * The handle `service` returns: inspectable (the control plane reads
  * `dependencies`) and runnable (the execution plane calls `run` with
  * hydrated deps). Constructing it runs nothing — `run` is never called until
  * something explicitly invokes it.
@@ -41,7 +41,7 @@ export interface ServiceHandle<D extends Dependencies = Dependencies> {
  * wiring body. Returns a handle — inert until `run` is called, so importing
  * a service module never executes the handler.
  */
-export function defineService<D extends Dependencies>(
+export function service<D extends Dependencies>(
   deps: D,
   handler: ServiceHandler<D>,
 ): ServiceHandle<D> {
@@ -54,7 +54,7 @@ export function defineService<D extends Dependencies>(
   };
 }
 
-/** True if `value` is a handle returned by `defineService`. */
+/** True if `value` is a handle returned by `service`. */
 export function isServiceHandle(value: unknown): value is ServiceHandle {
   return (
     typeof value === "object" &&

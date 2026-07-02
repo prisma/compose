@@ -21,7 +21,7 @@ export interface PostgresDescriptor {
 /** Every descriptor kind a Service can declare as a dependency. */
 export type Descriptor = PostgresDescriptor;
 
-/** The map of dependency names to descriptors a `defineService` call declares. */
+/** The map of dependency names to descriptors a `service()` call declares. */
 export type Dependencies = Record<string, Descriptor>;
 
 /** The typed client a descriptor hydrates to — read from its phantom `hydratedType`. */
@@ -35,7 +35,7 @@ function isPostgresDescriptor(value: unknown): value is PostgresDescriptor {
   );
 }
 
-/** True if `value` is a descriptor `defineService`/`Load` recognizes. */
+/** True if `value` is a descriptor `service()`/`Load` recognizes. */
 export function isDescriptor(value: unknown): value is Descriptor {
   return isPostgresDescriptor(value);
 }

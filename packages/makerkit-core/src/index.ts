@@ -3,7 +3,7 @@
  * Load the graph they describe. Importing this module never hydrates a
  * dependency or runs a handler — see `@makerkit/core/runtime` for that.
  */
-export { defineService, isServiceHandle } from "./service.ts";
+export { service, isServiceHandle } from "./service.ts";
 export type {
   ServiceHandle,
   ServiceHandler,

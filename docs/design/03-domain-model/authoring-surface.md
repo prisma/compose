@@ -27,7 +27,7 @@ consumes or produces them:
 
 ```ts
 // auth service — Input: db · Output: its API
-export default defineService(
+export default service(
   { db: Postgres(authData) },                 // dependency position ⇒ Input ⇒ hydrated client
   ({ db }) => ({ api: Auth.serve(buildAuthApp(db)) })   // returned ⇒ Output
 )
@@ -51,7 +51,7 @@ provider happened to publish.
 export const Auth = http(AuthInterface)   // neutral connection type
 
 // storefront service — Auth in dependency position ⇒ Input ⇒ typed client
-export default defineService(
+export default service(
   { db: Postgres(storeData), auth: Auth },
   (deps) => ({ web: next(deps) })         // 'web' Output served by a Next.js adapter
 )
@@ -130,7 +130,7 @@ local-emulation story.
 ## Alternatives set aside
 
 - **A separate MakerKit manifest file** describing each service's inputs. The
-  `defineService` declaration already carries it; a second artifact would only
+  `service` declaration already carries it; a second artifact would only
   restate the code and risk drifting from it, and per-service isolation makes
   convention-based env names sufficient.
 - **Explicit `In()` / `Out()` wrappers** on every port. Position already determines

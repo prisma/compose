@@ -1,32 +1,32 @@
 import { describe, expect, test } from "bun:test";
-import { defineService, isServiceHandle } from "../index.ts";
+import { service, isServiceHandle } from "../index.ts";
 import { postgres } from "../postgres.ts";
 
-describe("defineService", () => {
+describe("service", () => {
   test("returns a handle exposing the declared dependency descriptors", () => {
     const db = postgres();
-    const service = defineService({ db }, () => ({}));
+    const svc = service({ db }, () => ({}));
 
-    expect(isServiceHandle(service)).toBe(true);
-    expect(service.dependencies).toEqual({ db: { kind: "postgres" } });
-    expect(service.dependencies.db).toBe(db);
+    expect(isServiceHandle(svc)).toBe(true);
+    expect(svc.dependencies).toEqual({ db: { kind: "postgres" } });
+    expect(svc.dependencies.db).toBe(db);
   });
 
   test("returns a handle runnable with hydrated deps", () => {
-    const service = defineService(
+    const svc = service(
       { db: postgres() },
       ({ db }) => ({ echoed: db }),
     );
 
     const fakeDb = { query: () => "fake" } as never;
-    const result = service.run({ db: fakeDb }, { port: 3000 });
+    const result = svc.run({ db: fakeDb }, { port: 3000 });
 
     expect(result).toEqual({ echoed: fakeDb });
   });
 
   test("does not run the handler when defined", () => {
     let calls = 0;
-    defineService({ db: postgres() }, () => {
+    service({ db: postgres() }, () => {
       calls += 1;
       return {};
     });

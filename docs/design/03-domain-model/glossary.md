@@ -209,10 +209,10 @@ directly above the model and lowers onto the [compile
 target](#provisioning-plane--the-compile-target-alchemy--effect). These terms are
 described in full in [authoring-surface.md](authoring-surface.md).
 
-### defineService
+### service
 
 The library function that defines a **Service**. Takes a map of dependency ports
-and a wiring body: `defineService({ db: Postgres(contract) }, ({ db }) => ({ api:
+and a wiring body: `service({ db: Postgres(contract) }, ({ db }) => ({ api:
 … }))`. Its default export is both an inspectable descriptor (the control plane
 reads its ports) and a runnable handle (the runtime invokes it) — importing it runs
 nothing. The Service body is opaque to MakerKit (a **black box**); MakerKit sees
@@ -221,7 +221,7 @@ only its ports.
 ### hex
 
 The library function that defines a **Hex** — the same wiring surface as
-`defineService`, but transparent (MakerKit sees the internal topology) and with
+`service`, but transparent (MakerKit sees the internal topology) and with
 `provision` in scope. Its body wires the nodes it owns; it runs no code of its own.
 
 ### Port — Input / Output by position
