@@ -46,9 +46,12 @@ complete class/data-structure design is
   resolution** — later projects.
 - **Shipping a DB driver or fixing a JS runtime** — the client factory is app-supplied.
 - **Completely migrating `examples/storefront-auth`** — the migration is deliberately
-  partial: nodes the current primitives can express (the auth service + its Postgres)
-  move to the pack vocabulary; the rest (the Next.js storefront, the auth connection)
-  stays hand-wired, to be filled in by later projects.
+  partial: **both services** (auth and storefront, each with its Postgres) are
+  authored via the pack vocabulary — the storefront's handler is the framework-boot
+  adapter for its Next standalone server. What stays hand-wired is exactly the two
+  gaps later projects fill: the auth→storefront **connection** (`AUTH_URL`
+  EnvironmentVariable + deploy ordering — the Connection primitive) and the
+  **in-framework env reads** inside Next page code (the `use()` DI accessor).
 - Production DX polish (versioning, publishing, docs sites).
 
 ## Place in the larger world
@@ -76,10 +79,12 @@ test approach) survive restructuring, its architecture does not.
 - **Proven on real Prisma Cloud.** The minimal example deploys, serves a live DB
   query, and tears down clean — not only unit tests.
 - **The real example app proves the work end to end.** `examples/storefront-auth`
-  is partially migrated: the auth service is authored via the pack vocabulary; the
-  storefront stays hand-wired; the combined system deploys and the storefront→auth
-  round trip works live. A mixed topology (MakerKit-authored nodes beside hand-wired
-  Alchemy resources in one deploy) is therefore a supported shape, not an accident.
+  migrates both services to the pack vocabulary (the storefront's handler boots its
+  Next standalone server — the framework-as-Output-adapter shape from the design);
+  only the auth→storefront connection wiring and Next-internal env reads stay
+  hand-wired. The combined system deploys and the storefront→auth round trip works
+  live. A mixed topology (MakerKit-authored nodes beside hand-wired Alchemy
+  resources in one deploy) is therefore a supported shape, not an accident.
 - **The examples own their builds**: tsdown (or similar) bundles `main.ts`; the app's
   script writes `compute.manifest.json` and tars.
 
@@ -96,9 +101,11 @@ test approach) survive restructuring, its architecture does not.
 
 - [ ] The minimal example deploys via `lower(service, prismaCloud(...))`, returns a
       live `select 1` over HTTP, and destroys clean — verified against real Prisma Cloud.
-- [ ] `examples/storefront-auth`'s auth service is authored via
-      `@makerkit/prisma-cloud`; the two-service system deploys (storefront still
-      hand-wired) and the live storefront→auth round trip works.
+- [ ] Both `examples/storefront-auth` services are authored via
+      `@makerkit/prisma-cloud` (auth as a plain handler; storefront as a
+      framework-boot handler over the Next standalone artifact); only the `AUTH_URL`
+      connection wiring is hand-wired; the deployed storefront→auth round trip works
+      live.
 - [ ] App code contains no `process.env` (service module and `main.ts`); the deploy
       script reads only `PRISMA_WORKSPACE_ID` + artifact inputs.
 - [ ] All five invariant tests pass; `@makerkit/core`'s `package.json` names no
