@@ -346,16 +346,23 @@ interface ConfigManifestEntry {
 function configOf(root: ServiceNode): readonly ConfigManifestEntry[]   // in @makerkit/core (pure)
 
 // Boot: Load → configOf → adapter.get(requests) → per-param: override ?? raw ??
-// default → validate + coerce against the declared type ("" is UNRESOLVED, not a
-// value; a failed number parse with no default is an error) — ALL problems
-// reported in one ConfigError, before any hydrate (Load-before-Hydrate applied
-// to config) → per input: await connection.hydrate(typedValues) →
-// root.run(deps, serviceParamValues).
+// default → validate + coerce against the declared type. Validation rules:
+//   · "" is UNRESOLVED, not a value — it falls to the default or, if required,
+//     joins the missing set;
+//   · a NON-EMPTY value that fails its declared type is an ERROR regardless of
+//     any default — a default substitutes for absence, never for garbage;
+//   · unknown override keys are errors (a typoed override must not silently
+//     fall through to the platform value).
+// ALL problems reported in one ConfigError, before any hydrate
+// (Load-before-Hydrate applied to config) → per input:
+// await connection.hydrate(typedValues) → root.run(deps, serviceParamValues).
 function runHost(root: ServiceNode, opts?: {
   adapter?: ConfigAdapter                      // swap the platform: in-memory tests, inspection harnesses
-  config?: Record<string, string | number>     // per-param overrides, applied before the adapter is consulted
+  config?: Record<string, string | number>     // per-param overrides, applied before the adapter is
+                                               // consulted; keyed "input.param" (dotted) for input params,
+                                               // bare "param" for service-level params
 }): Promise<unknown>
-class ConfigError extends Error {}             // names every missing/invalid param at once
+class ConfigError extends Error {}             // names every missing/invalid/unknown param at once
 ```
 
 Core and user code contain **zero** environment reads: the platform's adapter is
