@@ -48,6 +48,23 @@ client factory. Reworks PR #6 in place; retitle at DoD.
 **Dispatches:** (1) core+pack+example rework with gates green; (2) Opus review +
 fix round; (3) deploy/verify/destroy + PR retitle.
 
+### [~] Slice R3 — core-owned config pipeline (own PR, stacked on R2)
+
+**Outcome:** the runtime path matches the redesigned model (core-model.md §
+Runtime, commit `7862835`): `runtime()`/`TargetRuntime`/the hydrator registry are
+gone; connections carry declared config fields + an app-parameterized hydrate;
+service types carry `HostConvention` addressing data; core enumerates
+(`configOf`), resolves, validates-before-hydrate, and supports field-level
+overrides. `runHost(service)` takes no second argument. Both examples updated;
+proof = both deploy and serve as before, plus a test overriding config through
+core with no environment faked.
+**Motivation:** operator design review of `runtime()` — opaque config providers
+lose visibility/interception; registries compose poorly across packs; the phantom
+client type was a trust boundary. See the doc's Motivation block.
+**Builds on:** R2 (branch `claude/r3-config-runtime` off the R2 tip).
+**Hands to:** the Connection-primitive project (connections are now the declared
+config + hydrate unit it will formalize).
+
 ### [x] Slice R2 — storefront-auth partial migration (own PR)
 
 > **Done.** [PR #7](https://github.com/prisma/makerkit/pull/7) (stacked on #6;
