@@ -110,7 +110,9 @@ test approach) survive restructuring, its architecture does not.
       script reads only `PRISMA_WORKSPACE_ID` + artifact inputs.
 - [ ] All five invariant tests pass; `@makerkit/core`'s `package.json` names no
       `prisma-*` package and no runtime API.
-- [ ] The six package entries exist with the specced exports and dependency weights.
+- [ ] The package entries match `core-model.md`'s entry map (exports + dependency
+      weights) — five entries after the config-pipeline redesign removed the pack's
+      runtime entry.
 - [ ] `docs/design/10-domains/core-model.md` matches what shipped (amended through
       the agreed process if the build forced changes).
 - [ ] PR open with CI green and the review loop complete.
