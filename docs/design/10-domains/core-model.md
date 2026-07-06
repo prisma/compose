@@ -230,7 +230,7 @@ node with a non-empty `type`. (When Connections arrive, Load additionally checks
 connection ends directionally valid, interfaces compatible, nothing dangling.) Load
 executes nothing — the graph
 is data in memory to inspect or hand to `lower`/`runHost`. A **topology view** —
-nodes as `{ id, kind, type, config }` plus edges, handler dropped — is
+nodes as `{ id, kind, type }` plus edges, function slots dropped — is
 `JSON.stringify`-able by construction; the serialized-artifact emit step builds on
 this later.
 
