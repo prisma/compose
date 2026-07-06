@@ -26,7 +26,7 @@ it, it points to it and records the build-decision history.
    `lower()` importing prisma-alchemy was a principle violation; the vocabulary
    (`compute`, `postgres`) moved to a target pack that carries routing metadata.
    KISS shape set by the operator: the pack provides `postgres()` and `compute()`.
-4. **Alchemy stays in core** (`@makerkit/core/lower` imports it): it is the
+4. **Alchemy stays in core** (`@makerkit/core/deploy` imports it): it is the
    target-neutral provisioning engine per layering.md claim 3, not a deployment target.
 5. **Runtime-agnostic** (operator principle): no Bun/Node coupling in any shipped
    entry, even type-only. The DB client factory is app-supplied
