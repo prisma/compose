@@ -12,14 +12,14 @@ roadmap (typed interfaces, hexes, contracts, …) follows as later projects.
 
 ## Current position
 
-**All three build slices complete.** R1 →
-[PR #6](https://github.com/prisma/makerkit/pull/6) (merged); R2 →
-[PR #7](https://github.com/prisma/makerkit/pull/7) (open → main, mergeable); R3 →
-[PR #8](https://github.com/prisma/makerkit/pull/8) (open → main). The
-storefront-auth demo is live on the authoring layer through the ConfigAdapter
-pipeline. Remaining: merge #7 then #8 (operator), project close-out (verify spec
-DoD, sync docs, delete this project dir), then the Connection-primitive project
-(first capability-roadmap entry — its target picture is the hand-wired AUTH_URL).
+**All three build slices merged** (R1 → [#6](https://github.com/prisma/makerkit/pull/6),
+R2 → [#7](https://github.com/prisma/makerkit/pull/7), R3 →
+[#8](https://github.com/prisma/makerkit/pull/8)). The storefront-auth demo is live
+on the authoring layer through the ConfigAdapter pipeline. CI setup is running in a
+separate session (check + e2e over storefront-auth; committed-state-branch stopgap).
+Remaining: project close-out (verify spec DoD, sync docs, delete this project dir),
+then the Connection-primitive project (first capability-roadmap entry — its target
+picture is the hand-wired AUTH_URL).
 
 ## Legend
 
