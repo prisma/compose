@@ -22,6 +22,8 @@ The capture workflow is the Ignite `product-record-gotcha` skill.
 - [Idle direct-connection close crashes a persistent Bun.SQL client into a 502 loop on scale-to-zero Compute](#idle-direct-connection-close-crashes-a-persistent-bunsql-client-into-a-502-loop-on-scale-to-zero-compute)
 - [Creating a database with isDefault:true fails — a project already auto-provisions a default database](#creating-a-database-with-isdefaulttrue-fails--a-project-already-auto-provisions-a-default-database)
 - [Next.js on Compute ignores runtime env vars unless the route is force-dynamic](#nextjs-on-compute-ignores-runtime-env-vars-unless-the-route-is-force-dynamic)
+- [Connection create/read response buries the real Postgres DSN under endpoints.*; `url` is an API self-link](#connection-createread-response-buries-the-real-postgres-dsn-under-endpoints-url-is-an-api-self-link)
+- [Compute's bun auto-installs at runtime — masks incomplete artifacts and cross-platform native binaries as an ENOSPC crash loop](#computes-bun-auto-installs-at-runtime--masks-incomplete-artifacts-and-cross-platform-native-binaries-as-an-enospc-crash-loop)
 
 ---
 
@@ -202,3 +204,46 @@ process.on("unhandledRejection", (e) => console.error(e));
 - Upstream: [PRO-211](https://linear.app/prisma-company/issue/PRO-211/compute-fresh-deploys-race-env-var-creation-against-first-version)
 - Race + edge analysis: [`examples/storefront-auth/alchemy.run.ts`](examples/storefront-auth/alchemy.run.ts) (the corrected ordering comment)
 - Related: [`dogfood-report.md`](dogfood-report.md)
+
+---
+
+## Connection create/read response buries the real Postgres DSN under endpoints.*; `url` is an API self-link
+
+**Filed upstream:** [PRO-212](https://linear.app/prisma-company/issue/PRO-212/connection-createread-response-buries-the-real-postgres-dsn-url-is-an) — _"Connection create/read response buries the real Postgres DSN — `url` is an API self-link, top-level `connectionString` is deprecated"_
+**Product:** Prisma Postgres / Management API
+**Version:** `@prisma/management-api-sdk` · Management API `https://api.prisma.io/v1`
+**First hit:** `examples/storefront-auth/hexes/auth` — the auth service's DB connection at the R4 deploy proof
+**Cost:** ~1.5 hours — every DB query 30s-timed-out on a deployed, healthy-looking service.
+
+**Symptom.** `POST /v1/databases/{databaseId}/connections` returns `data.url = https://api.prisma.io/v1/connections/con_…` — the connection resource's **API self-link**, not a Postgres DSN. A consumer that wires `data.url` into a Postgres client gets `ERR_POSTGRES_CONNECTION_TIMEOUT` after 30s (the driver dials an HTTPS host as if it were Postgres) → 502 on every query, while `status: running` and env vars are all present.
+
+**Cause.** The usable DSNs are nested: `data.endpoints.direct.connectionString` and `data.endpoints.pooled.connectionString` (`accelerate` too). The top-level `data.connectionString` is **deprecated**, and `data.url` is the self-link. The naming points at the wrong fields, and the credentials-bearing DSN is only returned at create (write-only on read), so the right nested field must be captured then.
+
+**Workaround.** Read `endpoints.direct.connectionString` (fall back to `endpoints.pooled.connectionString`); never `url` or the deprecated top-level `connectionString`. Verified by minting a connection and running `select 1` over both direct and pooled DSNs.
+
+**References.**
+
+- Upstream: [PRO-212](https://linear.app/prisma-company/issue/PRO-212/connection-createread-response-buries-the-real-postgres-dsn-url-is-an)
+- Fix: [`packages/prisma-alchemy/src/postgres/Connection.ts`](packages/prisma-alchemy/src/postgres/Connection.ts)
+
+---
+
+## Compute's bun auto-installs at runtime — masks incomplete artifacts and cross-platform native binaries as an ENOSPC crash loop
+
+**Filed upstream:** [PRO-213](https://linear.app/prisma-company/issue/PRO-213/compute-runs-bun-with-runtime-auto-install-on-masks-incomplete) — _"Compute runs `bun` with runtime auto-install ON — masks incomplete artifacts and cross-platform native-binary gaps as an ENOSPC crash loop"_
+**Product:** Prisma Compute (bun runtime)
+**Version:** Bun on Compute; Next.js 15.5.19 `output: "standalone"`; build darwin-arm64 → Compute linux-x64
+**First hit:** `examples/storefront-auth/hexes/storefront` — the Next hex at the R4 deploy proof
+**Cost:** ~3 hours, chasing a symptom several layers from the cause.
+
+**Symptom.** Crash loop: `starting bun with entrypoint: bootstrap.js` → `🚚 @next/swc-linux-x64-gnu [139/139] error: ENOSPC extracting tarball` → `Application exited with 0x0` → `reboot`, repeating. Endpoint serves `404 "There is no service on this URL"`; `status: running` throughout.
+
+**Cause.** Compute's `bun` has runtime auto-install **on**: a failed `require` triggers a boot-time `bun install`. Two triggers: (1) a darwin-built Next standalone traces darwin `sharp`/`@next/swc`, so on linux those requires miss and bun fetches the linux tree (~139 packages) onto a tiny disk → ENOSPC; (2) an artifact missing `node_modules` entirely (a packaging bug tarring the wrong subtree) is **silently masked** by auto-install fetching everything → same ENOSPC, no clear signal.
+
+**Workaround.** Ship a `bunfig.toml` with `[install]\nauto = "disable"` in the artifact (bun reads it from CWD = artifact root) — a missing dep then fails loudly (`Cannot find package 'next'`) and unused optional native deps degrade gracefully. Make the artifact fully self-contained (bundle real `node_modules`; for a Next standalone, include the standalone tree's hoisted `node_modules`, not just the app subdir). For Next: `images: { unoptimized: true }` + `outputFileTracingExcludes` to drop `sharp`/`@next/swc`.
+
+**References.**
+
+- Upstream: [PRO-213](https://linear.app/prisma-company/issue/PRO-213/compute-runs-bun-with-runtime-auto-install-on-masks-incomplete)
+- Fix: [`examples/storefront-auth/scripts/bundle-next.ts`](examples/storefront-auth/scripts/bundle-next.ts), [`examples/storefront-auth/hexes/storefront/next.config.ts`](examples/storefront-auth/hexes/storefront/next.config.ts)
+- Related: PRO-201 (Next standalone packaging), FT-5219 (Bun.SQL scale-to-zero)
