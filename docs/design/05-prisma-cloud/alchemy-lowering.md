@@ -17,7 +17,7 @@ it manages whatever a provider package registers).
 | `Connection` | database connection info | databaseId | url | direct/pooled endpoints |
 | `ComputeService` | App | projectId, name, region | id | PDP attaches it to the production branch implicitly |
 | `EnvironmentVariable` | ConfigVariable | projectId, class, key, value, branchId? | id | we write production-class templates only |
-| `Deployment` | Deployment (ComputeVersion) + Promotion | computeServiceId, artifactPath, artifactHash, port, **environment (corrected — see below)** | versionId, deployedUrl | provider reconcile: create version → upload tar.gz → start → poll until running → promote; `deployedUrl` read **post-promote** (create-time domain is a placeholder — PRO-200) |
+| `Deployment` | Deployment (ComputeVersion) + Promotion | computeServiceId, artifactPath, artifactHash, port, **environment** (the env-var records the version boots with — see the graphs below) | versionId, deployedUrl | provider reconcile: create version → upload tar.gz → start → poll until running → promote; `deployedUrl` read **post-promote** (create-time domain is a placeholder — PRO-200) |
 
 What we deliberately do **not** model yet, and where it will bite: **Branch**
 (everything implicitly targets the production branch; the platform's

@@ -74,16 +74,14 @@ Consequences MakerKit designs around:
 
 1. **A version's environment is a snapshot taken at version creation.** A config
    value that must be visible to a service's code has to exist as a
-   ConfigVariable row *before* that service's version-create call — this is the
-   precise definition of the deploy-time race (PRO-211, as corrected).
+   ConfigVariable row *before* that service's version-create call (the failure
+   mode when it doesn't is documented as PRO-211 in `gotchas.md`).
 2. **Changing config requires a new version to take effect.** There is no
-   restart-on-config-change and no live re-resolution. Propagating a changed
-   value (e.g. a producer's new URL) into a consumer means creating a new
-   consumer version — which is exactly what the corrected Alchemy graph does via
-   a property diff (see [alchemy-lowering.md](alchemy-lowering.md)).
-   (We once observed a stale version apparently pick up a late variable without
-   a new version; per operator decision this is treated as a platform bug, not a
-   behavior to depend on.)
+   restart-on-config-change and no live re-resolution; a late-written variable
+   never reaches an existing version. Propagating a changed value (e.g. a
+   producer's new URL) into a consumer therefore means creating a new consumer
+   version — which the Alchemy graph does via a property diff (see
+   [alchemy-lowering.md](alchemy-lowering.md)).
 3. **`DATABASE_URL` is not a separate mechanism.** It is a system-written
    template flowing through the same materialization as user variables.
 4. **Branch + class is the platform's environments model** (production
