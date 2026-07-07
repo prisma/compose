@@ -100,3 +100,17 @@ guard, side-effect-free-import test) carry forward into the rebuild.
      unintuitive — services stay one-file, self-describing); runHost inlined into the
      bootstrap (a second copy of core in the artifact — collapsed by moving `run`
      onto the node).
+
+9. **MakerKit owns the deploy entrypoint; `connections.ts` folded away** (operator
+   corrections, R4 docs pass). Directional — the invocation change is a LATER slice,
+   but the docs now describe the correct model:
+   - **No user-written stack file.** The standard deploy path is `makerkit deploy`
+     over a declarative `makerkit.config.ts` (`{ app, target, name, bundle(s) }`);
+     the CLI reads it and calls `lower()` internally. `lower()`/`lowering()` stay in
+     `/deploy` as the mechanism + the escape hatch for hand-composed/mixed stacks.
+     Listed as a named extension point; until it lands, examples keep an interim
+     `alchemy.run.ts` calling `lower()`.
+   - **`connections.ts` deleted from the model.** It held `const db =
+     postgres({client})` in a separate file whose only claimed job — isolating the
+     driver import — is void (the service module imports it anyway). The connection
+     definition lives inline in `service.ts`. R4 examples fold it in.

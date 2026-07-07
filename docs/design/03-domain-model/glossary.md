@@ -310,10 +310,10 @@ is in `layering.md`; this is the term-by-term catalogue.
 ### Alchemy — definition language
 
 - **Stack** — the root of an Alchemy program; a set of Resources deployed as a
-  unit. `Alchemy.Stack(name, { providers, state }, Effect.gen(…))`. Our whole
-  example emits one Stack (`examples/storefront-auth/alchemy.run.ts`).
-  `→` **Topology / implicit root Hex** (today hand-written; MakerKit will
-  generate it).
+  unit. `Alchemy.Stack(name, { providers, state }, Effect.gen(…))`. `lower()`
+  emits one Stack for the whole app; `makerkit deploy` calls it from the app's
+  `makerkit.config.ts` (no hand-written stack file — a named extension point).
+  `→` **Topology / implicit root Hex**.
 - **Resource\<Type, Props, Attributes>** — a managed entity with a string type
   tag, desired-input **Props**, and cloud-returned **Attributes**. Declared, then
   `yield*`-ed. Ours: `Prisma.Project`, `Database`, `Connection`,

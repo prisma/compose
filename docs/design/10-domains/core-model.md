@@ -47,10 +47,13 @@ carries `run`) and target (heavy, deploy-only).
 
 Who imports what, end to end:
 
-- the **user's service module** imports `@makerkit/prisma-cloud` plus the app's own
-  connection definitions (which hold the driver import);
-- the **deploy script** (`alchemy.run.ts`) imports the service module +
-  `@makerkit/core/deploy` + `@makerkit/prisma-cloud/target` (heavy — deploy-time only);
+- the **user's service module** imports `@makerkit/prisma-cloud` and the app's
+  own driver of choice (a DB client factory lives inline here);
+- the **deploy config** (`makerkit.config.ts`) imports the app (service or hex) +
+  `@makerkit/prisma-cloud/target` (heavy — deploy-time only). `makerkit deploy`
+  reads it and calls `@makerkit/core/deploy`'s `lower()` internally; the app
+  author writes no stack file (the CLI is a named extension point — until it
+  lands, examples use an interim `alchemy.run.ts` calling `lower()` directly);
 - the **runtime bundle entry** (`main.ts`, app-owned) re-exports the service
   module's node — nothing else, and nothing runs on import. The boot call lives
   in the **bootstrap** the pack prints at deploy (§ Lowering): a two-line,
@@ -59,8 +62,8 @@ Who imports what, end to end:
   copy of core); the bootstrap adds no code.
 
 The runtime bundle never contains Alchemy. One accepted consequence: because
-connections close over the app's client factory, the deploy script *loads* (never
-uses) the driver when it imports the service module — fine under Bun, and mitigable
+connections close over the app's client factory, the deploy config *loads* (never
+uses) the driver when it imports the app module — fine under Bun, and mitigable
 with a lazy import inside the factory if it ever matters.
 
 ## Decision taken: Alchemy is core's provisioning substrate
@@ -774,16 +777,12 @@ time.)
 Three app-owned files; bundling stays hand-rolled in the app:
 
 ```ts
-// src/connections.ts — app-owned connection definitions; the driver import lives HERE
-import { postgres } from "@makerkit/prisma-cloud"
+// src/service.ts — the authored service; the connection + its driver live here
+import { compute, postgres } from "@makerkit/prisma-cloud"
 import { SQL } from "bun"                       // the APP's choice of client
 
-export const db = postgres({ client: ({ url }) => new SQL({ url }) })
+const db = postgres({ client: ({ url }) => new SQL({ url }) })
 // typeof hydrated db = SQL — inferred from the factory, no phantom declaration
-
-// src/service.ts — the authored service
-import { compute } from "@makerkit/prisma-cloud"
-import { db } from "./connections"
 
 export default compute({ db }, ({ db }, { port }) =>
   Bun.serve({ port, hostname: "0.0.0.0",
@@ -794,23 +793,26 @@ export default compute({ db }, ({ db }, { port }) =>
 // bundle and calls main.run(address) with the service's deployment identity.
 export { default } from "./service"
 
-// alchemy.run.ts — deploy (heavy imports; never bundled)
-import service from "./src/service"
-import { lower } from "@makerkit/core/deploy"
+// makerkit.config.ts — declares the app, its target, and where the bundle is.
+// `makerkit deploy` reads this, calls lower() internally, and drives Alchemy;
+// the app author writes no stack file. (The CLI is a named extension point.)
+import app from "./src/service"
 import { prismaCloud } from "@makerkit/prisma-cloud/target"
-export default lower(service, prismaCloud({ workspaceId: requiredEnv("PRISMA_WORKSPACE_ID") }), {
+export default {
+  app,
+  target: prismaCloud({ workspaceId: requiredEnv("PRISMA_WORKSPACE_ID") }),
   name: "hello",
   bundle: { dir: "dist/bundle" },   // app-built; the pack packages it at deploy
-})
+}
 ```
 
 The app's build script bundles `src/main.ts` — that is the whole build. The
 envelope (bootstrap + `compute.manifest.json` + tar) is the pack's `package`
-step at deploy; the app never writes target vocabulary.
+step at deploy; the app never writes target vocabulary and never a stack file.
 
-Note where Bun appears: only in these app files (`Bun.serve` in the handler, `new
-SQL` in `connections.ts`) — the app's choice, since it deploys to a platform whose
-runtime is Bun. Switching the client to node-postgres, or the app to a Node
+Note where Bun appears: only in `service.ts` (`Bun.serve` in the handler, `new
+SQL` in the connection factory) — the app's choice, since it deploys to a platform
+whose runtime is Bun. Switching the client to node-postgres, or the app to a Node
 platform, changes these app lines and nothing in MakerKit.
 
 And note what a test needs: `service.invoke(fakes, { port: 0 })` — inject typed
@@ -840,14 +842,16 @@ export default hex("storefront-auth", (h) => {
   h.provision("storefront", storefrontService, { auth: authRef })  // wires the edge
 })
 
-// alchemy.run.ts — the whole deploy script
-export default lower(appHex, prismaCloud({ workspaceId }), {
+// makerkit.config.ts — the whole deploy declaration; `makerkit deploy` drives it
+export default {
+  app: appHex,
+  target: prismaCloud({ workspaceId }),
   name: "StorefrontAuth",
   bundles: {
     auth: { dir: "hexes/auth/dist/bundle" },
     storefront: { dir: "hexes/storefront/dist/bundle" },
   },
-})
+}
 ```
 
 At deploy, core sequences: auth provision → auth deploy (URL now real) → storefront
@@ -882,6 +886,12 @@ into a client exactly as it does `db`; the handler cannot tell the two apart.
 
 ## Extension points (designed for, not yet built)
 
+- **MakerKit-owned deploy entrypoint** — the standard deploy path is `makerkit
+  deploy` over a declarative `makerkit.config.ts` (`{ app, target, name,
+  bundle(s) }`); the CLI reads it and calls `lower()` internally, so the app
+  author writes no stack file. `lower()`/`lowering()` stay in `/deploy` as the
+  mechanism and the escape hatch for hand-composed / mixed-stack topologies.
+  Until the CLI lands, examples invoke `lower()` from an interim `alchemy.run.ts`.
 - **Typed connection interfaces + generated clients** — today `http()` hydrates to
   a plain URL-anchored client; the next step is declaring the interface of a
   connection (routes, request/response bodies), enforcing compatibility at Load,
