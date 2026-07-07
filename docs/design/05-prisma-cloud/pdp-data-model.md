@@ -83,7 +83,11 @@ Consequences MakerKit designs around:
    version — which the Alchemy graph does via a property diff (see
    [alchemy-lowering.md](alchemy-lowering.md)).
 3. **`DATABASE_URL` is not a separate mechanism.** It is a system-written
-   template flowing through the same materialization as user variables.
+   template flowing through the same materialization as user variables — a
+   convenience for hand-provisioned single services. MakerKit forbids its use
+   and poisons it at project provision (see
+   [alchemy-lowering.md](alchemy-lowering.md#database_url-is-forbidden--and-actively-poisoned));
+   every database URL a service consumes is an explicit, service-named variable.
 4. **Branch + class is the platform's environments model** (production
    templates vs preview templates + per-branch overrides) — the natural
    substrate for MakerKit's future stages/environments story.

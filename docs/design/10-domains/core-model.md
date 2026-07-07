@@ -77,7 +77,7 @@ graph, never sequences anything, never calls another tool.
 
 | Path | Where it executes | Core does (the actor) | Pack tools used |
 | --- | --- | --- | --- |
-| **provision** | deploy machine, via Alchemy | walk the DAG; for each service, realize the target-specific thing that will host it | `ServiceLowering.provision` → identity (Project, ComputeService) |
+| **provision** | deploy machine, via Alchemy | provision the application once (Project + poison vars), then walk the DAG realizing each service's host | `Target.application.provision`, then `ServiceLowering.provision` → identity (App) |
 | **deploy** | deploy machine, via Alchemy | ensure every config value the service reads at boot exists *first*, then ship the build | `ServiceLowering.writeConfig` in the seam, then `ServiceLowering.deploy` (version → upload → start → promote) |
 | **run** | inside the bundle, in the VM | Load the graph, resolve → validate → hydrate every binding, call the handler | `ConfigAdapter.get`, each connection's `hydrate` |
 
@@ -163,7 +163,7 @@ interface Connection<P extends Params = Params, C = unknown> {
 
 // The platform's config I/O, pack-provided and attached to the service node by
 // its constructor. The mapping between semantic params and physical locations
-// (e.g. url ↔ DATABASE_URL) is the adapter's PRIVATE business — core never sees
+// (e.g. auth's db.url ↔ AUTH_DB_URL) is the adapter's PRIVATE business — core never sees
 // platform keys. The adapter owns its source: the platform adapter is the one
 // sanctioned environment reader; an in-memory test adapter reads nothing.
 interface ConfigAdapter {
@@ -329,14 +329,24 @@ import type { Effect } from "effect"
 interface Target {
   readonly name: string
   providers(): Layer.Layer<never>                       // the pack's Alchemy providers
+  readonly application: ApplicationLowering             // once per lowering, before anything else
   readonly resources: Record<string, Lowering>          // resource type id → one-shot lowering
   readonly services: Record<string, ServiceLowering>    // service type id → phased SPI
 }
 
+// The application's shared infrastructure: on Prisma Cloud, the one Project
+// (the config namespace and lifecycle boundary) plus the poison DATABASE_URL
+// variables. Its outputs (projectId) reach every later SPI call via
+// LowerContext.application.
+interface ApplicationLowering {
+  provision(ctx: LowerContext): Effect.Effect<LoweredNode, unknown, unknown>
+}
+
 // The phased service SPI — the seam between the phases belongs to CORE.
 interface ServiceLowering {
-  // provision: make the target-specific thing that will host the service.
-  // Identity-bearing infrastructure only (Project, ComputeService); no code runs.
+  // provision: make the target-specific thing that will host the service —
+  // identity-bearing infrastructure only (the App), inside the application's
+  // Project (ctx.application); no code runs.
   provision(ctx: LowerContext): Effect.Effect<LoweredNode, unknown, unknown>
   // writeConfig: make these param values exist in the service's runtime
   // environment (on Prisma Cloud: EnvironmentVariables on the project). Uses
@@ -359,6 +369,7 @@ interface LowerContext {
   readonly node: ServiceNode | ResourceNode
   readonly graph: Graph
   readonly opts: LowerOptions
+  readonly application: LoweredNode                     // the application provision's outputs
   readonly lowered: ReadonlyMap<NodeId, LoweredNode>    // already-lowered deps (topo order)
 }
 
@@ -406,19 +417,24 @@ In the mixed case the hand-written stack supplies providers itself (including th
 target's, via `target.providers()`), yields a `lowering(…)` per MakerKit-authored
 service, and wires its own resources around the returned `outputs`.
 
-**Core's deploy-path sequencing** — the control flow no pack can misorder. Walk
-services in topological order over the connection edges (the DAG Load validated);
-for each service:
+**Core's deploy-path sequencing** — the control flow no pack can misorder.
+First, `application.provision` runs once (the Project, with the poison
+`DATABASE_URL` variables). Then walk services in topological order over the
+connection edges (the DAG Load validated); for each service:
 
-1. `provision` — the service now has identity (e.g. projectId).
-2. Resolve every wired ConnectionEnd's params from its **producer's deploy
-   outputs** (the producer, earlier in topo order, is already fully deployed —
-   its URL is real, not the create-time placeholder).
-3. `writeConfig` with those resolved params — config exists before any code runs.
-4. `deploy` — the first VM boots with its config present.
-
-Resource inputs lower via `Target.resources` as before (one-shot, before their
-service's provision). **How the ordering is actually enforced:** our walk only
+1. Lower its resource inputs via `Target.resources` (e.g. the service's own
+   Database + Connection — outputs carry the url).
+2. `provision` — the service now has identity (its App).
+3. Resolve every declared param that comes from the graph: resource-backed
+   params from the resource lowerings' outputs (the database url), wired
+   ConnectionEnd params from the **producer's deploy outputs** (the producer,
+   earlier in topo order, is already fully deployed — its URL is real, not the
+   create-time placeholder).
+4. `writeConfig` with all resolved params — every value the service boots with,
+   database URLs included, lands as the service's own named variables. Never
+   the platform default.
+5. `deploy` — the first version snapshots an environment that is already
+   complete. **How the ordering is actually enforced:** our walk only
 *assembles* Alchemy resource descriptions — Alchemy executes them in dependency
 order and runs unordered resources concurrently; declaration order is never
 consulted. So core realizes the sequence as **dependency edges**: most arise
@@ -568,20 +584,24 @@ export const compute = <D extends Deps>(
   })
 
 // The platform adapter — the pack's single environment reader. The semantic↔
-// physical mapping (url ↔ DATABASE_URL, port ↔ PORT; per-input naming when
-// multiple databases arrive) lives HERE, private to the pack.
+// physical mapping lives HERE, private to the pack, and is SHARED with the
+// deploy path's writeConfig (one module, both directions). Keys are unique per
+// service within the application's shared project namespace: the mapping
+// prefixes them with the service's identity, which writeConfig records as a
+// reserved MakerKit variable so the boot side can reconstruct the same names.
+// The platform's DATABASE_URL is never among them — it is forbidden and
+// poisoned at project provision (see 05-prisma-cloud/alchemy-lowering.md).
 const computeAdapter: ConfigAdapter = {
   async get(requests) {
     const values: Record<string, string> = {}
     for (const r of requests) {
-      const key = r.name === "url" ? "DATABASE_URL" : r.name.toUpperCase()
-      const raw = process.env[key]
+      const raw = process.env[envKey(r)]          // envKey: the shared mapping module
       if (raw !== undefined) values[r.id] = raw
     }
     return values
   },
   async describe(r) {
-    return { location: `env:${r.name === "url" ? "DATABASE_URL" : r.name.toUpperCase()}` }
+    return { location: `env:${envKey(r)}` }
   },
 }
 ```
@@ -606,25 +626,50 @@ export const prismaCloud = (o: PrismaCloudOptions): Target => ({
   // lives here in the pack — never in core — until fixed in prisma-alchemy.
   providers: () => Prisma.providers() as unknown as Layer.Layer<never>,
 
+  // Runs ONCE per lowering, before any service: the application's Project,
+  // with the poison DATABASE_URL/DATABASE_URL_POOLED variables written
+  // immediately so nothing can ever rely on the platform default.
+  application: {
+    provision: ({ opts }) =>
+      Effect.gen(function* () {
+        const project = yield* Prisma.Project(`${opts.name}-project`, {
+          workspaceId: o.workspaceId, name: opts.name,
+        })
+        for (const key of ["DATABASE_URL", "DATABASE_URL_POOLED"]) {
+          yield* Prisma.EnvironmentVariable(`${key}-poison`, {
+            projectId: project.id, key, value: "", class: "production",  // "" preferred; "-" if the API rejects empty
+          })
+        }
+        return { outputs: { projectId: project.id } }
+      }),
+  },
+
   resources: {
-    // For now the postgres input is served by the project's default database
-    // (Compute auto-injects DATABASE_URL), so it provisions nothing itself.
-    // It becomes a real Database resource when contracts/multiple DBs arrive.
-    "prisma-cloud/postgres": () => Effect.succeed({ outputs: {} }),
+    // Each postgres input gets its own Database in the application's project.
+    // The url output is resolved into the service's db.url param and written
+    // through writeConfig under the service's own named key — never the
+    // platform default.
+    "prisma-cloud/postgres": ({ id, application }) =>
+      Effect.gen(function* () {
+        const db = yield* Prisma.Database(`${id}-db`, {
+          projectId: application.outputs.projectId, name: id,
+        })
+        const conn = yield* Prisma.Connection(`${id}-conn`, { databaseId: db.id })
+        return { outputs: { url: conn.url } }
+      }),
   },
 
   services: {
     "prisma-cloud/compute": {
-      // The service as a PLACE: identity-bearing infrastructure, no code runs.
-      provision: ({ id }) =>
+      // The service as a PLACE inside the application's Project: the App,
+      // identity-bearing only, no code runs.
+      provision: ({ id, application }) =>
         Effect.gen(function* () {
-          const project = yield* Prisma.Project(`${id}-project`, {
-            workspaceId: o.workspaceId, name: id,
-          })
           const svc = yield* Prisma.ComputeService(`${id}-svc`, {
-            projectId: project.id, name: id, region: o.region ?? "us-east-1",
+            projectId: application.outputs.projectId,
+            name: id, region: o.region ?? "us-east-1",
           })
-          return { outputs: { projectId: project.id, serviceId: svc.id } }
+          return { outputs: { serviceId: svc.id, projectId: application.outputs.projectId } }
         }),
 
       // Make these values exist in the service's runtime environment — via the

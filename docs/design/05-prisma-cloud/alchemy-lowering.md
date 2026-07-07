@@ -5,6 +5,37 @@ The Alchemy resource types `packages/prisma-alchemy` defines over the
 lowering graphs — including the correction that makes deploy ordering a property
 of the dependency graph rather than luck.
 
+## Placement: one Project per application
+
+A PDP Project is a **shared config namespace** (every App on a branch snapshots
+the same variable set into its versions) and a **shared lifecycle** (deletion
+cascades). MakerKit's placement rule: **one Project per MakerKit application** —
+all of an application's services are Apps in that one Project, each with its own
+Database beside it. Consequences, stated plainly:
+
+- Config keys are namespaced per service by the pack's mapping (e.g.
+  `AUTH_DB_URL`, `STOREFRONT_AUTH_URL`) — collisions are a naming concern the
+  pack owns, not a reason to split projects.
+- The Project is thereby also the **secret-visibility boundary**: every service's
+  process env physically contains its co-located siblings' variables. One
+  application = one trust domain; anything that must not be visible across
+  services belongs in a different project (a different application).
+
+## `DATABASE_URL` is forbidden — and actively poisoned
+
+The platform writes `DATABASE_URL` / `DATABASE_URL_POOLED` templates pointing at
+a project's default database — a convenience for hand-provisioned single
+services, and precisely the kind of **implicit ambient config MakerKit exists to
+eliminate**. MakerKit never reads it, never depends on it, and makes reliance on
+it impossible: when MakerKit provisions a Project, it **writes user-level
+`DATABASE_URL` and `DATABASE_URL_POOLED` variables with a poison value** (empty
+string preferred — our own pipeline treats `""` as unresolved, and any direct
+reader fails at connect; `"-"` if the API rejects empty values). User-set values
+permanently override the platform templates (`wireDefaultDatabaseUrl` leaves
+them untouched), so nothing deployed by MakerKit can ever quietly work off the
+default again. Every database URL a service consumes is an explicit, per-service
+variable written through `writeConfig` under the pack's named key.
+
 ## The resource inventory
 
 Each row is an Alchemy resource type we define (Alchemy has no built-in types —
@@ -12,9 +43,9 @@ it manages whatever a provider package registers).
 
 | Our resource | PDP entity it manages | Props (in) | Outputs (out) | Notes |
 | --- | --- | --- | --- | --- |
-| `Project` | Project | workspaceId, name | id | a default Database (and its `DATABASE_URL` templates) comes with it |
-| `Database` | Database | projectId, name, isDefault | id, connection info | branch-scoped in PDP; we touch only the production branch's |
-| `Connection` | database connection info | databaseId | url | direct/pooled endpoints |
+| `Project` | Project | workspaceId, name | id | **one per MakerKit application**; the poison `DATABASE_URL` variables are written at provision (see above) |
+| `Database` | Database | projectId, name | id, connection info | one per service that declares a postgres input; never the project default |
+| `Connection` | database connection info | databaseId | url | direct/pooled endpoints; the url is written as the service's own named variable via `writeConfig` |
 | `ComputeService` | App | projectId, name, region | id | PDP attaches it to the production branch implicitly |
 | `EnvironmentVariable` | ConfigVariable | projectId, class, key, value, branchId? | id | we write production-class templates only |
 | `Deployment` | Deployment (ComputeVersion) + Promotion | computeServiceId, artifactPath, artifactHash, port, **environment** (the env-var records the version boots with — see the graphs below) | versionId, deployedUrl | provider reconcile: create version → upload tar.gz → start → poll until running → promote; `deployedUrl` read **post-promote** (create-time domain is a placeholder — PRO-200) |
@@ -54,30 +85,37 @@ flowchart LR
   AU -- input --> ADB[(auth db)]
 ```
 
-**The Alchemy graph it lowers to:**
+**The Alchemy graph it lowers to** (one Project — the application):
 
 ```mermaid
 flowchart TB
-  subgraph auth
-    Pa[Project_a] --> Sa[ComputeService_a] --> Da[Deployment_a]
+  subgraph P [Project: storefront-auth]
+    POISON["EnvironmentVariable(DATABASE_URL = poison)"]
+    DBa[(Database auth-db)] --> Ca[Connection] -- url --> EVa["EnvironmentVariable(AUTH_DB_URL)"]
+    DBs[(Database storefront-db)] --> Cs[Connection] -- url --> EVs["EnvironmentVariable(STOREFRONT_DB_URL)"]
+    Sa[ComputeService auth] --> Da[Deployment_a]
+    Ss[ComputeService storefront] --> Ds[Deployment_s]
+    EVa -- record ref --> Da
+    EVs -- record ref --> Ds
+    Da -- deployedUrl --> EVu["EnvironmentVariable(STOREFRONT_AUTH_URL)"]
+    EVu -- record ref --> Ds
   end
-  subgraph storefront
-    Ps[Project_s] --> Ss[ComputeService_s] --> Ds[Deployment_s]
-    Ps --> EV["EnvironmentVariable(AUTH_URL)"]
-    EV -- record ref --> Ds
-  end
-  Da -- deployedUrl --> EV
 ```
 
 How the pieces map:
 
-- **Each service** lowers to its `Project → ComputeService → Deployment` chain
-  (the resource inputs — here each service's database — ride the Project's
-  default DB; see the inventory above).
+- **The application** lowers to one `Project`, provisioned first, with the
+  poison `DATABASE_URL` variables written immediately (nothing downstream can
+  depend on the default).
+- **Each service** lowers to a `ComputeService → Deployment` chain plus its own
+  `Database → Connection`, whose url is written as that service's **explicitly
+  named** variable — the same `writeConfig` path as any other config value.
 - **The connection** lowers to two edges: the producer's `deployedUrl` flows
-  into an `EnvironmentVariable` on the consumer's project, and that variable's
-  **record reference flows into the consumer's `Deployment`** via its
-  `environment` prop.
+  into a named `EnvironmentVariable`, and that variable's **record reference
+  flows into the consumer's `Deployment`** via its `environment` prop.
+- Every `EnvironmentVariable` a Deployment boots with appears in its
+  `environment` prop — database URLs and connection URLs alike — so ordering
+  and change propagation hold uniformly.
 
 The `environment` prop is load-bearing and mirrors PDP's own dataflow — the
 version-create call literally contains the materialized env map, so the

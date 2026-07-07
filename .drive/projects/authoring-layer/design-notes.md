@@ -51,3 +51,15 @@ guard, side-effect-free-import test) carry forward into the rebuild.
    the minimal `hex()` wires producer → consumer; connection edges must form a
    DAG (address-at-deploy-time wiring; checked at Load). Recorded in
    core-model.md §§ Three execution paths / Lowering / worked instance.
+
+7. **Project = application; DATABASE_URL forbidden and poisoned** (operator
+   decisions). One PDP Project per MakerKit application — all services co-locate
+   as Apps with their own Databases; the Project is the config-namespace and
+   secret-visibility boundary. The platform's default DATABASE_URL/_POOLED are
+   never read: MakerKit writes user-level poison values ("" preferred, "-"
+   fallback) at project provision so reliance is impossible. Every database URL
+   is an explicit per-service variable through writeConfig. The one-project-per-
+   service layout of R1–R3 is retired (it was a slice-1 expedient, wrongly
+   rationalized). Target SPI gains application.provision (once, before services);
+   postgres resource lowering creates a real Database + Connection. Recorded in
+   05-prisma-cloud/* and core-model.md.
