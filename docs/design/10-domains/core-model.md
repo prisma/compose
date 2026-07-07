@@ -418,9 +418,20 @@ for each service:
 4. `deploy` — the first VM boots with its config present.
 
 Resource inputs lower via `Target.resources` as before (one-shot, before their
-service's provision). The provision→writeConfig→deploy order per service, and
-producer-before-consumer across services, are core's — which is what makes the
-fresh-deploy config race (PRO-211) structurally impossible on every target.
+service's provision). **How the ordering is actually enforced:** our walk only
+*assembles* Alchemy resource descriptions — Alchemy executes them in dependency
+order and runs unordered resources concurrently; declaration order is never
+consulted. So core realizes the sequence as **dependency edges**: most arise
+naturally from value flow (the env var consumes the project id and the
+producer's URL), and the one that doesn't — deploy-after-writeConfig — exists
+because the `Deployment` resource declares the environment records it boots
+with as a prop, which is PDP's own dataflow restored (the version-create call
+literally contains the materialized env map). See the lowering graphs in
+[`../05-prisma-cloud/alchemy-lowering.md`](../05-prisma-cloud/alchemy-lowering.md).
+The same edge also propagates change: a producer's new URL diffs the consumer's
+`Deployment` props → new version → new snapshot, the only propagation mechanism
+PDP's snapshot-per-version semantics permit. This is what makes the fresh-deploy
+config race (PRO-211) structurally impossible on every target.
 
 Notes:
 

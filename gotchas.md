@@ -185,17 +185,17 @@ process.on("unhandledRejection", (e) => console.error(e));
 **First hit:** `examples/storefront-auth` R2 migration — fresh deploy of the two-service system
 **Cost:** ~20 min (plus a review round establishing the old stack never had the ordering either)
 
-**Symptom.** Deploying producer service + consumer service + an env var derived from the producer's URL in one apply: on a fresh deploy the consumer's first VM boots before the env var lands and serves "AUTH_URL not set". Minutes later it silently heals — a scale-to-zero recycle boots a replacement VM that reads the variable.
+**Symptom.** Deploying producer service + consumer service + an env var derived from the producer's URL in one apply: on a fresh deploy the consumer's version is created before the env-var row lands, and it serves "AUTH_URL not set".
 
-**Cause.** Two orchestration gaps (env-at-boot-only itself is normal): (1) no way to order "config exists" before a version's first start within a deploy — the env-var POST and the version start are independent and race; (2) changing a production env var does not restart/roll the running version, so a write that misses the boot stays invisible until an unrelated recycle or redeploy.
+**Cause (corrected after reading pdp-control-plane source).** Env vars are `ConfigVariable` rows **materialized into a version at version-create time** (`materializeBranchEnvVars` resolves the branch's map and hands it to Foundry with the version) and frozen there — version start does not re-resolve, and updating a variable touches only the row, never an existing version. So the race is the env-var POST vs the consumer's **version-create** call, issued by one apply with no dependency edge between them. Consequences: (1) a version created before the row exists never sees it, regardless of VM recycles; (2) config changes take effect only via a new version — there is no restart-on-config-change. _The original filing (and this entry's first version) claimed boot-time application and recycle-healing; the source model contradicts that. Our one observed recycle-heal is treated as a platform bug, not behavior to rely on._
 
-**Workaround.** After a fresh multi-service deploy, verify consumers; if a config-derived read is missing, wait out a scale-to-zero recycle or ship a redeploy (new artifact hash → fresh version boots with the variable). Structurally, an ordering edge into the version start is exactly what MakerKit's Connection primitive will express.
+**Workaround.** Give the consumer's version-create a real dependency on the env-var write in the deploy graph — the version genuinely consumes the environment (PDP's version-create call contains the materialized map). In MakerKit this is the Connection primitive's corrected lowering: `Deployment` declares its expected environment records as a prop, which both orders the write first and redeploys the consumer when a value changes. Manual stacks: create the variable, then ship a new version.
 
 **Reproduction.**
 
 1. One stack: service A; env var on service B's project whose value is A's deployed URL; service B.
-2. Fresh deploy (no prior state). Curl B immediately → config-missing behavior.
-3. Wait for scale-to-zero recycle (or redeploy B) → healed, no code change.
+2. Fresh deploy (no prior state) where the version-create wins the race → config-missing behavior, permanent for that version.
+3. Ship a new version of B → healed (its snapshot includes the variable).
 
 **References.**
 
