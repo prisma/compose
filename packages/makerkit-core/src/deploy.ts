@@ -78,7 +78,11 @@ export function lowering(
     const graph = Load(root, { id: opts.name });
     const lowered = new Map<NodeId, LoweredNode>();
 
-    for (const { id, node } of graph.nodes) {
+    for (const { id, node: graphNode } of graph.nodes) {
+      // lowering() takes service roots today; hex roots arrive with the phased
+      // SPI rework. A service-rooted graph never contains a HexNode, so every
+      // node here carries a routing type.
+      const node = graphNode as ServiceNode | ResourceNode;
       const lowerNode = target.lower[node.type];
       if (lowerNode === undefined) {
         return yield* Effect.fail(

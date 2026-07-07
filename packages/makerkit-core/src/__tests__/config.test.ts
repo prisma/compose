@@ -1,7 +1,7 @@
-import { describe, expect, test } from 'bun:test';
-import { configOf } from '../config.ts';
-import { resource, service } from '../node.ts';
-import { conn, memoryAdapter } from './helpers.ts';
+import { describe, expect, test } from "bun:test";
+import { configOf } from "../config.ts";
+import { connectionEnd, resource, service } from "../node.ts";
+import { conn, memoryAdapter } from "./helpers.ts";
 
 const adapter = memoryAdapter({});
 
@@ -106,5 +106,32 @@ describe('configOf', () => {
     expect(handlerCalls).toBe(0);
     expect(hydrateCalls).toBe(0);
     expect(adapter.requested.length).toBe(0);
+  });
+});
+
+describe("configOf over connection-end inputs", () => {
+  test("connection-end params appear with owner { input } exactly like resource params", () => {
+    const root = service({
+      type: "fake/app",
+      inputs: {
+        db: resource({
+          type: "fake/db",
+          connection: conn({ url: { type: "string", secret: true } }, () => ({})),
+        }),
+        auth: connectionEnd({
+          type: "fake/http",
+          connection: conn({ url: { type: "string" } }, () => ({})),
+        }),
+      },
+      params: { port: { type: "number", default: 3000 } },
+      config: adapter,
+      handler: () => null,
+    });
+
+    expect(configOf(root)).toEqual([
+      { owner: { input: "db" }, name: "url", type: "string", secret: true, optional: false },
+      { owner: { input: "auth" }, name: "url", type: "string", secret: false, optional: false },
+      { owner: "service", name: "port", type: "number", secret: false, optional: false, default: 3000 },
+    ]);
   });
 });

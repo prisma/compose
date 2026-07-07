@@ -1,8 +1,8 @@
-import { describe, expect, test } from 'bun:test';
-import { LoadError } from '../graph.ts';
-import { resource, service } from '../node.ts';
-import { ConfigError, runHost } from '../runtime.ts';
-import { conn, memoryAdapter, untouchableAdapter } from './helpers.ts';
+import { describe, expect, test } from "bun:test";
+import { LoadError } from "../graph.ts";
+import { connectionEnd, resource, service } from "../node.ts";
+import { ConfigError, runHost } from "../runtime.ts";
+import { conn, memoryAdapter, untouchableAdapter } from "./helpers.ts";
 
 const dbNode = (record?: (values: { url: string }) => void) =>
   resource({
@@ -331,5 +331,54 @@ describe('runHost', () => {
     expect(runHost(root)).rejects.toThrow(ConfigError);
     await runHost(root).catch(() => {});
     expect(handlerCalls).toBe(0);
+  });
+});
+
+describe("runHost over connection-end inputs", () => {
+  test("a ConnectionEnd hydrates through the existing pipeline — zero new mechanism", async () => {
+    let received: unknown;
+    const made: unknown[] = [];
+    const root = service({
+      type: "fake/app",
+      inputs: {
+        auth: connectionEnd({
+          type: "fake/http",
+          connection: conn({ url: { type: "string" } }, (v) => {
+            made.push(v);
+            return { fetchBase: v.url };
+          }),
+        }),
+      },
+      params: {},
+      config: untouchableAdapter,
+      handler: (deps) => {
+        received = deps;
+        return "served";
+      },
+    });
+
+    const result = await runHost(root, { overrides: { "auth.url": "https://auth.example" } });
+
+    expect(result).toBe("served");
+    expect(made).toEqual([{ url: "https://auth.example" }]);
+    expect(received).toEqual({ auth: { fetchBase: "https://auth.example" } });
+  });
+
+  test("an unwired ConnectionEnd with no value fails through the ordinary missing-config path", async () => {
+    const root = service({
+      type: "fake/app",
+      inputs: {
+        auth: connectionEnd({
+          type: "fake/http",
+          connection: conn({ url: { type: "string" } }, () => ({})),
+        }),
+      },
+      params: {},
+      config: memoryAdapter({}),
+      handler: () => null,
+    });
+
+    expect(runHost(root)).rejects.toThrow(ConfigError);
+    expect(runHost(root)).rejects.toThrow(/auth\.url/);
   });
 });

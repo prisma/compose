@@ -15,8 +15,7 @@ const NODE: unique symbol = Symbol.for('makerkit:node') as never;
 
 export interface NodeBase {
   readonly [NODE]: true;
-  /** "hex" later — an extension point, not built yet. */
-  readonly kind: 'service' | 'resource';
+  readonly kind: "service" | "resource" | "connection";
   /** Routing key, e.g. "prisma-cloud/postgres". */
   readonly type: string;
 }
@@ -46,11 +45,54 @@ export interface ServiceNode<D extends Deps = Deps, P extends Params = Params> e
   run(deps: HydratedDeps<D>, ctx: Values<P>): unknown;
 }
 
-/** Dependency map: name → ResourceNode. `any`, not `unknown` — keeps inference. */
-// biome-ignore lint/suspicious/noExplicitAny: `any` here is deliberate — `unknown` would break dependency inference.
-export type Deps = Record<string, ResourceNode<any>>;
+/**
+ * A service-to-service dependency end. Sits in a Deps slot like a
+ * ResourceNode, but nothing is provisioned FOR it — at deploy it becomes an
+ * EDGE to the producer service the enclosing hex wires it to; at run it
+ * hydrates a client through exactly the same Connection machinery as a
+ * resource. The consumer never learns HOW the producer's address reached it.
+ */
+export interface ConnectionEnd<C = unknown> extends NodeBase {
+  readonly kind: "connection";
+  readonly connection: Connection<Params, C>;
+}
 
-export type Hydrated<N> = N extends ResourceNode<infer C> ? C : never;
+/**
+ * A Hex: transparent wiring, no code of its own. The body runs at Load (it
+ * is wiring, not user code) and provisions the services it owns, supplying a
+ * producer for every ConnectionEnd input. Minimal form — boundary ports and
+ * nesting arrive with full Hex composition.
+ */
+export interface HexNode {
+  readonly [NODE]: true;
+  readonly kind: "hex";
+  readonly name: string;
+  body(h: HexBuilder): void;
+}
+
+export interface HexBuilder {
+  /**
+   * Registers an owned service under a stable id; `wiring` satisfies the
+   * service's ConnectionEnd inputs with previously provisioned producers.
+   */
+  provision(
+    id: string,
+    service: ServiceNode<any, any>,
+    wiring?: Record<string, ProvisionedRef>,
+  ): ProvisionedRef;
+}
+
+/** Opaque handle within the hex body. */
+export type ProvisionedRef = { readonly id: string };
+
+/** Dependency map: name → what the service consumes. `any`, not `unknown` — keeps inference. */
+export type Deps = Record<string, ResourceNode<any> | ConnectionEnd<any>>;
+
+export type Hydrated<N> = N extends ResourceNode<infer C>
+  ? C
+  : N extends ConnectionEnd<infer C>
+    ? C
+    : never;
 export type HydratedDeps<D extends Deps> = { readonly [K in keyof D]: Hydrated<D[K]> };
 
 /**
@@ -121,11 +163,60 @@ export function service<D extends Deps, P extends Params>(def: {
   return Object.freeze(node);
 }
 
-/** True if `value` is a node constructed by the service()/resource() factories. */
+/**
+ * Constructs a branded, frozen ConnectionEnd. Pure — nothing executes; the
+ * connection's hydrate runs only through the boot pipeline.
+ */
+export function connectionEnd<P extends Params, C>(def: {
+  type: string;
+  connection: Connection<P, C>;
+}): ConnectionEnd<C> {
+  requireType(def.type, "connectionEnd");
+  const connection: Connection<P, C> = Object.freeze({
+    params: freezeParams(def.connection.params),
+    hydrate: def.connection.hydrate,
+  });
+  const node: ConnectionEnd<C> = {
+    [NODE]: true,
+    kind: "connection",
+    type: def.type,
+    connection: connection as Connection<Params, C>,
+  };
+  return Object.freeze(node);
+}
+
+/**
+ * Constructs a branded, frozen Hex node. Construction is INERT — the body is
+ * wiring, not user code, and runs only when the hex is Loaded.
+ */
+export function hex(name: string, body: (h: HexBuilder) => void): HexNode {
+  if (typeof name !== "string" || name.length === 0) {
+    throw new Error("hex() requires a non-empty name.");
+  }
+  const node: HexNode = {
+    [NODE]: true,
+    kind: "hex",
+    name,
+    body,
+  };
+  return Object.freeze(node);
+}
+
+/** True if `value` is a node constructed by this module's factories. */
 export function isNode(value: unknown): value is NodeBase {
   return (
     typeof value === 'object' &&
     value !== null &&
     (value as Record<PropertyKey, unknown>)[NODE] === true
+  );
+}
+
+/** True if `value` is a hex constructed by the hex() factory. */
+export function isHexNode(value: unknown): value is HexNode {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as Record<PropertyKey, unknown>)[NODE] === true &&
+    (value as { kind?: unknown }).kind === "hex"
   );
 }

@@ -15,9 +15,9 @@ describe('Load', () => {
 
     const graph = Load(root, { id: 'hello' });
 
-    expect(graph.root).toEqual({ id: 'hello', node: root });
-    expect(graph.nodes.map((n) => n.id)).toEqual(['hello.db', 'hello']);
-    expect(graph.edges).toEqual([{ from: 'hello.db', to: 'hello', input: 'db' }]);
+    expect(graph.root).toEqual({ id: "hello", node: root });
+    expect(graph.nodes.map((n) => n.id)).toEqual(["hello.db", "hello"]);
+    expect(graph.edges).toEqual([{ from: "hello.db", to: "hello", input: "db", kind: "input" }]);
   });
 
   test('defaults the root id to "root"', () => {
@@ -32,8 +32,8 @@ describe('Load', () => {
 
     expect(graph.nodes.map((n) => n.id)).toEqual(['svc.a', 'svc.b', 'svc']);
     expect(graph.edges).toEqual([
-      { from: 'svc.a', to: 'svc', input: 'a' },
-      { from: 'svc.b', to: 'svc', input: 'b' },
+      { from: "svc.a", to: "svc", input: "a", kind: "input" },
+      { from: "svc.b", to: "svc", input: "b", kind: "input" },
     ]);
   });
 

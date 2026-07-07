@@ -133,10 +133,13 @@ export async function runHost(root: ServiceNode, opts?: RunHostOptions): Promise
     throw new ConfigError(`Config validation failed: ${problems.join('; ')}.`);
   }
 
-  // Hydrate each input with its typed value slice.
+  // Hydrate each input with its typed value slice. Resource and connection-end
+  // inputs hydrate through the same machinery — the handler cannot tell the
+  // two mechanisms apart.
   const deps: Record<string, unknown> = {};
   const byId = new Map(graph.nodes.map((entry) => [entry.id, entry]));
   for (const edge of graph.edges) {
+    if (edge.kind !== "input") continue;
     const node = byId.get(edge.from)?.node as ResourceNode;
     const values: Record<string, string | number | undefined> = {};
     for (const name of Object.keys(node.connection.params)) {
