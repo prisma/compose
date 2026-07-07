@@ -42,6 +42,17 @@ export async function bundleNextComputeArtifact(appDir: string): Promise<BundleN
     );
   }
 
+  // Next hoists the traced node_modules to the STANDALONE ROOT, resolved from
+  // the nested server.js by walking up. But the artifact tars only this app
+  // subdir (the bundle dir), so those deps (`next`, `react`, …) are left out —
+  // the VM then can't resolve `next` from server.js. Copy the hoisted tree in
+  // so the bundle dir is self-contained.
+  const standaloneRoot = path.join(resolvedApp, ".next", "standalone");
+  const rootModules = path.join(standaloneRoot, "node_modules");
+  if (path.resolve(rootModules) !== path.resolve(appOut, "node_modules") && fs.existsSync(rootModules)) {
+    await fs.promises.cp(rootModules, path.join(appOut, "node_modules"), { recursive: true });
+  }
+
   // The standalone build ships server.js + traced node_modules but not the
   // client assets; copy them where server.js serves them from.
   await fs.promises.cp(
@@ -79,6 +90,14 @@ export async function bundleNextComputeArtifact(appDir: string): Promise<BundleN
   } finally {
     await fs.promises.rm(bundleTmp, { recursive: true, force: true });
   }
+
+  // Disable bun's runtime auto-install. Next's server.js references `sharp` /
+  // `@next/swc` (optional native deps this app never uses); on Compute, bun
+  // tries to fetch their linux binaries at that `require`, filling the tiny
+  // disk (ENOSPC -> reboot loop). With auto-install off, the require fails
+  // gracefully and Next boots — exactly as it does locally. bun reads bunfig
+  // from the process CWD, which is the artifact root at boot.
+  await fs.promises.writeFile(path.join(appOut, "bunfig.toml"), '[install]\nauto = "disable"\n');
 
   return { bundleDir: appOut };
 }

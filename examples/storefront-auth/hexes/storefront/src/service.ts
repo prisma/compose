@@ -14,11 +14,17 @@ const serverModule = './server.js';
 
 // No db input: nothing in the storefront queries its own database today (D3).
 // Next reads PORT itself, so the service param is declared but unused here.
-export default compute({ auth }, () => {
+export default compute({ auth }, async () => {
   // An unhandled error would otherwise crash the process into a 502 restart
   // loop on Compute; log and keep the process alive instead.
   process.on("uncaughtException", (err) => console.error("uncaughtException", err));
   process.on("unhandledRejection", (err) => console.error("unhandledRejection", err));
 
-  return import(serverModule);
+  console.log("storefront: starting Next standalone server");
+  await import(serverModule);
+  console.log("storefront: Next server started");
+  // The bootstrap `await main.run()` resolves once the handler returns; unlike
+  // Bun.serve, Next's imported http server does not reliably hold Compute's bun
+  // process open, so it exits and the VM restart-loops. Block forever.
+  await new Promise<never>(() => {});
 });
