@@ -1,11 +1,11 @@
-import { describe, expect, test } from "bun:test";
-import { Load, LoadError } from "../graph.ts";
-import { resource, service } from "../node.ts";
-import { conn } from "./helpers.ts";
+import { describe, expect, test } from 'bun:test';
+import { Load, LoadError } from '../graph.ts';
+import { resource, service } from '../node.ts';
+import { conn } from './helpers.ts';
 
-const db = () => resource({ type: "fake/db", connection: conn({}, () => ({})) });
+const db = () => resource({ type: 'fake/db', connection: conn({}, () => ({})) });
 const app = (inputs: Record<string, ReturnType<typeof db>>) =>
-  service({ type: "fake/app", inputs, params: {}, handler: () => null });
+  service({ type: 'fake/app', inputs, params: {}, handler: () => null });
 
 describe('Load', () => {
   test('builds path-derived ids, edges, and topo-ordered nodes (deps first)', () => {
@@ -14,9 +14,9 @@ describe('Load', () => {
 
     const graph = Load(root, { id: 'hello' });
 
-    expect(graph.root).toEqual({ id: "hello", node: root });
-    expect(graph.nodes.map((n) => n.id)).toEqual(["hello.db", "hello"]);
-    expect(graph.edges).toEqual([{ from: "hello.db", to: "hello", input: "db", kind: "input" }]);
+    expect(graph.root).toEqual({ id: 'hello', node: root });
+    expect(graph.nodes.map((n) => n.id)).toEqual(['hello.db', 'hello']);
+    expect(graph.edges).toEqual([{ from: 'hello.db', to: 'hello', input: 'db', kind: 'input' }]);
   });
 
   test('defaults the root id to "root"', () => {
@@ -31,8 +31,8 @@ describe('Load', () => {
 
     expect(graph.nodes.map((n) => n.id)).toEqual(['svc.a', 'svc.b', 'svc']);
     expect(graph.edges).toEqual([
-      { from: "svc.a", to: "svc", input: "a", kind: "input" },
-      { from: "svc.b", to: "svc", input: "b", kind: "input" },
+      { from: 'svc.a', to: 'svc', input: 'a', kind: 'input' },
+      { from: 'svc.b', to: 'svc', input: 'b', kind: 'input' },
     ]);
   });
 

@@ -1,11 +1,11 @@
-import { Resource } from "alchemy";
-import * as Provider from "alchemy/Provider";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
-import * as fs from "node:fs";
-import { ManagementClient } from "../client.ts";
-import { PrismaApiError, call, callOptional } from "../http.ts";
-import type { EnvironmentVariable } from "./EnvironmentVariable.ts";
+import * as fs from 'node:fs';
+import { Resource } from 'alchemy';
+import * as Provider from 'alchemy/Provider';
+import * as Effect from 'effect/Effect';
+import * as Schedule from 'effect/Schedule';
+import { ManagementClient } from '../client.ts';
+import { call, callOptional, PrismaApiError } from '../http.ts';
+import type { EnvironmentVariable } from './EnvironmentVariable.ts';
 
 export interface DeploymentProps {
   /** The compute service this deployment targets. */

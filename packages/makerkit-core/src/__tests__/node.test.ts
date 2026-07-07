@@ -1,6 +1,6 @@
-import { describe, expect, test } from "bun:test";
-import { connectionEnd, hex, isNode, resource, service } from "../node.ts";
-import { conn } from "./helpers.ts";
+import { describe, expect, test } from 'bun:test';
+import { connectionEnd, hex, isNode, resource, service } from '../node.ts';
+import { conn } from './helpers.ts';
 
 describe('resource()', () => {
   test('returns a branded, frozen resource node carrying its connection', () => {
@@ -47,7 +47,7 @@ describe('service()', () => {
     const node = service({
       type: 'fake/app',
       inputs: { db },
-      params: { port: { type: "number", default: 3000 } },
+      params: { port: { type: 'number', default: 3000 } },
       handler: () => null,
     });
 
@@ -55,19 +55,19 @@ describe('service()', () => {
     expect(node.kind).toBe('service');
     expect(node.type).toBe('fake/app');
     expect(node.inputs.db).toBe(db);
-    expect(node.params).toEqual({ port: { type: "number", default: 3000 } });
+    expect(node.params).toEqual({ port: { type: 'number', default: 3000 } });
     expect(Object.isFrozen(node)).toBe(true);
     expect(Object.isFrozen(node.inputs)).toBe(true);
     expect(Object.isFrozen(node.params)).toBe(true);
     expect(Object.isFrozen(node.params.port)).toBe(true);
   });
 
-  test("stores the handler as invoke; constructing calls nothing", () => {
+  test('stores the handler as invoke; constructing calls nothing', () => {
     let calls = 0;
     const node = service({
-      type: "fake/app",
-      inputs: { db: resource({ type: "fake/db", connection: conn({}, () => ({})) }) },
-      params: { port: { type: "number", default: 3000 } },
+      type: 'fake/app',
+      inputs: { db: resource({ type: 'fake/db', connection: conn({}, () => ({})) }) },
+      params: { port: { type: 'number', default: 3000 } },
       handler: (deps, ctx) => {
         calls += 1;
         return { deps, ctx };
@@ -82,66 +82,66 @@ describe('service()', () => {
     expect(result).toEqual({ deps: { db: fakeDb }, ctx: { port: 4242 } });
   });
 
-  test("throws on an empty type", () => {
-    expect(() => service({ type: "", inputs: {}, params: {}, handler: () => null })).toThrow(
+  test('throws on an empty type', () => {
+    expect(() => service({ type: '', inputs: {}, params: {}, handler: () => null })).toThrow(
       /non-empty node type/,
     );
   });
 });
 
-describe("connectionEnd()", () => {
-  test("returns a branded, frozen connection end carrying its connection", () => {
+describe('connectionEnd()', () => {
+  test('returns a branded, frozen connection end carrying its connection', () => {
     const end = connectionEnd({
-      type: "fake/http",
-      connection: conn({ url: { type: "string" } }, (v) => ({ url: v.url })),
+      type: 'fake/http',
+      connection: conn({ url: { type: 'string' } }, (v) => ({ url: v.url })),
     });
 
     expect(isNode(end)).toBe(true);
-    expect(end.kind).toBe("connection");
-    expect(end.type).toBe("fake/http");
-    expect(end.connection.params).toEqual({ url: { type: "string" } });
+    expect(end.kind).toBe('connection');
+    expect(end.type).toBe('fake/http');
+    expect(end.connection.params).toEqual({ url: { type: 'string' } });
     expect(Object.isFrozen(end)).toBe(true);
     expect(Object.isFrozen(end.connection)).toBe(true);
     expect(Object.isFrozen(end.connection.params)).toBe(true);
   });
 
-  test("hydrate is the supplied factory — called only when invoked", () => {
+  test('hydrate is the supplied factory — called only when invoked', () => {
     let calls = 0;
     const end = connectionEnd({
-      type: "fake/http",
-      connection: conn({ url: { type: "string" } }, (v) => {
+      type: 'fake/http',
+      connection: conn({ url: { type: 'string' } }, (v) => {
         calls += 1;
         return { url: v.url };
       }),
     });
 
     expect(calls).toBe(0);
-    expect(end.connection.hydrate({ url: "https://x" })).toEqual({ url: "https://x" });
+    expect(end.connection.hydrate({ url: 'https://x' })).toEqual({ url: 'https://x' });
     expect(calls).toBe(1);
   });
 
-  test("throws on an empty type", () => {
-    expect(() => connectionEnd({ type: "", connection: conn({}, () => ({})) })).toThrow(
+  test('throws on an empty type', () => {
+    expect(() => connectionEnd({ type: '', connection: conn({}, () => ({})) })).toThrow(
       /non-empty node type/,
     );
   });
 });
 
-describe("hex()", () => {
-  test("construction is INERT — the body runs only at Load", () => {
+describe('hex()', () => {
+  test('construction is INERT — the body runs only at Load', () => {
     let bodyCalls = 0;
-    const node = hex("shop", () => {
+    const node = hex('shop', () => {
       bodyCalls += 1;
     });
 
     expect(bodyCalls).toBe(0);
     expect(isNode(node)).toBe(true);
-    expect(node.kind).toBe("hex");
-    expect(node.name).toBe("shop");
+    expect(node.kind).toBe('hex');
+    expect(node.name).toBe('shop');
     expect(Object.isFrozen(node)).toBe(true);
   });
 
-  test("throws on an empty name", () => {
-    expect(() => hex("", () => {})).toThrow(/non-empty name/);
+  test('throws on an empty name', () => {
+    expect(() => hex('', () => {})).toThrow(/non-empty name/);
   });
 });

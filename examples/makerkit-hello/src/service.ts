@@ -1,5 +1,5 @@
-import { compute, postgres } from "@makerkit/prisma-cloud";
-import { SQL } from "bun";
+import { compute, postgres } from '@makerkit/prisma-cloud';
+import { SQL } from 'bun';
 
 // The connection + its driver live here — the app's choice of client.
 // max/idleTimeout keep the pool resilient to Compute's scale-to-zero.

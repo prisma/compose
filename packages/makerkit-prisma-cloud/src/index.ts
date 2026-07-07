@@ -4,9 +4,10 @@
  * ships none and the client type is inferred. Imports @makerkit/core and
  * nothing else. Pure barrel — implementations live in the named modules.
  */
-export { postgres } from "./postgres.ts";
-export type { PostgresConfig } from "./postgres.ts";
-export { compute } from "./compute.ts";
-export { http } from "./http.ts";
-export type { HttpClient } from "./http.ts";
-export { configKey } from "./serializer.ts";
+
+export { compute } from './compute.ts';
+export type { HttpClient } from './http.ts';
+export { http } from './http.ts';
+export type { PostgresConfig } from './postgres.ts';
+export { postgres } from './postgres.ts';
+export { configKey } from './serializer.ts';

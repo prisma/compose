@@ -1,78 +1,78 @@
-import { describe, expect, test } from "bun:test";
-import { Load, LoadError } from "../graph.ts";
-import { connectionEnd, hex, resource, service } from "../node.ts";
-import type { ProvisionedRef } from "../node.ts";
-import { conn } from "./helpers.ts";
+import { describe, expect, test } from 'bun:test';
+import { Load, LoadError } from '../graph.ts';
+import type { ProvisionedRef } from '../node.ts';
+import { connectionEnd, hex, resource, service } from '../node.ts';
+import { conn } from './helpers.ts';
 
 const dbResource = () =>
   resource({
-    type: "fake/db",
-    connection: conn({ url: { type: "string", secret: true } }, (v) => ({ url: v.url })),
+    type: 'fake/db',
+    connection: conn({ url: { type: 'string', secret: true } }, (v) => ({ url: v.url })),
   });
 
 const httpEnd = () =>
   connectionEnd({
-    type: "fake/http",
-    connection: conn({ url: { type: "string" } }, (v) => ({ url: v.url })),
+    type: 'fake/http',
+    connection: conn({ url: { type: 'string' } }, (v) => ({ url: v.url })),
   });
 
 const makeAuthService = () =>
   service({
-    type: "fake/compute",
+    type: 'fake/compute',
     inputs: { db: dbResource() },
     params: {},
-    handler: () => "auth",
+    handler: () => 'auth',
   });
 
 const makeStorefrontService = () =>
   service({
-    type: "fake/compute",
+    type: 'fake/compute',
     inputs: { auth: httpEnd() },
     params: {},
-    handler: () => "storefront",
+    handler: () => 'storefront',
   });
 
 const twoServiceHex = () =>
-  hex("shop", (h) => {
-    const authRef = h.provision("auth", makeAuthService());
-    h.provision("storefront", makeStorefrontService(), { auth: authRef });
+  hex('shop', (h) => {
+    const authRef = h.provision('auth', makeAuthService());
+    h.provision('storefront', makeStorefrontService(), { auth: authRef });
   });
 
-describe("Load of a hex root", () => {
-  test("executes the body, producing owned services, input edges, and connection edges", () => {
+describe('Load of a hex root', () => {
+  test('executes the body, producing owned services, input edges, and connection edges', () => {
     const root = twoServiceHex();
 
     const graph = Load(root);
 
-    expect(graph.root.id).toBe("shop");
+    expect(graph.root.id).toBe('shop');
     expect(graph.root.node).toBe(root);
     expect(graph.nodes.map((n) => ({ id: n.id, kind: n.node.kind }))).toEqual([
-      { id: "auth.db", kind: "resource" },
-      { id: "auth", kind: "service" },
-      { id: "storefront.auth", kind: "connection" },
-      { id: "storefront", kind: "service" },
-      { id: "shop", kind: "hex" },
+      { id: 'auth.db', kind: 'resource' },
+      { id: 'auth', kind: 'service' },
+      { id: 'storefront.auth', kind: 'connection' },
+      { id: 'storefront', kind: 'service' },
+      { id: 'shop', kind: 'hex' },
     ]);
     expect(graph.edges).toEqual([
-      { from: "auth.db", to: "auth", input: "db", kind: "input" },
-      { from: "storefront.auth", to: "storefront", input: "auth", kind: "input" },
-      { from: "auth", to: "storefront", input: "auth", kind: "connection" },
+      { from: 'auth.db', to: 'auth', input: 'db', kind: 'input' },
+      { from: 'storefront.auth', to: 'storefront', input: 'auth', kind: 'input' },
+      { from: 'auth', to: 'storefront', input: 'auth', kind: 'connection' },
     ]);
   });
 
-  test("opts.id overrides the hex name as root id", () => {
-    const graph = Load(twoServiceHex(), { id: "prod" });
+  test('opts.id overrides the hex name as root id', () => {
+    const graph = Load(twoServiceHex(), { id: 'prod' });
 
-    expect(graph.root.id).toBe("prod");
+    expect(graph.root.id).toBe('prod');
     // Provision ids are hex-local and unaffected by the root id.
-    expect(graph.nodes.map((n) => n.id)).toContain("auth");
+    expect(graph.nodes.map((n) => n.id)).toContain('auth');
   });
 
-  test("the body runs at Load, not at construction — and Load runs no handler", () => {
+  test('the body runs at Load, not at construction — and Load runs no handler', () => {
     let bodyCalls = 0;
     let handlerCalls = 0;
     const svc = service({
-      type: "fake/compute",
+      type: 'fake/compute',
       inputs: {},
       params: {},
       handler: () => {
@@ -80,9 +80,9 @@ describe("Load of a hex root", () => {
         return null;
       },
     });
-    const root = hex("shop", (h) => {
+    const root = hex('shop', (h) => {
       bodyCalls += 1;
-      h.provision("only", svc);
+      h.provision('only', svc);
     });
 
     expect(bodyCalls).toBe(0);
@@ -91,30 +91,30 @@ describe("Load of a hex root", () => {
     expect(handlerCalls).toBe(0);
   });
 
-  test("duplicate provision ids are a LoadError", () => {
-    const root = hex("shop", (h) => {
-      h.provision("auth", makeAuthService());
-      h.provision("auth", makeAuthService());
+  test('duplicate provision ids are a LoadError', () => {
+    const root = hex('shop', (h) => {
+      h.provision('auth', makeAuthService());
+      h.provision('auth', makeAuthService());
     });
 
     expect(() => Load(root)).toThrow(LoadError);
     expect(() => Load(root)).toThrow(/Duplicate provision id "auth"/);
   });
 
-  test("a dangling ConnectionEnd input names the service and the input", () => {
-    const root = hex("shop", (h) => {
-      h.provision("auth", makeAuthService());
-      h.provision("storefront", makeStorefrontService()); // auth input left unwired
+  test('a dangling ConnectionEnd input names the service and the input', () => {
+    const root = hex('shop', (h) => {
+      h.provision('auth', makeAuthService());
+      h.provision('storefront', makeStorefrontService()); // auth input left unwired
     });
 
     expect(() => Load(root)).toThrow(LoadError);
     expect(() => Load(root)).toThrow(/"auth" of provisioned service "storefront" is not wired/);
   });
 
-  test("wiring to an unknown producer id is a LoadError", () => {
-    const root = hex("shop", (h) => {
-      h.provision("storefront", makeStorefrontService(), {
-        auth: { id: "nope" } as ProvisionedRef,
+  test('wiring to an unknown producer id is a LoadError', () => {
+    const root = hex('shop', (h) => {
+      h.provision('storefront', makeStorefrontService(), {
+        auth: { id: 'nope' } as ProvisionedRef,
       });
     });
 
@@ -122,49 +122,49 @@ describe("Load of a hex root", () => {
     expect(() => Load(root)).toThrow(/"storefront.auth" references "nope"/);
   });
 
-  test("wiring a name that is not a ConnectionEnd input is a LoadError", () => {
-    const root = hex("shop", (h) => {
-      const authRef = h.provision("auth", makeAuthService());
+  test('wiring a name that is not a ConnectionEnd input is a LoadError', () => {
+    const root = hex('shop', (h) => {
+      const authRef = h.provision('auth', makeAuthService());
       // "db" is a resource input on auth — not wireable.
-      h.provision("other", makeAuthService(), { db: authRef });
+      h.provision('other', makeAuthService(), { db: authRef });
     });
 
     expect(() => Load(root)).toThrow(LoadError);
     expect(() => Load(root)).toThrow(/"db", which is not a ConnectionEnd input/);
   });
 
-  test("builder layer: refs are only obtainable from provision() — honest wiring is create-then-wire", () => {
+  test('builder layer: refs are only obtainable from provision() — honest wiring is create-then-wire', () => {
     // The API hands a ref back only after the producer is provisioned, so an
     // honest body cannot express a forward reference, let alone a cycle.
     const seen: string[] = [];
-    const root = hex("shop", (h) => {
-      const ref = h.provision("auth", makeAuthService());
+    const root = hex('shop', (h) => {
+      const ref = h.provision('auth', makeAuthService());
       seen.push(ref.id);
-      h.provision("storefront", makeStorefrontService(), { auth: ref });
+      h.provision('storefront', makeStorefrontService(), { auth: ref });
     });
 
     Load(root);
 
-    expect(seen).toEqual(["auth"]);
+    expect(seen).toEqual(['auth']);
   });
 
-  test("graph layer: a 2-cycle (forged refs) is a LoadError naming both nodes", () => {
+  test('graph layer: a 2-cycle (forged refs) is a LoadError naming both nodes', () => {
     const a = service({
-      type: "fake/compute",
+      type: 'fake/compute',
       inputs: { peer: httpEnd() },
       params: {},
       handler: () => null,
     });
     const b = service({
-      type: "fake/compute",
+      type: 'fake/compute',
       inputs: { peer: httpEnd() },
       params: {},
       handler: () => null,
     });
-    const root = hex("shop", (h) => {
+    const root = hex('shop', (h) => {
       // Forged ref: the builder API cannot produce this — the DAG check can.
-      h.provision("a", a, { peer: { id: "b" } as ProvisionedRef });
-      h.provision("b", b, { peer: { id: "a" } as ProvisionedRef });
+      h.provision('a', a, { peer: { id: 'b' } as ProvisionedRef });
+      h.provision('b', b, { peer: { id: 'a' } as ProvisionedRef });
     });
 
     expect(() => Load(root)).toThrow(LoadError);
@@ -173,26 +173,26 @@ describe("Load of a hex root", () => {
       Load(root);
     } catch (error) {
       const message = (error as Error).message;
-      expect(message).toContain("a");
-      expect(message).toContain("b");
+      expect(message).toContain('a');
+      expect(message).toContain('b');
       expect(message).toMatch(/(a → b → a|b → a → b)/);
     }
   });
 
-  test("a lone service Loaded directly may have unwired ConnectionEnds", () => {
+  test('a lone service Loaded directly may have unwired ConnectionEnds', () => {
     const lone = makeStorefrontService();
 
-    const graph = Load(lone, { id: "storefront" });
+    const graph = Load(lone, { id: 'storefront' });
 
     expect(graph.edges).toEqual([
-      { from: "storefront.auth", to: "storefront", input: "auth", kind: "input" },
+      { from: 'storefront.auth', to: 'storefront', input: 'auth', kind: 'input' },
     ]);
   });
 });
 
-describe("importing a hex module", () => {
-  test("runs nothing — neither the body nor any handler (invariant 3)", async () => {
-    const fixture = await import("./fixtures/side-effect-hex.ts");
+describe('importing a hex module', () => {
+  test('runs nothing — neither the body nor any handler (invariant 3)', async () => {
+    const fixture = await import('./fixtures/side-effect-hex.ts');
 
     expect(fixture.bodyCallCount).toBe(0);
     expect(fixture.handlerCallCount).toBe(0);

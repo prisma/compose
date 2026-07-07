@@ -2,12 +2,12 @@
 // but it does own the artifact envelope — bootstrap.js + compute.manifest.json
 // + the deterministic tar are printed by the pack's `package()` at deploy,
 // not here.
-import * as path from "node:path";
-import { fileURLToPath } from "node:url";
-import { build } from "tsdown";
+import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { build } from 'tsdown';
 
-const rootDir = fileURLToPath(new URL("..", import.meta.url));
-const bundleDir = path.join(rootDir, "dist", "bundle");
+const rootDir = fileURLToPath(new URL('..', import.meta.url));
+const bundleDir = path.join(rootDir, 'dist', 'bundle');
 
 await build({
   entry: [path.join(rootDir, 'src', 'main.ts')],

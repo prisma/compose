@@ -1,6 +1,6 @@
-import { configOf, hydrate, service } from "@makerkit/core";
-import type { Deps, RunnableServiceNode, ServiceHandler } from "@makerkit/core";
-import { deserialize } from "./serializer.ts";
+import type { Deps, RunnableServiceNode, ServiceHandler } from '@makerkit/core';
+import { configOf, hydrate, service } from '@makerkit/core';
+import { deserialize } from './serializer.ts';
 
 const computeParams = { port: { type: 'number', default: 3000 } } as const;
 
@@ -14,12 +14,17 @@ export const compute = <D extends Deps>(
   deps: D,
   handler: ServiceHandler<D, typeof computeParams>,
 ): RunnableServiceNode<D, typeof computeParams> => {
-  const node = service({ type: "prisma-cloud/compute", inputs: deps, params: computeParams, handler });
+  const node = service({
+    type: 'prisma-cloud/compute',
+    inputs: deps,
+    params: computeParams,
+    handler,
+  });
   return Object.freeze({
     ...node,
     async run(address: string) {
       const config = deserialize(configOf(node), address);
-      return node.invoke(await hydrate(node, config) as never, config.service as never);
+      return node.invoke((await hydrate(node, config)) as never, config.service as never);
     },
   }) as RunnableServiceNode<D, typeof computeParams>;
 };

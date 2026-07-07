@@ -2,6 +2,6 @@
 // pure re-export). Boots the service directly via its own run(); a lone
 // service's address is "" (the serializer's unprefixed case), so it reads plain
 // DB_URL/PORT from the local environment.
-import service from "../src/service.ts";
+import service from '../src/service.ts';
 
-await service.run("");
+await service.run('');

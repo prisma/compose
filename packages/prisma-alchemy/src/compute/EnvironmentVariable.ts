@@ -47,7 +47,7 @@ export const EnvironmentVariableProvider = () =>
         stables: ['id'],
         list: () => Effect.succeed([] as EnvironmentVariableAttributes[]),
         reconcile: Effect.fn(function* ({ news, output }) {
-          const cls = news.class ?? "production";
+          const cls = news.class ?? 'production';
           // The value is write-only (encrypted), so we never diff it — we PATCH.
           // Find the row to write, adopting in order: our own prior row
           // (output.id), then a pre-existing row at the same (project, class,
@@ -58,7 +58,7 @@ export const EnvironmentVariableProvider = () =>
           if (id !== undefined) {
             const priorId = id;
             const mine = yield* callOptional(() =>
-              client.GET("/v1/environment-variables/{envVarId}", {
+              client.GET('/v1/environment-variables/{envVarId}', {
                 params: { path: { envVarId: priorId } },
               }),
             );
@@ -66,8 +66,10 @@ export const EnvironmentVariableProvider = () =>
           }
           if (id === undefined) {
             const match = yield* call(() =>
-              client.GET("/v1/environment-variables", {
-                params: { query: { projectId: news.projectId, class: cls, key: news.key } as never },
+              client.GET('/v1/environment-variables', {
+                params: {
+                  query: { projectId: news.projectId, class: cls, key: news.key } as never,
+                },
               }),
             );
             id = (match as { data?: Array<{ id: string }> }).data?.[0]?.id;
@@ -75,7 +77,7 @@ export const EnvironmentVariableProvider = () =>
           if (id !== undefined) {
             const targetId = id;
             yield* call(() =>
-              client.PATCH("/v1/environment-variables/{envVarId}", {
+              client.PATCH('/v1/environment-variables/{envVarId}', {
                 params: { path: { envVarId: targetId } },
                 body: { value: news.value },
               }),

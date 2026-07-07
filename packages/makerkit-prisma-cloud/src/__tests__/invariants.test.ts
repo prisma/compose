@@ -65,7 +65,7 @@ describe("invariant 4: exactly one environment read — inside the config serial
       return count > 0 ? [{ file, count }] : [];
     });
 
-    expect(hits).toEqual([{ file: "serializer.ts", count: 1 }]);
+    expect(hits).toEqual([{ file: 'serializer.ts', count: 1 }]);
   });
 });
 

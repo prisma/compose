@@ -6,8 +6,8 @@
  * validation, no strings — the pack's `run()` already reversed its own
  * serialization into a typed Config before calling this.
  */
-import type { Config } from "./config.ts";
-import type { Deps, HydratedDeps, ServiceNode } from "./node.ts";
+import type { Config } from './config.ts';
+import type { Deps, HydratedDeps, ServiceNode } from './node.ts';
 
 /**
  * Given a service and a concrete typed Config, hydrate every input

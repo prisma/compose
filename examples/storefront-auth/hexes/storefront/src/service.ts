@@ -1,4 +1,4 @@
-import { compute, http } from "@makerkit/prisma-cloud";
+import { compute, http } from '@makerkit/prisma-cloud';
 
 // Declared so the hex can wire it to the auth service and core computes +
 // serializes its physical key (STOREFRONT_AUTH_URL — see app/page.tsx). This
@@ -17,12 +17,12 @@ const serverModule = './server.js';
 export default compute({ auth }, async () => {
   // An unhandled error would otherwise crash the process into a 502 restart
   // loop on Compute; log and keep the process alive instead.
-  process.on("uncaughtException", (err) => console.error("uncaughtException", err));
-  process.on("unhandledRejection", (err) => console.error("unhandledRejection", err));
+  process.on('uncaughtException', (err) => console.error('uncaughtException', err));
+  process.on('unhandledRejection', (err) => console.error('unhandledRejection', err));
 
-  console.log("storefront: starting Next standalone server");
+  console.log('storefront: starting Next standalone server');
   await import(serverModule);
-  console.log("storefront: Next server started");
+  console.log('storefront: Next server started');
   // The bootstrap `await main.run()` resolves once the handler returns; unlike
   // Bun.serve, Next's imported http server does not reliably hold Compute's bun
   // process open, so it exits and the VM restart-loops. Block forever.

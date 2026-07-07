@@ -16,17 +16,18 @@
  * isolated layout hides Next's peers (e.g. styled-jsx) under `.pnpm`, and the
  * flattened standalone `next` copy can't resolve them at boot.
  */
-import { build } from "tsdown";
-import * as fs from "node:fs";
-import * as os from "node:os";
-import * as path from "node:path";
+
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { build } from 'tsdown';
 
 /** Where Next's standalone build places this app, given `outputFileTracingRoot` pins the monorepo root. */
 export function nextStandaloneDir(appDir: string): string {
   const resolvedApp = path.resolve(appDir);
-  const workspaceRoot = path.resolve(resolvedApp, "../../../..");
+  const workspaceRoot = path.resolve(resolvedApp, '../../../..');
   const rel = path.relative(workspaceRoot, resolvedApp);
-  return path.join(resolvedApp, ".next", "standalone", rel);
+  return path.join(resolvedApp, '.next', 'standalone', rel);
 }
 
 export interface BundleNextResult {
@@ -36,7 +37,7 @@ export interface BundleNextResult {
 export async function bundleNextComputeArtifact(appDir: string): Promise<BundleNextResult> {
   const resolvedApp = path.resolve(appDir);
   const appOut = nextStandaloneDir(appDir);
-  if (!fs.existsSync(path.join(appOut, "server.js"))) {
+  if (!fs.existsSync(path.join(appOut, 'server.js'))) {
     throw new Error(
       `no standalone server.js at ${appOut} — run \`next build\` with output: "standalone" first`,
     );
@@ -47,10 +48,13 @@ export async function bundleNextComputeArtifact(appDir: string): Promise<BundleN
   // subdir (the bundle dir), so those deps (`next`, `react`, …) are left out —
   // the VM then can't resolve `next` from server.js. Copy the hoisted tree in
   // so the bundle dir is self-contained.
-  const standaloneRoot = path.join(resolvedApp, ".next", "standalone");
-  const rootModules = path.join(standaloneRoot, "node_modules");
-  if (path.resolve(rootModules) !== path.resolve(appOut, "node_modules") && fs.existsSync(rootModules)) {
-    await fs.promises.cp(rootModules, path.join(appOut, "node_modules"), { recursive: true });
+  const standaloneRoot = path.join(resolvedApp, '.next', 'standalone');
+  const rootModules = path.join(standaloneRoot, 'node_modules');
+  if (
+    path.resolve(rootModules) !== path.resolve(appOut, 'node_modules') &&
+    fs.existsSync(rootModules)
+  ) {
+    await fs.promises.cp(rootModules, path.join(appOut, 'node_modules'), { recursive: true });
   }
 
   // The standalone build ships server.js + traced node_modules but not the
@@ -69,7 +73,7 @@ export async function bundleNextComputeArtifact(appDir: string): Promise<BundleN
   // server.js as main.mjs (unambiguously ESM — the standalone tree's
   // package.json is CJS-default). Its handler's `import("./server.js")`
   // resolves relative to this file inside the artifact.
-  const bundleTmp = await fs.promises.mkdtemp(path.join(os.tmpdir(), "storefront-main-"));
+  const bundleTmp = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'storefront-main-'));
   try {
     await build({
       entry: [path.join(resolvedApp, 'src', 'main.ts')],
@@ -97,7 +101,7 @@ export async function bundleNextComputeArtifact(appDir: string): Promise<BundleN
   // disk (ENOSPC -> reboot loop). With auto-install off, the require fails
   // gracefully and Next boots — exactly as it does locally. bun reads bunfig
   // from the process CWD, which is the artifact root at boot.
-  await fs.promises.writeFile(path.join(appOut, "bunfig.toml"), '[install]\nauto = "disable"\n');
+  await fs.promises.writeFile(path.join(appOut, 'bunfig.toml'), '[install]\nauto = "disable"\n');
 
   return { bundleDir: appOut };
 }
@@ -105,7 +109,7 @@ export async function bundleNextComputeArtifact(appDir: string): Promise<BundleN
 if (import.meta.main) {
   const appDir = process.argv[2];
   if (!appDir) {
-    console.error("Usage: bun scripts/bundle-next.ts <appDir>");
+    console.error('Usage: bun scripts/bundle-next.ts <appDir>');
     process.exit(1);
   }
   const result = await bundleNextComputeArtifact(appDir);

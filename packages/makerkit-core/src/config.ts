@@ -89,9 +89,12 @@ export function configOf(root: ServiceNode): readonly ConfigDeclaration[] {
   const entries: ConfigDeclaration[] = [];
 
   for (const edge of graph.edges) {
-    if (edge.kind !== "input") continue;
+    if (edge.kind !== 'input') continue;
     const entry = graph.nodes.find((n) => n.id === edge.from);
-    if (entry === undefined || (entry.node.kind !== "resource" && entry.node.kind !== "connection")) {
+    if (
+      entry === undefined ||
+      (entry.node.kind !== 'resource' && entry.node.kind !== 'connection')
+    ) {
       continue;
     }
     // Resource and connection-end inputs declare params identically.

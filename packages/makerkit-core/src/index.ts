@@ -4,37 +4,33 @@
  * entry ships only this code. (/control carves out of here when the control
  * surface grows.) Pure barrel — no implementations live here.
  */
-export { resource, service, connectionEnd, hex, isNode } from "./node.ts";
+
 export type {
-  NodeBase,
-  ResourceNode,
-  ServiceNode,
-  RunnableServiceNode,
+  Config,
+  ConfigDeclaration,
+  ConfigParam,
+  Connection,
+  Params,
+  ParamType,
+  TypeOf,
+  Values,
+} from './config.ts';
+export { configOf } from './config.ts';
+export type { Edge, Graph, GraphNode, NodeId } from './graph.ts';
+export { Load, LoadError } from './graph.ts';
+export { hydrate } from './hydrate.ts';
+export type {
   ConnectionEnd,
-  HexNode,
-  HexBuilder,
-  ProvisionedRef,
   Deps,
+  HexBuilder,
+  HexNode,
   Hydrated,
   HydratedDeps,
   NodeBase,
+  ProvisionedRef,
   ResourceNode,
+  RunnableServiceNode,
   ServiceHandler,
-} from "./node.ts";
-
-export { Load, LoadError } from "./graph.ts";
-export type { NodeId, GraphNode, Edge, Graph } from "./graph.ts";
-
-export { configOf } from "./config.ts";
-export type {
-  ParamType,
-  TypeOf,
-  ConfigParam,
-  Params,
-  Values,
-  Connection,
-  ConfigDeclaration,
-  Config,
-} from "./config.ts";
-
-export { hydrate } from "./hydrate.ts";
+  ServiceNode,
+} from './node.ts';
+export { connectionEnd, hex, isNode, resource, service } from './node.ts';

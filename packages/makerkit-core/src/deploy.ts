@@ -7,15 +7,16 @@
  * core-model.md § Lowering). Imports the provisioning substrate
  * (alchemy/effect) — never a deployment target.
  */
-import * as Alchemy from "alchemy";
-import type { StackServices } from "alchemy";
-import { localState } from "alchemy/State/LocalState";
-import type { State } from "alchemy/State/State";
-import * as Effect from "effect/Effect";
-import type * as Layer from "effect/Layer";
-import type { Config } from "./config.ts";
-import { Load, type Graph, type NodeId } from "./graph.ts";
-import type { HexNode, ResourceNode, ServiceNode } from "./node.ts";
+
+import type { StackServices } from 'alchemy';
+import * as Alchemy from 'alchemy';
+import { localState } from 'alchemy/State/LocalState';
+import type { State } from 'alchemy/State/State';
+import * as Effect from 'effect/Effect';
+import type * as Layer from 'effect/Layer';
+import type { Config } from './config.ts';
+import { type Graph, Load, type NodeId } from './graph.ts';
+import type { HexNode, ResourceNode, ServiceNode } from './node.ts';
 
 /**
  * What a target pack's /target entry produces — data + per-type SPI
@@ -174,8 +175,10 @@ export function buildConfig(
   const inputs: Record<string, Record<string, unknown>> = {};
 
   for (const [inputName, inputNode] of Object.entries(node.inputs)) {
-    const wantKind = inputNode.kind === "connection" ? "connection" : "input";
-    const edge = graph.edges.find((e) => e.to === id && e.input === inputName && e.kind === wantKind);
+    const wantKind = inputNode.kind === 'connection' ? 'connection' : 'input';
+    const edge = graph.edges.find(
+      (e) => e.to === id && e.input === inputName && e.kind === wantKind,
+    );
     const producedOutputs = edge !== undefined ? (lowered.get(edge.from)?.outputs ?? {}) : {};
     const values: Record<string, unknown> = {};
     for (const name of Object.keys(inputNode.connection.params)) {
@@ -197,7 +200,7 @@ function resolveBundle(opts: LowerOptions, id: NodeId, isHexRoot: boolean): Bund
 }
 
 function missingBundleError(id: NodeId, isHexRoot: boolean): LowerError {
-  const where = isHexRoot ? `opts.bundles["${id}"]` : "opts.bundle";
+  const where = isHexRoot ? `opts.bundles["${id}"]` : 'opts.bundle';
   return new LowerError(`No bundle provided for service "${id}" (${where} is required).`);
 }
 
@@ -221,7 +224,7 @@ export function lowering(
 ): Effect.Effect<LoweredNode, LowerError, unknown> {
   return Effect.gen(function* () {
     const graph = Load(root, { id: opts.name });
-    const isHexRoot = graph.root.node.kind === "hex";
+    const isHexRoot = graph.root.node.kind === 'hex';
     const lowered = new Map<NodeId, LoweredNode>();
 
     // Every hex-provisioned service's own graph id IS its address (single-
@@ -230,15 +233,15 @@ export function lowering(
     const serviceAddress = new Map<NodeId, string>();
     if (isHexRoot) {
       for (const { id, node } of graph.nodes) {
-        if (node.kind === "service") serviceAddress.set(id, id);
+        if (node.kind === 'service') serviceAddress.set(id, id);
       }
     } else {
-      serviceAddress.set(graph.root.id, "");
+      serviceAddress.set(graph.root.id, '');
     }
 
     const appCtx: LowerContext = {
       id: graph.root.id,
-      address: "",
+      address: '',
       // Not a specific node — application provisioning is graph-wide.
       node: graph.root.node as never,
       graph,
@@ -249,10 +252,10 @@ export function lowering(
     const application = yield* target.application.provision(appCtx);
 
     for (const { id, node } of graph.nodes) {
-      if (node.kind === "hex") continue; // the transparent root itself — nothing to lower
-      if (node.kind === "connection") continue; // ConnectionEnd: an edge only, never lowered
+      if (node.kind === 'hex') continue; // the transparent root itself — nothing to lower
+      if (node.kind === 'connection') continue; // ConnectionEnd: an edge only, never lowered
 
-      const address = serviceAddress.get(id) ?? "";
+      const address = serviceAddress.get(id) ?? '';
       const ctx: LowerContext = {
         id,
         address,
@@ -263,13 +266,13 @@ export function lowering(
         lowered,
       };
 
-      if (node.kind === "resource") {
+      if (node.kind === 'resource') {
         const lowerResource = target.resources[node.type];
         if (lowerResource === undefined) {
           return yield* Effect.fail(
             new LowerError(
               `Target "${target.name}" has no resource lowering for type "${node.type}" ` +
-                `(known: ${Object.keys(target.resources).join(", ")}).`,
+                `(known: ${Object.keys(target.resources).join(', ')}).`,
             ),
           );
         }
@@ -282,7 +285,7 @@ export function lowering(
         return yield* Effect.fail(
           new LowerError(
             `Target "${target.name}" has no service lowering for type "${node.type}" ` +
-              `(known: ${Object.keys(target.services).join(", ")}).`,
+              `(known: ${Object.keys(target.services).join(', ')}).`,
           ),
         );
       }

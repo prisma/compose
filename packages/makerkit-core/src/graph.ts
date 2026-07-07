@@ -1,13 +1,13 @@
 import {
-  isHexNode,
-  isNode,
   type ConnectionEnd,
   type HexBuilder,
   type HexNode,
+  isHexNode,
+  isNode,
   type ProvisionedRef,
   type ResourceNode,
   type ServiceNode,
-} from "./node.ts";
+} from './node.ts';
 
 /** Path-derived: root "hello", its input "hello.db". */
 export type NodeId = string;
@@ -27,7 +27,7 @@ export interface Edge {
   readonly from: NodeId;
   readonly to: NodeId;
   readonly input: string;
-  readonly kind: "input" | "connection";
+  readonly kind: 'input' | 'connection';
 }
 
 export interface Graph {
@@ -64,25 +64,28 @@ export function Load(root: ServiceNode | HexNode, opts?: { id?: NodeId }): Graph
   if (isHexNode(root)) {
     return loadHex(root, opts);
   }
-  if (!isNode(root) || root.kind !== "service") {
+  if (!isNode(root) || root.kind !== 'service') {
     throw new LoadError(
-      "Load expects a branded service or hex node (construct it with the service()/hex() factories).",
+      'Load expects a branded service or hex node (construct it with the service()/hex() factories).',
     );
   }
-  return loadService(root, opts?.id ?? "root");
+  return loadService(root, opts?.id ?? 'root');
 }
 
-function serviceInputs(service: ServiceNode, serviceId: NodeId): { nodes: GraphNode[]; edges: Edge[] } {
-  if (typeof service.inputs !== "object" || service.inputs === null) {
+function serviceInputs(
+  service: ServiceNode,
+  serviceId: NodeId,
+): { nodes: GraphNode[]; edges: Edge[] } {
+  if (typeof service.inputs !== 'object' || service.inputs === null) {
     throw new LoadError(`Service "${serviceId}" has no inputs map.`);
   }
   const nodes: GraphNode[] = [];
   const edges: Edge[] = [];
   for (const [input, value] of Object.entries(service.inputs)) {
-    if (!isNode(value) || (value.kind !== "resource" && value.kind !== "connection")) {
+    if (!isNode(value) || (value.kind !== 'resource' && value.kind !== 'connection')) {
       throw new LoadError(
         `Input "${input}" of "${serviceId}" is not a branded resource or connection end ` +
-          `(construct it with the resource()/connectionEnd() factories).`,
+          '(construct it with the resource()/connectionEnd() factories).',
       );
     }
     if (value.type.length === 0) {
@@ -90,7 +93,7 @@ function serviceInputs(service: ServiceNode, serviceId: NodeId): { nodes: GraphN
     }
     const id = `${serviceId}.${input}`;
     nodes.push({ id, node: value as ResourceNode | ConnectionEnd });
-    edges.push({ from: id, to: serviceId, input, kind: "input" });
+    edges.push({ from: id, to: serviceId, input, kind: 'input' });
   }
   return { nodes, edges };
 }
@@ -118,13 +121,13 @@ function loadHex(root: HexNode, opts?: { id?: NodeId }): Graph {
 
   const builder: HexBuilder = {
     provision(id, service, wiring) {
-      if (typeof id !== "string" || id.length === 0) {
+      if (typeof id !== 'string' || id.length === 0) {
         throw new LoadError(`provision() requires a non-empty id (hex "${root.name}").`);
       }
       if (ids.has(id)) {
         throw new LoadError(`Duplicate provision id "${id}" in hex "${root.name}".`);
       }
-      if (!isNode(service) || service.kind !== "service") {
+      if (!isNode(service) || service.kind !== 'service') {
         throw new LoadError(
           `provision("${id}") expects a branded service node (construct it with the service() factory).`,
         );
@@ -149,22 +152,22 @@ function loadHex(root: HexNode, opts?: { id?: NodeId }): Graph {
     // provisioned producer — one connection edge per wired input.
     for (const [input, ref] of Object.entries(wiring)) {
       const declared = service.inputs[input];
-      if (declared === undefined || !isNode(declared) || declared.kind !== "connection") {
+      if (declared === undefined || !isNode(declared) || declared.kind !== 'connection') {
         throw new LoadError(
           `Wiring for "${id}" names "${input}", which is not a ConnectionEnd input of that service.`,
         );
       }
-      if (typeof ref?.id !== "string" || !ids.has(ref.id)) {
+      if (typeof ref?.id !== 'string' || !ids.has(ref.id)) {
         throw new LoadError(
           `Wiring for "${id}.${input}" references "${String(ref?.id)}", which is not a provisioned service in hex "${root.name}".`,
         );
       }
-      edges.push({ from: ref.id, to: id, input, kind: "connection" });
+      edges.push({ from: ref.id, to: id, input, kind: 'connection' });
     }
 
     // Dangling check: every ConnectionEnd input must be wired.
     for (const [input, value] of Object.entries(service.inputs)) {
-      if (isNode(value) && value.kind === "connection" && wiring[input] === undefined) {
+      if (isNode(value) && value.kind === 'connection' && wiring[input] === undefined) {
         throw new LoadError(
           `ConnectionEnd input "${input}" of provisioned service "${id}" is not wired to a producer ` +
             `(hex "${root.name}").`,
@@ -187,7 +190,7 @@ function loadHex(root: HexNode, opts?: { id?: NodeId }): Graph {
 function assertConnectionDag(edges: readonly Edge[]): void {
   const adjacency = new Map<string, string[]>();
   for (const edge of edges) {
-    if (edge.kind !== "connection") continue;
+    if (edge.kind !== 'connection') continue;
     const targets = adjacency.get(edge.from) ?? [];
     targets.push(edge.to);
     adjacency.set(edge.from, targets);
@@ -201,7 +204,7 @@ function assertConnectionDag(edges: readonly Edge[]): void {
     if (done.has(id)) return;
     if (visiting.has(id)) {
       const cycle = [...stack.slice(stack.indexOf(id)), id];
-      throw new LoadError(`Connection cycle: ${cycle.join(" → ")} — no deploy order exists.`);
+      throw new LoadError(`Connection cycle: ${cycle.join(' → ')} — no deploy order exists.`);
     }
     visiting.add(id);
     stack.push(id);

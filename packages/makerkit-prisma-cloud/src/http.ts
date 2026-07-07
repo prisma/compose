@@ -1,5 +1,5 @@
-import { connectionEnd } from "@makerkit/core";
-import type { ConnectionEnd } from "@makerkit/core";
+import type { ConnectionEnd } from '@makerkit/core';
+import { connectionEnd } from '@makerkit/core';
 
 /** A service-to-service dependency's default client: a thin URL-anchored fetch wrapper. */
 export interface HttpClient {
@@ -18,11 +18,13 @@ const defaultHttpClient = (cfg: { url: string }): HttpClient => ({
  * coupling); an app factory can replace it. The typed generated client
  * arrives with the interface primitive (a later extension point).
  */
-export const http = <C = HttpClient>(opts?: { client?: (cfg: { url: string }) => C }): ConnectionEnd<C> =>
+export const http = <C = HttpClient>(opts?: {
+  client?: (cfg: { url: string }) => C;
+}): ConnectionEnd<C> =>
   connectionEnd({
-    type: "prisma-cloud/http",
+    type: 'prisma-cloud/http',
     connection: {
-      params: { url: { type: "string" } },
+      params: { url: { type: 'string' } },
       hydrate: (v) => (opts?.client ?? defaultHttpClient)({ url: v.url }) as C,
     },
   });

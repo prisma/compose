@@ -19,11 +19,7 @@ const nextConfig: NextConfig = {
   // (ENOSPC crash loop). Exclude them from the trace — the proper Next knob,
   // rather than deleting them from the assembled tree afterwards.
   outputFileTracingExcludes: {
-    "*": [
-      "**/node_modules/@next/swc-*/**",
-      "**/node_modules/sharp/**",
-      "**/node_modules/@img/**",
-    ],
+    '*': ['**/node_modules/@next/swc-*/**', '**/node_modules/sharp/**', '**/node_modules/@img/**'],
   },
 };
 

@@ -1,7 +1,7 @@
-import { fileURLToPath } from "node:url";
-import { lower } from "@makerkit/core/deploy";
-import { prismaCloud } from "@makerkit/prisma-cloud/target";
-import service from "./src/service.ts";
+import { fileURLToPath } from 'node:url';
+import { lower } from '@makerkit/core/deploy';
+import { prismaCloud } from '@makerkit/prisma-cloud/target';
+import service from './src/service.ts';
 
 /**
  * Deploy script (heavy imports; never bundled): lowers the authored service
@@ -17,9 +17,9 @@ import service from "./src/service.ts";
  * PRISMA_SERVICE_TOKEN, PRISMA_WORKSPACE_ID, ALCHEMY_PASSWORD.
  */
 const workspaceId = process.env.PRISMA_WORKSPACE_ID;
-if (!workspaceId) throw new Error("PRISMA_WORKSPACE_ID is required");
+if (!workspaceId) throw new Error('PRISMA_WORKSPACE_ID is required');
 
 export default lower(service, prismaCloud({ workspaceId }), {
-  name: "makerkit-hello",
-  bundle: { dir: fileURLToPath(new URL("./dist/bundle", import.meta.url)) },
+  name: 'makerkit-hello',
+  bundle: { dir: fileURLToPath(new URL('./dist/bundle', import.meta.url)) },
 });

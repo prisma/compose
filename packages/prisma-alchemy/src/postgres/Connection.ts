@@ -1,9 +1,9 @@
-import { Resource } from "alchemy";
-import * as Provider from "alchemy/Provider";
-import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
-import { ManagementClient } from "../client.ts";
-import { PrismaApiError, call, callVoid } from "../http.ts";
+import { Resource } from 'alchemy';
+import * as Provider from 'alchemy/Provider';
+import * as Effect from 'effect/Effect';
+import * as Redacted from 'effect/Redacted';
+import { ManagementClient } from '../client.ts';
+import { call, callVoid, PrismaApiError } from '../http.ts';
 
 export interface ConnectionProps {
   /** The database this connection targets. */

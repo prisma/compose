@@ -1,11 +1,11 @@
-import { fileURLToPath } from "node:url";
-import { hex } from "@makerkit/core";
-import type { HexBuilder } from "@makerkit/core";
-import { lower } from "@makerkit/core/deploy";
-import { prismaCloud } from "@makerkit/prisma-cloud/target";
-import authService from "./hexes/auth/src/service.ts";
-import storefrontService from "./hexes/storefront/src/service.ts";
-import { nextStandaloneDir } from "./scripts/bundle-next.ts";
+import { fileURLToPath } from 'node:url';
+import type { HexBuilder } from '@makerkit/core';
+import { hex } from '@makerkit/core';
+import { lower } from '@makerkit/core/deploy';
+import { prismaCloud } from '@makerkit/prisma-cloud/target';
+import authService from './hexes/auth/src/service.ts';
+import storefrontService from './hexes/storefront/src/service.ts';
+import { nextStandaloneDir } from './scripts/bundle-next.ts';
 
 /**
  * The storefront-auth app hex — transparent wiring, executed at Load. Two
@@ -26,17 +26,19 @@ import { nextStandaloneDir } from "./scripts/bundle-next.ts";
  * makerkit.config.ts) lands — see core-model.md's Extension points.
  */
 const workspaceId = process.env.PRISMA_WORKSPACE_ID;
-if (!workspaceId) throw new Error("PRISMA_WORKSPACE_ID is required");
+if (!workspaceId) throw new Error('PRISMA_WORKSPACE_ID is required');
 
-const app = hex("storefront-auth", (h: HexBuilder) => {
-  const authRef = h.provision("auth", authService);
-  h.provision("storefront", storefrontService, { auth: authRef });
+const app = hex('storefront-auth', (h: HexBuilder) => {
+  const authRef = h.provision('auth', authService);
+  h.provision('storefront', storefrontService, { auth: authRef });
 });
 
 export default lower(app, prismaCloud({ workspaceId }), {
-  name: "storefront-auth",
+  name: 'storefront-auth',
   bundles: {
-    auth: { dir: fileURLToPath(new URL("./hexes/auth/dist/bundle", import.meta.url)) },
-    storefront: { dir: nextStandaloneDir(fileURLToPath(new URL("./hexes/storefront", import.meta.url))) },
+    auth: { dir: fileURLToPath(new URL('./hexes/auth/dist/bundle', import.meta.url)) },
+    storefront: {
+      dir: nextStandaloneDir(fileURLToPath(new URL('./hexes/storefront', import.meta.url))),
+    },
   },
 });

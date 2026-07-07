@@ -2,15 +2,16 @@
  * The lowering table — the only place @makerkit/prisma-alchemy is imported.
  * Deploy-time only; never lands in a runtime bundle.
  */
-import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
-import type * as Layer from "effect/Layer";
-import * as Output from "alchemy/Output";
-import * as Prisma from "@makerkit/prisma-alchemy";
-import { configOf } from "@makerkit/core";
-import type { ServiceNode } from "@makerkit/core";
-import type { Target } from "@makerkit/core/deploy";
-import { configKey } from "./serializer.ts";
+
+import type { ServiceNode } from '@makerkit/core';
+import { configOf } from '@makerkit/core';
+import type { Target } from '@makerkit/core/deploy';
+import * as Prisma from '@makerkit/prisma-alchemy';
+import * as Output from 'alchemy/Output';
+import * as Effect from 'effect/Effect';
+import type * as Layer from 'effect/Layer';
+import * as Redacted from 'effect/Redacted';
+import { configKey } from './serializer.ts';
 
 export interface PrismaCloudOptions {
   workspaceId: string;
@@ -37,15 +38,15 @@ export const prismaCloud = (o: PrismaCloudOptions): Target => ({
           workspaceId: o.workspaceId,
           name: opts.name,
         });
-        for (const key of ["DATABASE_URL", "DATABASE_URL_POOLED"]) {
+        for (const key of ['DATABASE_URL', 'DATABASE_URL_POOLED']) {
           yield* Prisma.EnvironmentVariable(`${key}-poison`, {
             projectId: project.id,
             key,
             // "-", not "": the API rejects empty env-var values with
             // "String must contain at least 1 character" (verified at the R4
             // deploy proof). Any garbage value fails a real connect loudly.
-            value: "-",
-            class: "production",
+            value: '-',
+            class: 'production',
           });
         }
         return { outputs: { projectId: project.id } };
@@ -56,7 +57,7 @@ export const prismaCloud = (o: PrismaCloudOptions): Target => ({
     // Each postgres input gets its own Database in the application's project.
     // The url output fills the service's db.url Config leaf and is encoded by
     // serialize under the service's own named key — never the platform default.
-    "prisma-cloud/postgres": ({ id, application }) =>
+    'prisma-cloud/postgres': ({ id, application }) =>
       Effect.gen(function* () {
         const db = yield* Prisma.Database(`${id}-db`, {
           projectId: application.outputs.projectId as string,
@@ -70,7 +71,7 @@ export const prismaCloud = (o: PrismaCloudOptions): Target => ({
   },
 
   services: {
-    "prisma-cloud/compute": {
+    'prisma-cloud/compute': {
       // The service as a PLACE inside the application's Project: the App,
       // identity-bearing only, no code runs.
       provision: ({ id, application }) =>
@@ -78,7 +79,7 @@ export const prismaCloud = (o: PrismaCloudOptions): Target => ({
           const svc = yield* Prisma.ComputeService(`${id}-svc`, {
             projectId: application.outputs.projectId as string,
             name: id,
-            region: o.region ?? "us-east-1",
+            region: o.region ?? 'us-east-1',
           });
           return { outputs: { serviceId: svc.id, projectId: application.outputs.projectId } };
         }),
@@ -94,7 +95,9 @@ export const prismaCloud = (o: PrismaCloudOptions): Target => ({
           const records = [];
           for (const d of configOf(node as ServiceNode)) {
             const value =
-              d.owner === "service" ? config.service[d.name] : config.inputs[d.owner.input]?.[d.name];
+              d.owner === 'service'
+                ? config.service[d.name]
+                : config.inputs[d.owner.input]?.[d.name];
             const key = configKey(address, d);
             records.push(
               yield* Prisma.EnvironmentVariable(`${key}-var`, {
@@ -102,8 +105,8 @@ export const prismaCloud = (o: PrismaCloudOptions): Target => ({
                 key,
                 // encode typed→string: a concrete leaf stringifies; a provisioning
                 // ref (already string-typed) passes through and carries the edge.
-                value: typeof value === "number" ? String(value) : (value as never),
-                class: "production",
+                value: typeof value === 'number' ? String(value) : (value as never),
+                class: 'production',
               }),
             );
           }
@@ -139,7 +142,9 @@ export const prismaCloud = (o: PrismaCloudOptions): Target => ({
             environment: serialized.outputs.environment as readonly Prisma.EnvironmentVariable[],
             port: 3000,
           });
-          return { outputs: { url: deployment.deployedUrl, projectId: provisioned.outputs.projectId } };
+          return {
+            outputs: { url: deployment.deployedUrl, projectId: provisioned.outputs.projectId },
+          };
         }),
     },
   },

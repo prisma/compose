@@ -9,11 +9,11 @@
 
 // Render on every request so the runtime-injected value is used — otherwise
 // Next prerenders this page at build time, before it exists.
-export const dynamic = "force-dynamic";
+export const dynamic = 'force-dynamic';
 
 async function getAuthStatus(): Promise<string> {
   const base = process.env.STOREFRONT_AUTH_URL;
-  if (!base) return "STOREFRONT_AUTH_URL not set";
+  if (!base) return 'STOREFRONT_AUTH_URL not set';
   try {
     const res = await fetch(new URL('/verify', base), { cache: 'no-store' });
     return `${res.status} ${(await res.text()).trim()}`;

@@ -11,16 +11,16 @@
  * The platform's DATABASE_URL is never among them — forbidden and poisoned
  * at project provision (see docs/design/05-prisma-cloud/alchemy-lowering.md).
  */
-import type { Config, ConfigDeclaration } from "@makerkit/core";
+import type { Config, ConfigDeclaration } from '@makerkit/core';
 
 // The ambient environment of whatever runtime hosts the bundle. Declared
 // structurally so this entry imports no runtime's types.
 declare const process: { readonly env: Record<string, string | undefined> };
 
 export const configKey = (address: string, d: ConfigDeclaration): string => {
-  const segments = address.split(".").filter((s) => s.length > 0);
-  const owner = d.owner === "service" ? [] : [d.owner.input];
-  return [...segments, ...owner, d.name].join("_").toUpperCase();
+  const segments = address.split('.').filter((s) => s.length > 0);
+  const owner = d.owner === 'service' ? [] : [d.owner.input];
+  return [...segments, ...owner, d.name].join('_').toUpperCase();
 };
 
 function coerce(raw: string | undefined, d: ConfigDeclaration, key: string): unknown {
@@ -28,16 +28,18 @@ function coerce(raw: string | undefined, d: ConfigDeclaration, key: string): unk
   // a loud boot failure; a NON-EMPTY value that fails its declared type is
   // an error regardless of any default (a default substitutes for absence,
   // never for garbage).
-  const present = raw !== undefined && raw !== "";
+  const present = raw !== undefined && raw !== '';
   if (!present) {
     if (d.default !== undefined) return d.default;
     if (d.optional) return undefined;
     throw new Error(`missing required config param "${d.name}" (env ${key})`);
   }
-  if (d.type === "number") {
+  if (d.type === 'number') {
     const parsed = Number(raw);
     if (!Number.isFinite(parsed)) {
-      throw new Error(`invalid number for config param "${d.name}" (env ${key}): ${JSON.stringify(raw)}`);
+      throw new Error(
+        `invalid number for config param "${d.name}" (env ${key}): ${JSON.stringify(raw)}`,
+      );
     }
     return parsed;
   }
@@ -57,10 +59,11 @@ export const deserialize = (shape: readonly ConfigDeclaration[], address: string
   for (const d of shape) {
     const key = configKey(address, d);
     const value = coerce(process.env[key], d, key);
-    if (d.owner === "service") {
+    if (d.owner === 'service') {
       service[d.name] = value;
     } else {
-      (inputs[d.owner.input] ??= {})[d.name] = value;
+      inputs[d.owner.input] ??= {};
+      inputs[d.owner.input][d.name] = value;
     }
   }
 

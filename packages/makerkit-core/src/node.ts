@@ -7,7 +7,7 @@
  * declarations are pure data; core reads no environment. A node's `type` is
  * its routing key at deploy; core never interprets it beyond lookup.
  */
-import type { ConfigParam, Connection, Params, Values } from "./config.ts";
+import type { ConfigParam, Connection, Params, Values } from './config.ts';
 
 // Brand — set by the factories below; how Load tells a node from junk.
 // Symbol.for so the check survives duplicated module instances in a workspace.
@@ -15,7 +15,7 @@ const NODE: unique symbol = Symbol.for('makerkit:node') as never;
 
 export interface NodeBase {
   readonly [NODE]: true;
-  readonly kind: "service" | "resource" | "connection";
+  readonly kind: 'service' | 'resource' | 'connection';
   /** Routing key, e.g. "prisma-cloud/postgres". */
   readonly type: string;
 }
@@ -65,7 +65,7 @@ export interface RunnableServiceNode<D extends Deps = Deps, P extends Params = P
  * resource. The consumer never learns HOW the producer's address reached it.
  */
 export interface ConnectionEnd<C = unknown> extends NodeBase {
-  readonly kind: "connection";
+  readonly kind: 'connection';
   readonly connection: Connection<Params, C>;
 }
 
@@ -77,7 +77,7 @@ export interface ConnectionEnd<C = unknown> extends NodeBase {
  */
 export interface HexNode {
   readonly [NODE]: true;
-  readonly kind: "hex";
+  readonly kind: 'hex';
   readonly name: string;
   body(h: HexBuilder): void;
 }
@@ -89,6 +89,7 @@ export interface HexBuilder {
    */
   provision(
     id: string,
+    // biome-ignore lint/suspicious/noExplicitAny: accepts any concrete service node; ServiceNode generics are invariant so `any` is required.
     service: ServiceNode<any, any>,
     wiring?: Record<string, ProvisionedRef>,
   ): ProvisionedRef;
@@ -98,13 +99,11 @@ export interface HexBuilder {
 export type ProvisionedRef = { readonly id: string };
 
 /** Dependency map: name → what the service consumes. `any`, not `unknown` — keeps inference. */
+// biome-ignore lint/suspicious/noExplicitAny: `any` (not `unknown`) preserves handler-dep inference from each entry's hydrate return.
 export type Deps = Record<string, ResourceNode<any> | ConnectionEnd<any>>;
 
-export type Hydrated<N> = N extends ResourceNode<infer C>
-  ? C
-  : N extends ConnectionEnd<infer C>
-    ? C
-    : never;
+export type Hydrated<N> =
+  N extends ResourceNode<infer C> ? C : N extends ConnectionEnd<infer C> ? C : never;
 export type HydratedDeps<D extends Deps> = { readonly [K in keyof D]: Hydrated<D[K]> };
 
 /**
@@ -181,14 +180,14 @@ export function connectionEnd<P extends Params, C>(def: {
   type: string;
   connection: Connection<P, C>;
 }): ConnectionEnd<C> {
-  requireType(def.type, "connectionEnd");
+  requireType(def.type, 'connectionEnd');
   const connection: Connection<P, C> = Object.freeze({
     params: freezeParams(def.connection.params),
     hydrate: def.connection.hydrate,
   });
   const node: ConnectionEnd<C> = {
     [NODE]: true,
-    kind: "connection",
+    kind: 'connection',
     type: def.type,
     connection: connection as Connection<Params, C>,
   };
@@ -200,12 +199,12 @@ export function connectionEnd<P extends Params, C>(def: {
  * wiring, not user code, and runs only when the hex is Loaded.
  */
 export function hex(name: string, body: (h: HexBuilder) => void): HexNode {
-  if (typeof name !== "string" || name.length === 0) {
-    throw new Error("hex() requires a non-empty name.");
+  if (typeof name !== 'string' || name.length === 0) {
+    throw new Error('hex() requires a non-empty name.');
   }
   const node: HexNode = {
     [NODE]: true,
-    kind: "hex",
+    kind: 'hex',
     name,
     body,
   };
@@ -224,9 +223,9 @@ export function isNode(value: unknown): value is NodeBase {
 /** True if `value` is a hex constructed by the hex() factory. */
 export function isHexNode(value: unknown): value is HexNode {
   return (
-    typeof value === "object" &&
+    typeof value === 'object' &&
     value !== null &&
     (value as Record<PropertyKey, unknown>)[NODE] === true &&
-    (value as { kind?: unknown }).kind === "hex"
+    (value as { kind?: unknown }).kind === 'hex'
   );
 }
