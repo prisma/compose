@@ -1,9 +1,9 @@
-import { Resource } from 'alchemy';
-import * as Provider from 'alchemy/Provider';
-import * as Effect from 'effect/Effect';
-import * as Redacted from 'effect/Redacted';
-import { ManagementClient } from '../client.ts';
-import { call, callVoid } from '../http.ts';
+import { Resource } from "alchemy";
+import * as Provider from "alchemy/Provider";
+import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
+import { ManagementClient } from "../client.ts";
+import { PrismaApiError, call, callVoid } from "../http.ts";
 
 export interface ConnectionProps {
   /** The database this connection targets. */
@@ -44,9 +44,23 @@ export const ConnectionProvider = () =>
               body: { name: news.name },
             }),
           );
+          // `data.url` is the API self-link, NOT a Postgres DSN. The real
+          // connection strings live under endpoints.{direct,pooled}; the
+          // top-level `connectionString` is deprecated. Prefer the direct
+          // endpoint, fall back to pooled.
+          const endpoints = created.data.endpoints;
+          const dsn = endpoints?.direct?.connectionString ?? endpoints?.pooled?.connectionString;
+          if (dsn === undefined) {
+            return yield* Effect.fail(
+              new PrismaApiError({
+                status: 0,
+                message: `connection ${created.data.id} returned no direct/pooled connection string`,
+              }),
+            );
+          }
           return {
             id: created.data.id,
-            connectionString: Redacted.make(created.data.url),
+            connectionString: Redacted.make(dsn),
           };
         }),
         delete: Effect.fn(function* ({ output }) {
