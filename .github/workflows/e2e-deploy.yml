@@ -1,9 +1,10 @@
 name: E2E deploy
 
 # Deploys examples/makerkit-hello to real Prisma Cloud, verifies it serves,
-# then destroys it. Requires repo secrets PRISMA_SERVICE_TOKEN (a Prisma
-# Console service token) and PRISMA_WORKSPACE_ID (the target workspace id).
-# A human must create both in the repo's Actions secrets before this runs.
+# then destroys it. Requires a repo secret PRISMA_SERVICE_TOKEN (a Prisma
+# Console service token) and a repo variable PRISMA_WORKSPACE_ID (the target
+# workspace id — not sensitive, so a variable, not a secret). A human must
+# create both in the repo's Actions settings before this runs.
 
 on:
   push:
@@ -31,7 +32,9 @@ jobs:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     env:
       PRISMA_SERVICE_TOKEN: ${{ secrets.PRISMA_SERVICE_TOKEN }}
-      PRISMA_WORKSPACE_ID: ${{ secrets.PRISMA_WORKSPACE_ID }}
+      # A workspace id is an identifier, not a credential, so it lives as a
+      # repo variable (vars.*), not a secret.
+      PRISMA_WORKSPACE_ID: ${{ vars.PRISMA_WORKSPACE_ID }}
       # Cloud resource ids are derived from the lowercased stack name,
       # so a fixed name would collide across concurrent runs in the workspace.
       HELLO_STACK_NAME: hello-ci-${{ github.run_id }}
