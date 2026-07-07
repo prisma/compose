@@ -38,3 +38,16 @@ The first slice-1 build (PR #6 code: core-owned `lower()` → prisma-alchemy, `/
 bundler, pack-fixed `Bun.SQL` client) — superseded by decisions 2, 3, 5. Its
 graph/Load mechanics, no-globals shim boundary, and test discipline (import-split
 guard, side-effect-free-import test) carry forward into the rebuild.
+
+6. **Connection primitive design settled** (operator discussion): three execution
+   paths — provision / deploy / run — with core the only actor on all three; the
+   pack satisfies an SPI ("packs provide the tools, Core utilizes them; the pack
+   is never the actor"). Service SPI splits into provision (identity) /
+   writeConfig (values into the runtime env, via the pack's one shared name
+   mapping) / deploy (build → running version); core's per-service sequencing
+   provision → writeConfig → deploy makes the PRO-211 fresh-deploy race
+   structurally impossible. Consumers declare `http()` connection ends (hydrate
+   to a plain client; typed generated clients deferred to the interface work);
+   the minimal `hex()` wires producer → consumer; connection edges must form a
+   DAG (address-at-deploy-time wiring; checked at Load). Recorded in
+   core-model.md §§ Three execution paths / Lowering / worked instance.
