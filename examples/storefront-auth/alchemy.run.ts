@@ -25,7 +25,7 @@ import { nextStandaloneDir } from './scripts/bundle-next.ts';
  * Interim hand-written stack until `makerkit deploy` (a declarative
  * makerkit.config.ts) lands — see core-model.md's Extension points.
  */
-const workspaceId = process.env.PRISMA_WORKSPACE_ID;
+const workspaceId = process.env['PRISMA_WORKSPACE_ID'];
 if (!workspaceId) throw new Error('PRISMA_WORKSPACE_ID is required');
 
 const app = hex('storefront-auth', (h: HexBuilder) => {

@@ -82,7 +82,10 @@ function fakeTarget() {
         provision: (ctx) => {
           calls.push({ phase: 'provision', id: ctx.id, address: ctx.address });
           return Effect.succeed({
-            outputs: { serviceId: `${ctx.id}#svc`, projectId: ctx.application.outputs.projectId },
+            outputs: {
+              serviceId: `${ctx.id}#svc`,
+              projectId: ctx.application.outputs['projectId'],
+            },
           });
         },
         serialize: (ctx, _provisioned, config) => {
@@ -108,10 +111,13 @@ function fakeTarget() {
             phase: 'deploy',
             id: ctx.id,
             artifact,
-            environment: serialized.outputs.environment,
+            environment: serialized.outputs['environment'],
           });
           return Effect.succeed({
-            outputs: { url: `https://${ctx.id}.example`, projectId: provisioned.outputs.projectId },
+            outputs: {
+              url: `https://${ctx.id}.example`,
+              projectId: provisioned.outputs['projectId'],
+            },
           });
         },
       },

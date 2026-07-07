@@ -60,7 +60,7 @@ export const prismaCloud = (o: PrismaCloudOptions): Target => ({
     'prisma-cloud/postgres': ({ id, application }) =>
       Effect.gen(function* () {
         const db = yield* Prisma.Database(`${id}-db`, {
-          projectId: application.outputs.projectId as string,
+          projectId: application.outputs['projectId'] as string,
           name: id,
           region: o.region ?? 'us-east-1',
         });
@@ -77,11 +77,11 @@ export const prismaCloud = (o: PrismaCloudOptions): Target => ({
       provision: ({ id, application }) =>
         Effect.gen(function* () {
           const svc = yield* Prisma.ComputeService(`${id}-svc`, {
-            projectId: application.outputs.projectId as string,
+            projectId: application.outputs['projectId'] as string,
             name: id,
             region: o.region ?? 'us-east-1',
           });
-          return { outputs: { serviceId: svc.id, projectId: application.outputs.projectId } };
+          return { outputs: { serviceId: svc.id, projectId: application.outputs['projectId'] } };
         }),
 
       // Encode the typed Config into the runtime environment — one env var
@@ -101,7 +101,7 @@ export const prismaCloud = (o: PrismaCloudOptions): Target => ({
             const key = configKey(address, d);
             records.push(
               yield* Prisma.EnvironmentVariable(`${key}-var`, {
-                projectId: provisioned.outputs.projectId as string,
+                projectId: provisioned.outputs['projectId'] as string,
                 key,
                 // encode typed→string: a concrete leaf stringifies; a provisioning
                 // ref (already string-typed) passes through and carries the edge.
@@ -123,7 +123,7 @@ export const prismaCloud = (o: PrismaCloudOptions): Target => ({
           Prisma.packageComputeArtifact({
             id,
             bundleDir: bundle.dir,
-            bundleEntry: bundle.entry,
+            ...(bundle.entry !== undefined ? { bundleEntry: bundle.entry } : {}),
             address,
           }),
         ),
@@ -136,14 +136,14 @@ export const prismaCloud = (o: PrismaCloudOptions): Target => ({
       deploy: ({ id }, provisioned, artifact, serialized) =>
         Effect.gen(function* () {
           const deployment = yield* Prisma.Deployment(`${id}-deploy`, {
-            computeServiceId: provisioned.outputs.serviceId as string,
+            computeServiceId: provisioned.outputs['serviceId'] as string,
             artifactPath: artifact.path,
             artifactHash: artifact.sha256,
-            environment: serialized.outputs.environment as readonly Prisma.EnvironmentVariable[],
+            environment: serialized.outputs['environment'] as readonly Prisma.EnvironmentVariable[],
             port: 3000,
           });
           return {
-            outputs: { url: deployment.deployedUrl, projectId: provisioned.outputs.projectId },
+            outputs: { url: deployment.deployedUrl, projectId: provisioned.outputs['projectId'] },
           };
         }),
     },

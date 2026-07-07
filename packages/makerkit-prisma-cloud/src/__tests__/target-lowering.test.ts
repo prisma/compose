@@ -106,7 +106,7 @@ describe("prismaCloud().resources['prisma-cloud/postgres']", () => {
       application: { outputs: { projectId: 'shop-project#cloud-id' } },
     } as unknown as LowerContext;
 
-    const result = run<LoweredNode>(target.resources['prisma-cloud/postgres'](ctx));
+    const result = run<LoweredNode>(target.resources['prisma-cloud/postgres']!(ctx));
 
     expect(result.outputs).toEqual({ url: 'postgres://auth.db-conn' });
     expect(recorded.db).toEqual([
@@ -126,7 +126,7 @@ describe("prismaCloud().services['prisma-cloud/compute']", () => {
       application: { outputs: { projectId: 'shop-project#cloud-id' } },
     } as unknown as LowerContext;
 
-    const result = run<LoweredNode>(target.services['prisma-cloud/compute'].provision(ctx));
+    const result = run<LoweredNode>(target.services['prisma-cloud/compute']!.provision(ctx));
 
     expect(result.outputs).toEqual({
       serviceId: 'auth-svc#cloud-id',
@@ -147,7 +147,7 @@ describe("prismaCloud().services['prisma-cloud/compute']", () => {
     const config = { service: { port: 3000 }, inputs: { db: { url: 'postgres://real-db' } } };
 
     const result = run<LoweredNode>(
-      target.services['prisma-cloud/compute'].serialize(ctx, provisioned, config),
+      target.services['prisma-cloud/compute']!.serialize(ctx, provisioned, config),
     );
 
     expect(recorded.envVar.slice(-2)).toEqual([
@@ -173,7 +173,7 @@ describe("prismaCloud().services['prisma-cloud/compute']", () => {
         },
       ],
     ]);
-    expect(result.outputs.environment).toEqual([
+    expect(result.outputs['environment']).toEqual([
       { id: 'AUTH_DB_URL-var#cloud-id', key: 'AUTH_DB_URL' },
       { id: 'AUTH_PORT-var#cloud-id', key: 'AUTH_PORT' },
     ]);
@@ -184,7 +184,7 @@ describe("prismaCloud().services['prisma-cloud/compute']", () => {
     const ctx = { id: 'auth' } as unknown as LowerContext;
 
     const result = run(
-      target.services['prisma-cloud/compute'].package(ctx, {
+      target.services['prisma-cloud/compute']!.package(ctx, {
         bundle: { dir: 'hexes/auth/dist/bundle' },
         address: 'auth',
       }),
@@ -215,7 +215,7 @@ describe("prismaCloud().services['prisma-cloud/compute']", () => {
     };
 
     const result = run<LoweredNode>(
-      target.services['prisma-cloud/compute'].deploy(ctx, provisioned, artifact, serialized),
+      target.services['prisma-cloud/compute']!.deploy(ctx, provisioned, artifact, serialized),
     );
 
     expect(recorded.deploy).toEqual([
@@ -225,7 +225,7 @@ describe("prismaCloud().services['prisma-cloud/compute']", () => {
           computeServiceId: 'auth-svc#cloud-id',
           artifactPath: '/tmp/auth.tar.gz',
           artifactHash: 'sha-auth',
-          environment: serialized.outputs.environment,
+          environment: serialized.outputs['environment'],
           port: 3000,
         },
       ],

@@ -84,6 +84,7 @@ describe("the config serializer (shared by run() and /target's serialize)", () =
   test("configKey: lone-service root (address '') is unprefixed — owner ▸ name", () => {
     const app = compute({ db: postgres({ client: ({ url }) => ({ url }) }) }, () => null);
     const [dbUrl, port] = configOf(app);
+    if (dbUrl === undefined || port === undefined) throw new Error('expected config declarations');
 
     expect(configKey('', dbUrl)).toBe('DB_URL');
     expect(configKey('', port)).toBe('PORT');
@@ -92,6 +93,7 @@ describe("the config serializer (shared by run() and /target's serialize)", () =
   test('configKey: a hex-addressed service prefixes with its address segment', () => {
     const app = compute({ db: postgres({ client: ({ url }) => ({ url }) }) }, () => null);
     const [dbUrl] = configOf(app);
+    if (dbUrl === undefined) throw new Error('expected a config declaration');
 
     expect(configKey('auth', dbUrl)).toBe('AUTH_DB_URL');
   });
@@ -167,8 +169,8 @@ describe("the config serializer (shared by run() and /target's serialize)", () =
 
     await withEnv({ [configKey('auth', portDecl)]: encoded }, () => {
       const config = deserialize(shape, 'auth');
-      expect(config.service.port).toBe(original);
-      expect(typeof config.service.port).toBe('number');
+      expect(config.service['port']).toBe(original);
+      expect(typeof config.service['port']).toBe('number');
     });
   });
 });

@@ -16,7 +16,7 @@ import service from './src/service.ts';
  * Requires env (repo-root .env, see `pnpm setup:env`):
  * PRISMA_SERVICE_TOKEN, PRISMA_WORKSPACE_ID, ALCHEMY_PASSWORD.
  */
-const workspaceId = process.env.PRISMA_WORKSPACE_ID;
+const workspaceId = process.env['PRISMA_WORKSPACE_ID'];
 if (!workspaceId) throw new Error('PRISMA_WORKSPACE_ID is required');
 
 export default lower(service, prismaCloud({ workspaceId }), {

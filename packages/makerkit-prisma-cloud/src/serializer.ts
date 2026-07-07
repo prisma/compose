@@ -62,8 +62,12 @@ export const deserialize = (shape: readonly ConfigDeclaration[], address: string
     if (d.owner === 'service') {
       service[d.name] = value;
     } else {
-      inputs[d.owner.input] ??= {};
-      inputs[d.owner.input][d.name] = value;
+      let bucket = inputs[d.owner.input];
+      if (bucket === undefined) {
+        bucket = {};
+        inputs[d.owner.input] = bucket;
+      }
+      bucket[d.name] = value;
     }
   }
 
