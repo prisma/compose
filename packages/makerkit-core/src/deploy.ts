@@ -56,9 +56,9 @@ export interface ServiceLowering {
   /**
    * Encode the typed Config core built into the service's runtime
    * environment. The pack owns the encoding; its boot-side deserialize
-   * (run) reverses it through the same codec, so writer and reader cannot
-   * drift. Returns the env-var records so `deploy` can reference them (the
-   * environment edge — see alchemy-lowering.md).
+   * (run) reverses it through the same serializer, so writer and reader
+   * cannot drift. Returns the env-var records so `deploy` can reference them
+   * (the environment edge — see alchemy-lowering.md).
    */
   serialize(
     ctx: LowerContext,
@@ -104,7 +104,7 @@ export interface LowerContext {
   /**
    * The node's deployment address (graph position): the path of provision
    * ids from the app root, excluding the root itself. Empty ("") for a lone
-   * service root — the config codec's "unprefixed" case. The config-key
+   * service root — the config serializer's "unprefixed" case. The config-key
    * namespace and the bootstrap parameter.
    */
   readonly address: string;
@@ -226,7 +226,7 @@ export function lowering(
 
     // Every hex-provisioned service's own graph id IS its address (single-
     // level hex only — nesting is out of scope); a lone service root has no
-    // address of its own — "" is the config codec's unprefixed case.
+    // address of its own — "" is the config serializer's unprefixed case.
     const serviceAddress = new Map<NodeId, string>();
     if (isHexRoot) {
       for (const { id, node } of graph.nodes) {

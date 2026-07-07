@@ -10,7 +10,7 @@ import * as Prisma from "@makerkit/prisma-alchemy";
 import { configOf } from "@makerkit/core";
 import type { ServiceNode } from "@makerkit/core";
 import type { Target } from "@makerkit/core/deploy";
-import { configKey } from "./codec.ts";
+import { configKey } from "./serializer.ts";
 
 export interface PrismaCloudOptions {
   workspaceId: string;
@@ -81,8 +81,8 @@ export const prismaCloud = (o: PrismaCloudOptions): Target => ({
         }),
 
       // Encode the typed Config into the runtime environment — one env var
-      // per leaf, keyed by the SAME codec run() reads at boot (codec.ts,
-      // env-free, shared both directions). Values are the provisioning refs
+      // per leaf, keyed by the SAME serializer run() reads at boot
+      // (serializer.ts, shared both directions). Values are the provisioning refs
       // core built the Config from, so each env var depends on its
       // resource/producer — the ordering edges. class production; the
       // platform default is never written.
@@ -97,7 +97,9 @@ export const prismaCloud = (o: PrismaCloudOptions): Target => ({
               yield* Prisma.EnvironmentVariable(`${key}-var`, {
                 projectId: provisioned.outputs.projectId as string,
                 key,
-                value: value as never,
+                // encode typed→string: a concrete leaf stringifies; a provisioning
+                // ref (already string-typed) passes through and carries the edge.
+                value: typeof value === "number" ? String(value) : (value as never),
                 class: "production",
               }),
             );

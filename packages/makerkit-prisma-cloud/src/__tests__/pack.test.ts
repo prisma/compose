@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { configOf, isNode } from "@makerkit/core";
-import { configKey, deserialize } from "../codec.ts";
+import { configKey, deserialize } from "../serializer.ts";
 import { compute, postgres } from "../index.ts";
 
 /** Sets env vars for the duration of `fn`, restoring whatever was there before. */
@@ -80,7 +80,7 @@ describe("compute()", () => {
   });
 });
 
-describe("the config codec (shared by run() and /target's serialize)", () => {
+describe("the config serializer (shared by run() and /target's serialize)", () => {
   test("configKey: lone-service root (address '') is unprefixed — owner ▸ name", () => {
     const app = compute({ db: postgres({ client: ({ url }) => ({ url }) }) }, () => null);
     const [dbUrl, port] = configOf(app);
@@ -140,6 +140,29 @@ describe("the config codec (shared by run() and /target's serialize)", () => {
 
     await withEnv({ PORT: "not-a-number" }, () => {
       expect(() => deserialize(shape, "")).toThrow(/port/);
+    });
+  });
+
+  test("round-trip: a numeric leaf serializes to a string and deserializes back to the identical number", async () => {
+    // The gap that hid the serialize bug: /target's serialize encodes typed→
+    // string (3000 → "3000"), and this same module's deserialize must read it
+    // back as a number (3000). Emulate serialize's encoding for the `port`
+    // param, keyed by the SHARED configKey, then read it back through
+    // deserialize and assert the number is identical.
+    const app = compute({}, () => null);
+    const shape = configOf(app);
+    const portDecl = shape.find((d) => d.name === "port");
+    if (portDecl === undefined) throw new Error("expected a port declaration");
+
+    const original = 3000;
+    // serialize (in target.ts): a concrete number stringifies.
+    const encoded = typeof original === "number" ? String(original) : original;
+    expect(encoded).toBe("3000");
+
+    await withEnv({ [configKey("auth", portDecl)]: encoded }, () => {
+      const config = deserialize(shape, "auth");
+      expect(config.service.port).toBe(original);
+      expect(typeof config.service.port).toBe("number");
     });
   });
 });

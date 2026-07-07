@@ -150,7 +150,7 @@ describe("lowering a lone service root", () => {
     expect(result).toEqual({ outputs: { url: "https://hello.example", projectId: "hello#project" } });
   });
 
-  test("a lone service's address is empty — the codec's unprefixed case", () => {
+  test("a lone service's address is empty — the serializer's unprefixed case", () => {
     const { target, calls } = fakeTarget();
     const root = app("fake/compute", { db: db() });
 

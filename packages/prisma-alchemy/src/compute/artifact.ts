@@ -119,6 +119,11 @@ function createDeterministicTarGz(entries: readonly { relPath: string; content: 
  */
 export function packageComputeArtifact(opts: PackageComputeArtifactOptions): ComputeArtifact {
   if (!fs.existsSync(opts.bundleDir)) {
+    // Destroy-only tolerance: `alchemy destroy` never uploads the artifact, so
+    // packaging must not require a prior build. A build-less DEPLOY still fails
+    // later — the Deployment provider's readFileSync hits ENOENT on this empty
+    // path. An explicit up-front guard belongs in the deploy entrypoint (the
+    // makerkit deploy CLI), which is deferred.
     return { path: "", sha256: "absent" };
   }
 

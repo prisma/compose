@@ -126,7 +126,10 @@ describe("prismaCloud().services['prisma-cloud/compute']", () => {
         "AUTH_DB_URL-var",
         { projectId: "shop-project#cloud-id", key: "AUTH_DB_URL", value: "postgres://real-db", class: "production" },
       ],
-      ["AUTH_PORT-var", { projectId: "shop-project#cloud-id", key: "AUTH_PORT", value: 3000, class: "production" }],
+      // The concrete numeric leaf is encoded typed→string ("3000", not 3000):
+      // the ConfigVariable value field is string-typed, and deserialize reads
+      // it back to a number (round-tripped in pack.test.ts).
+      ["AUTH_PORT-var", { projectId: "shop-project#cloud-id", key: "AUTH_PORT", value: "3000", class: "production" }],
     ]);
     expect(result.outputs.environment).toEqual([
       { id: "AUTH_DB_URL-var#cloud-id", key: "AUTH_DB_URL" },

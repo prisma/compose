@@ -1,6 +1,6 @@
 import { configOf, hydrate, service } from "@makerkit/core";
 import type { Deps, RunnableServiceNode, ServiceHandler } from "@makerkit/core";
-import { deserialize } from "./codec.ts";
+import { deserialize } from "./serializer.ts";
 
 const computeParams = { port: { type: 'number', default: 3000 } } as const;
 

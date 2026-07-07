@@ -9,4 +9,4 @@ export type { PostgresConfig } from "./postgres.ts";
 export { compute } from "./compute.ts";
 export { http } from "./http.ts";
 export type { HttpClient } from "./http.ts";
-export { configKey } from "./codec.ts";
+export { configKey } from "./serializer.ts";

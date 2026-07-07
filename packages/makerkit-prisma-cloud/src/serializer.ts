@@ -1,10 +1,10 @@
 /**
- * The pack's config codec — the semantic↔physical mapping, private to the
- * pack, SHARED by run() (boot) and /target's serialize (deploy) so writer and
- * reader cannot drift.
+ * The pack's config serializer — the semantic↔physical mapping, private to
+ * the pack, SHARED by run() (boot) and /target's serialize (deploy) so writer
+ * and reader cannot drift.
  *
- * Keys are unique per service within the shared project namespace: the codec
- * prefixes them with the deployment address (its segments after the app
+ * Keys are unique per service within the shared project namespace: the
+ * serializer prefixes them with the deployment address (its segments after the app
  * root — empty for a lone-service deploy, the "unprefixed" case), then the
  * owner (the input name, dropped for the service's own params), then the
  * param name. auth's db.url ↔ AUTH_DB_URL; a lone service's db.url ↔ DB_URL.
