@@ -42,20 +42,6 @@ export async function bundleNextComputeArtifact(appDir: string): Promise<BundleN
     );
   }
 
-  // Drop `sharp` (and its `@img/*` native binaries) from the traced tree.
-  // Next always traces sharp for image optimization, but this app uses no
-  // `next/image` (and next.config sets images.unoptimized), so it is never
-  // loaded. Left in, its native binary is this build machine's platform
-  // (darwin); on Compute's linux VM the linux binary is missing, so `bun`
-  // auto-installs it at boot and fills the tiny disk (ENOSPC crash loop).
-  const standaloneRoot = path.join(resolvedApp, ".next", "standalone");
-  for (const dir of ["sharp", "@img"]) {
-    await fs.promises.rm(path.join(standaloneRoot, "node_modules", dir), {
-      recursive: true,
-      force: true,
-    });
-  }
-
   // The standalone build ships server.js + traced node_modules but not the
   // client assets; copy them where server.js serves them from.
   await fs.promises.cp(

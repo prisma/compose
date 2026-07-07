@@ -11,12 +11,20 @@ const workspaceRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '.
 const nextConfig: NextConfig = {
   output: 'standalone',
   outputFileTracingRoot: workspaceRoot,
-  // No `next/image` here. Default optimization traces `sharp` (a native binary)
-  // into the standalone — built on this machine's platform (darwin), so on
-  // Compute's linux VM its linux binary is missing and `bun` tries to auto-
-  // install it at boot, filling the tiny disk (ENOSPC crash loop). Unoptimized
-  // images drop the sharp dependency entirely.
   images: { unoptimized: true },
+  // Next traces native binaries (`sharp` for image optimization, `@next/swc`)
+  // into the standalone, built for THIS machine's platform (darwin). The app
+  // uses neither at runtime, but on Compute's linux VM their linux variants are
+  // missing, so `bun` auto-installs them at boot and fills the tiny disk
+  // (ENOSPC crash loop). Exclude them from the trace — the proper Next knob,
+  // rather than deleting them from the assembled tree afterwards.
+  outputFileTracingExcludes: {
+    "*": [
+      "**/node_modules/@next/swc-*/**",
+      "**/node_modules/sharp/**",
+      "**/node_modules/@img/**",
+    ],
+  },
 };
 
 export default nextConfig;
