@@ -16,17 +16,19 @@ roadmap (typed interfaces, hexes, contracts, …) follows as later projects.
 R2 → [#7](https://github.com/prisma/makerkit/pull/7), R3 →
 [#8](https://github.com/prisma/makerkit/pull/8)). **R4 (Connection primitive)
 built and proven live** on `claude/plan-state-store` / [PR #10](https://github.com/prisma/makerkit/pull/10):
-the design settled through decisions 8–10, the code shipped (core reshape, pack,
-prisma-alchemy, both examples), Opus-reviewed, and the storefront→auth round trip
-runs on real Prisma Cloud. See the R4 roadmap entry for what shipped + the
-**Deferred** block.
+the design settled through decisions 8–10, the code shipped, Opus-reviewed, the
+storefront→auth round trip runs on real Prisma Cloud, rebased onto main, strict-TS
+green, e2e switched to `storefront-auth`.
 
-**Finishing R4:** the branch was **rebased onto main** (which merged Biome +
-strict TypeScript + CI workflows). Rebase clean (`-X theirs`; externals kept out
-of the commit); Biome format/lint applied; a Sonnet agent is finishing the
-mechanical **strict-TS compliance** (main's stricter tsconfig). Remaining: confirm
-the CI jobs green (lint/typecheck/test/build), deploy makerkit-hello to validate
-the e2e-deploy workflow + the idempotent-redeploy check, then the DoD close-out.
+**R5 (authoring-surface redesign) — active, on the same branch / PR #10.** A long
+design session (decision 11) resolved R4's two warts at the root: the framework-DI
+gap (Next page read `process.env` directly) and the packaging fragility (import
+cycle hidden behind a non-literal `serverModule` trick). The service becomes
+declarations only (`compute({deps,build})`, no handler); `run(address,boot)` is the
+process controller and `load()` is typed pull-DI; the app owns and bundles its own
+entry; build is a two-piece adapter (`@makerkit/node`/`@makerkit/nextjs`). Docs
+rewritten (core-model.md, design-note, decision 11); implementation dispatched;
+re-prove live is the headline proof. See the R5 slice below.
 
 ## Legend
 
@@ -35,6 +37,30 @@ the e2e-deploy workflow + the idempotent-redeploy check, then the DoD close-out.
 ---
 
 ## Build slices (this project)
+
+### [~] Slice R5 — authoring-surface redesign (`compute({deps,build})`, `run`/`load`, build adapters)
+
+> **Active** on `claude/plan-state-store` / PR #10 (retrofits R4). Design settled
+> (decision 11); docs rewritten; implementation dispatched; re-prove live pending.
+
+**Outcome:** the service is declarations only (`compute({ deps, build })`, no
+handler); the node carries `run(address, boot)` (resolve → stash → boot) and
+`load()` (read stash → hydrate → memoize, typed); the app writes AND bundles its own
+entrypoint; build is a two-piece adapter (`@makerkit/node`, `@makerkit/nextjs`:
+descriptor + `/assemble`). R4's import cycle, non-literal `serverModule` trick,
+keep-alive, in-service error handlers, and the Next page's `process.env` read are
+all deleted; the framework-DI gap closes (`load()` is the one pull mechanism).
+Proof: both `storefront-auth` services on the new shape, live, storefront renders
+`Auth /verify says: 200 {"ok":true}`.
+**Contract:** rewritten `core-model.md` + `slices/r5-authoring-surface/design-note.md`.
+**Motivation:** operator design session — R4's framework-DI gap and packaging
+fragility resolved at the root (the service stops being a program).
+**Builds on:** R4 (same branch).
+**Closes:** the roadmap's **Framework-hosted DI** item (`use()` subsumed by
+`load()`).
+**Dispatches:** (1) core node reshape + `/deploy` `PackageInput`; (2) pack
+`run`/`load`/stash + `/target` `package`; (3) the two adapter packages; (4) examples
+refactor; (5) tests; (6) Opus review + fix rounds; (7) deploy/verify/destroy.
 
 ### [x] Slice R1 — core + pack rebuild, proven on the minimal example
 
@@ -132,7 +158,7 @@ The storefront artifact bundles the standalone `node_modules` (self-contained fi
 ### [ ] Replace a dependency by interface (DIP swap)
 ### [ ] Data Contract for a data dependency (migrations open)
 ### [ ] Hex composition / app root (multi-hex deploy)
-### [ ] Framework-hosted DI (`use()` accessor; removes Next-internal env reads)
+### [x] Framework-hosted DI — **closed by R5**: `service.load()` is the one typed pull mechanism for both a Hono entry and a Next page; the Next-internal `process.env` read is gone. No separate `use()` accessor needed.
 ### [ ] Local emulation / test (Load + Hydrate with fakes)
 ### [ ] Streams (async connection style)
 ### [ ] Prisma-hosted Alchemy state store (platform target)

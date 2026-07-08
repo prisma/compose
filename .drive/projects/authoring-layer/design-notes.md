@@ -143,3 +143,50 @@ guard, side-effect-free-import test) carry forward into the rebuild.
       platform. No prisma-alchemy change in R4; the overclaim was scoped down in
       core-model.md + alchemy-lowering.md, and the config/secret split recorded in the
       glossary.
+
+11. **Service = declarations; the app owns and bundles its entry; the node carries
+    `run`/`load`; build is an adapter** (operator discussion, R5). A long design
+    session that resolved the framework-DI gap and the storefront's packaging
+    fragility at the root. Exhaustively recorded in
+    [`slices/r5-authoring-surface/design-note.md`](slices/r5-authoring-surface/design-note.md);
+    contract in core-model.md. In brief:
+
+    - **No handler on the service.** `compute({ deps, build })` declares a service —
+      dependencies and how it is built — and nothing else. The code that serves is
+      the app's own **entrypoint**, which the app author writes AND bundles
+      themselves (Hono → their bundler; Next → `next build`). MakerKit never bundles
+      app code; it produces a small wrapper (the service module + core, one copy)
+      around the app's built entry. Replaces R4's baked-in handler (`invoke`).
+    - **`run` is the process controller; `load` is pull-DI.** `run(address, boot)`
+      resolves config from the address-keyed env, re-emits it under address-free
+      process-local **stash** keys (env is the medium — inherited by framework worker
+      forks), then calls `boot()` to start the app's entry. `load()` — called from
+      *inside* the entry (a Hono `server.ts` or a Next page) — reads the stash,
+      hydrates + memoizes deps, and returns them **typed** (chain
+      `postgres()`→`compute()`→`load()`), no address. run-before-load is guaranteed
+      because the entry runs inside run()'s process.
+    - **Kills the R4 fragility.** The import cycle is gone (serve code left
+      `service.ts` for the app's entry, so `service.ts` never references
+      `server.js`), and with it the non-literal `serverModule` anti-bundling trick,
+      the keep-alive `Promise`, and the in-service error handlers. The Next page's
+      direct `process.env.STOREFRONT_AUTH_URL` read (R2/R4's framework-DI gap)
+      becomes `service.load()` — the SAME mechanism the Hono entry uses; the deferred
+      `use()` primitive is subsumed by `load()`.
+    - **Build is a two-piece adapter — the ecosystem seam.** A lean authoring
+      descriptor (`node({ entry })` / `nextjs()`) rides on the service node; a heavy
+      deploy-side assembler (`@makerkit/<adapter>/assemble`) normalizes the app's
+      built output into a bundle dir with the wrapper and reports the runtime entry.
+      Runtime shape is identical across adapters (`run(address, () => import(entry))`);
+      only assembly differs (Next: standalone fixups). New frameworks / access
+      patterns are new adapters; core and the target pack are untouched.
+    - **Rejected on the way:** push-a-global from the bootstrap (couples every
+      consumer to bootstrap lifecycle + shared mutable state); a `MAKERKIT_ADDRESS`
+      env var for the pull side (a second address consumer — unnecessary once `run`
+      stashes address-free); per-framework runtime *adapters* (the framework code is
+      just the app's entry — makerkit stays framework-agnostic); the serve callback
+      inside `build:` (conflates build config with runtime code — moved to the app's
+      entry).
+    - **Deferred (unchanged owners):** the `makerkit deploy` CLI still owns the
+      build→deploy pipeline (it runs each assembler and drops the interim per-service
+      bundle map); the deterministic Next-standalone artifact still gates a true
+      no-op redeploy.
