@@ -92,10 +92,17 @@ export interface RunnableServiceNode<
  * EDGE to the producer service the enclosing hex wires it to; at run it
  * hydrates a client through exactly the same Connection machinery as a
  * resource. The consumer never learns HOW the producer's address reached it.
+ *
+ * `Req` is the contract this end requires — `unknown` for an untyped end
+ * (e.g. `http()`, the escape hatch that accepts anything). `HexBuilder.provision`
+ * checks each wired ref-port against `Req` at compile time; `required` carries
+ * the same contract as a runtime value so Load can call its `satisfies()` as
+ * the backstop.
  */
-export interface ConnectionEnd<C = unknown> extends NodeBase {
+export interface ConnectionEnd<C = unknown, Req = unknown> extends NodeBase {
   readonly kind: 'connection';
   readonly connection: Connection<Params, C>;
+  readonly required?: Req;
 }
 
 /**
@@ -111,32 +118,87 @@ export interface HexNode {
   body(h: HexBuilder): void;
 }
 
+/**
+ * A provisioned producer's exposed port as a wiring-time value: the port's own
+ * contract, tagged with which provider produced it. `provision(id, consumer,
+ * wiring)` checks a ref-port's contract against the consumer's required slot
+ * (plain assignability); Load reads `__providerId` to resolve the edge and
+ * calls the port's own `satisfies()` as the runtime mirror of that check.
+ */
+// biome-ignore lint/suspicious/noExplicitAny: opaque per-port Cmp — matches Expose's own `any` bound.
+export type RefPort<C extends Contract<any, any>> = C & { readonly __providerId: string };
+
+/**
+ * What `provision(id, service)` hands back: a stable id — so a service with no
+ * exposed ports (or an untyped ConnectionEnd slot) can still be wired
+ * wholesale by passing the ref itself — plus one ref-port per exposed
+ * contract (empty when the service declares no `expose`).
+ */
+export type ProvisionedRef<E extends Expose = Record<never, never>> = { readonly id: string } & {
+  readonly [P in keyof E]: RefPort<E[P]>;
+};
+
+/** A ConnectionEnd's required contract (unknown for an untyped end). */
+// biome-ignore lint/suspicious/noExplicitAny: generic ConnectionEnd bound — Req is opaque here.
+type ReqOf<CE> = CE extends ConnectionEnd<any, infer Req> ? Req : never;
+
+/** The wireable (ConnectionEnd) keys of a Deps map — resource inputs are never wired here. */
+type ConnectionKeys<D extends Deps> = {
+  // biome-ignore lint/suspicious/noExplicitAny: matches ReqOf's bound.
+  [K in keyof D]: D[K] extends ConnectionEnd<any, any> ? K : never;
+}[keyof D];
+
+/**
+ * `HexBuilder.provision`'s wiring argument: one ref-port per ConnectionEnd
+ * input, each required to be assignable to that input's required contract.
+ * `NoInfer` keeps the brand honest — without it, an incompatible ref would
+ * just widen the inferred required type instead of failing.
+ */
+type Wiring<D extends Deps> = { [K in ConnectionKeys<D>]: NoInfer<ReqOf<D[K]>> };
+
 export interface HexBuilder {
   /**
-   * Registers an owned service under a stable id; `wiring` satisfies the
-   * service's ConnectionEnd inputs with previously provisioned producers.
+   * Registers an owned service under a stable id, returning a ref carrying
+   * its exposed ports (if any) for a later provision() to wire in. Also the
+   * form for a service with ConnectionEnd inputs left for the runtime dangling
+   * check to catch — TypeScript cannot see whether a service's own inputs got
+   * wired anywhere else in the body, only Load can.
    */
-  provision(
+  provision<E extends Expose>(
     id: string,
     // biome-ignore lint/suspicious/noExplicitAny: accepts any concrete service node; ServiceNode generics are invariant so `any` is required.
-    service: ServiceNode<any, any>,
-    wiring?: Record<string, ProvisionedRef>,
-  ): ProvisionedRef;
+    service: ServiceNode<any, any, E>,
+  ): ProvisionedRef<E>;
+  /**
+   * Registers an owned service under a stable id; `wiring` supplies a
+   * producer's ref-port for each of the service's ConnectionEnd inputs.
+   * TypeScript checks each against that input's required contract — an
+   * untyped input's Req is `unknown`, so it accepts anything (http()'s escape
+   * hatch); Load re-checks the same relation via the port's `satisfies()`.
+   */
+  provision<D extends Deps, E extends Expose>(
+    id: string,
+    // biome-ignore lint/suspicious/noExplicitAny: accepts any concrete service node; ServiceNode generics are invariant so `any` is required.
+    service: ServiceNode<D, any, E>,
+    wiring: Wiring<D>,
+  ): ProvisionedRef<E>;
 }
-
-/** Opaque handle within the hex body. */
-export type ProvisionedRef = { readonly id: string };
 
 /** Dependency map: name → what the service consumes. `any`, not `unknown` — keeps inference. */
 // biome-ignore lint/suspicious/noExplicitAny: `any` (not `unknown`) preserves loaded-dep inference from each entry's hydrate return.
-export type Deps = Record<string, ResourceNode<any> | ConnectionEnd<any>>;
+export type Deps = Record<string, ResourceNode<any> | ConnectionEnd<any, any>>;
 
 /** Output-port map: name → the Contract a service exposes for others to depend on. */
 // biome-ignore lint/suspicious/noExplicitAny: opaque per-port Cmp — core never inspects it (see Contract).
 export type Expose = Readonly<Record<string, Contract<any, any>>>;
 
 export type Hydrated<N> =
-  N extends ResourceNode<infer C> ? C : N extends ConnectionEnd<infer C> ? C : never;
+  N extends ResourceNode<infer C>
+    ? C
+    : // biome-ignore lint/suspicious/noExplicitAny: Req is irrelevant to the hydrated shape.
+      N extends ConnectionEnd<infer C, any>
+      ? C
+      : never;
 export type HydratedDeps<D extends Deps> = { readonly [K in keyof D]: Hydrated<D[K]> };
 
 /**
@@ -209,22 +271,26 @@ export function service<
 
 /**
  * Constructs a branded, frozen ConnectionEnd. Pure — nothing executes; the
- * connection's hydrate runs only through the boot pipeline.
+ * connection's hydrate runs only through the boot pipeline. `required` (if
+ * given) is the contract this end depends on — the same value Load compares
+ * a wired ref-port against via `satisfies()`.
  */
-export function connectionEnd<P extends Params, C>(def: {
+export function connectionEnd<P extends Params, C, Req = unknown>(def: {
   type: string;
   connection: Connection<P, C>;
-}): ConnectionEnd<C> {
+  required?: Req;
+}): ConnectionEnd<C, Req> {
   requireType(def.type, 'connectionEnd');
   const connection: Connection<P, C> = Object.freeze({
     params: freezeParams(def.connection.params),
     hydrate: def.connection.hydrate,
   });
-  const node: ConnectionEnd<C> = {
+  const node: ConnectionEnd<C, Req> = {
     [NODE]: true,
     kind: 'connection',
     type: def.type,
     connection: connection as Connection<Params, C>,
+    ...(def.required !== undefined ? { required: def.required } : {}),
   };
   return Object.freeze(node);
 }

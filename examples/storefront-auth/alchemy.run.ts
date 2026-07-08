@@ -30,7 +30,7 @@ if (!workspaceId) throw new Error('PRISMA_WORKSPACE_ID is required');
 
 const app = hex('storefront-auth', (h: HexBuilder) => {
   const authRef = h.provision('auth', authService);
-  h.provision('storefront', storefrontService, { auth: authRef });
+  h.provision('storefront', storefrontService, { auth: authRef.rpc });
 });
 
 export default lower(app, prismaCloud({ workspaceId }), {

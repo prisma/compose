@@ -16,8 +16,7 @@ export type {
   Values,
 } from './config.ts';
 export { configOf } from './config.ts';
-export type { Consumer, Contract } from './contract.ts';
-export { provision } from './contract.ts';
+export type { Contract } from './contract.ts';
 export type { Edge, Graph, GraphNode, NodeId } from './graph.ts';
 export { Load, LoadError } from './graph.ts';
 export { hydrate, hydrateSync } from './hydrate.ts';
@@ -33,6 +32,7 @@ export type {
   Loaded,
   NodeBase,
   ProvisionedRef,
+  RefPort,
   ResourceNode,
   RunnableServiceNode,
   ServiceNode,

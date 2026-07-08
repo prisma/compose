@@ -8,7 +8,9 @@
  *
  * A Contract instead types a dependency's connection end — the typed sibling
  * of `http()`, same `{ url }` param, hydrating to the typed client `Client<C>`
- * over the network binding in client.ts.
+ * over the network binding in client.ts. It carries the contract as its
+ * `required` value, so `HexBuilder.provision`'s wiring is checked against it
+ * (compile time) and Load's `satisfies()` backstop re-checks it (runtime).
  */
 import type { Contract } from '@makerkit/core';
 import { type ConnectionEnd, connectionEnd } from '@makerkit/core';
@@ -23,7 +25,7 @@ export function rpc<I extends StandardSchemaV1, O extends StandardSchemaV1>(m: {
   input: I;
   output: O;
 }): (input: StandardSchemaV1.InferInput<I>) => Promise<StandardSchemaV1.InferOutput<O>>;
-export function rpc<C extends Contract<'rpc', RpcFns>>(contract: C): ConnectionEnd<Client<C>>;
+export function rpc<C extends Contract<'rpc', RpcFns>>(contract: C): ConnectionEnd<Client<C>, C>;
 export function rpc(
   arg: { input: StandardSchemaV1; output: StandardSchemaV1 } | Contract<'rpc', RpcFns>,
 ): unknown {
@@ -35,6 +37,7 @@ export function rpc(
       params: { url: { type: 'string' } },
       hydrate: ({ url }) => makeClient(arg, url),
     },
+    required: arg,
   });
 }
 

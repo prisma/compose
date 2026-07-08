@@ -29,6 +29,22 @@ describe('makeClient()', () => {
     expect(await requests[0]?.json()).toEqual({ token: 't' });
   });
 
+  test('a base URL with its own path is preserved, not dropped — a leading-slash-free join', async () => {
+    const requests: Request[] = [];
+    const client = makeClient(authContract, 'http://auth.internal/api/v1', {
+      fetch: async (req) => {
+        requests.push(req);
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { 'content-type': 'application/json' },
+        });
+      },
+    });
+
+    await client.verify({ token: 't' });
+
+    expect(requests[0]?.url).toBe('http://auth.internal/api/v1/rpc/verify');
+  });
+
   test('rejects a response that fails the output schema — a lying server is caught', async () => {
     const client = makeClient(authContract, 'http://auth.internal', {
       fetch: async () =>
@@ -46,6 +62,18 @@ describe('makeClient()', () => {
     });
 
     await expect(client.verify({ token: 't' })).rejects.toThrow(/verify/);
+  });
+
+  test("a non-2xx response's { error } body is folded into the thrown message", async () => {
+    const client = makeClient(authContract, 'http://auth.internal', {
+      fetch: async () =>
+        new Response(JSON.stringify({ error: 'token expired' }), {
+          status: 401,
+          headers: { 'content-type': 'application/json' },
+        }),
+    });
+
+    await expect(client.verify({ token: 't' })).rejects.toThrow(/token expired/);
   });
 
   test('defaults the transport to the real fetch when none is supplied', () => {

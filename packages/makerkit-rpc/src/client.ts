@@ -24,6 +24,24 @@ interface MethodSchemas {
  */
 export type Transport = (req: Request) => Promise<Response>;
 
+/** `<base>/rpc/<method>`, preserving a base URL's own path (e.g. a mount point). */
+function methodUrl(base: string, method: string): string {
+  const normalizedBase = base.endsWith('/') ? base : `${base}/`;
+  return new URL(`rpc/${method}`, normalizedBase).toString();
+}
+
+/** The server's `{ error }` body, if the response has one — undefined otherwise. */
+async function errorDetail(res: Response): Promise<string | undefined> {
+  try {
+    const body: unknown = await res.json();
+    return typeof body === 'object' && body !== null && 'error' in body
+      ? String((body as { error: unknown }).error)
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function makeClient<C extends Contract<'rpc', RpcFns>>(
   contract: C,
   url: string,
@@ -37,14 +55,18 @@ export function makeClient<C extends Contract<'rpc', RpcFns>>(
   )) {
     client[method] = async (input: unknown) => {
       const res = await send(
-        new Request(new URL(`rpc/${method}`, url).toString(), {
+        new Request(methodUrl(url, method), {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify(input),
         }),
       );
       if (!res.ok) {
-        throw new Error(`RPC call "${method}" failed: ${res.status} ${res.statusText}`);
+        const detail = await errorDetail(res);
+        throw new Error(
+          `RPC call "${method}" failed: ${res.status} ${res.statusText}` +
+            (detail !== undefined ? ` — ${detail}` : ''),
+        );
       }
       return standardValidate(schemas.output, await res.json());
     };
