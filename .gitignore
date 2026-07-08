@@ -20,3 +20,8 @@ packages/e2e-tests/.tmp-output
 
 # Local clone of prisma-next used as a scaffolding reference; not part of this repo.
 /prisma-next/
+
+# External checkouts (never commit)
+ignite/
+pdp-control-plane/
+prisma-next/

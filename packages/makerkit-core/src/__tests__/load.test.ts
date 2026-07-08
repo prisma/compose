@@ -1,12 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import { Load, LoadError } from '../graph.ts';
 import { resource, service } from '../node.ts';
-import { conn, memoryAdapter } from './helpers.ts';
+import { conn } from './helpers.ts';
 
-const adapter = memoryAdapter({});
+const build = { kind: 'node', entry: 'server.js' };
+
 const db = () => resource({ type: 'fake/db', connection: conn({}, () => ({})) });
 const app = (inputs: Record<string, ReturnType<typeof db>>) =>
-  service({ type: 'fake/app', inputs, params: {}, config: adapter, handler: () => null });
+  service({ type: 'fake/app', inputs, params: {}, build });
 
 describe('Load', () => {
   test('builds path-derived ids, edges, and topo-ordered nodes (deps first)', () => {
@@ -17,7 +18,7 @@ describe('Load', () => {
 
     expect(graph.root).toEqual({ id: 'hello', node: root });
     expect(graph.nodes.map((n) => n.id)).toEqual(['hello.db', 'hello']);
-    expect(graph.edges).toEqual([{ from: 'hello.db', to: 'hello', input: 'db' }]);
+    expect(graph.edges).toEqual([{ from: 'hello.db', to: 'hello', input: 'db', kind: 'input' }]);
   });
 
   test('defaults the root id to "root"', () => {
@@ -32,22 +33,26 @@ describe('Load', () => {
 
     expect(graph.nodes.map((n) => n.id)).toEqual(['svc.a', 'svc.b', 'svc']);
     expect(graph.edges).toEqual([
-      { from: 'svc.a', to: 'svc', input: 'a' },
-      { from: 'svc.b', to: 'svc', input: 'b' },
+      { from: 'svc.a', to: 'svc', input: 'a', kind: 'input' },
+      { from: 'svc.b', to: 'svc', input: 'b', kind: 'input' },
     ]);
   });
 
-  test('executes nothing', () => {
+  test('executes nothing — Load never calls a connection hydrate', () => {
     let calls = 0;
     const root = service({
       type: 'fake/app',
-      inputs: { db: db() },
-      params: {},
-      config: adapter,
-      handler: () => {
-        calls += 1;
-        return null;
+      inputs: {
+        db: resource({
+          type: 'fake/db',
+          connection: conn({}, () => {
+            calls += 1;
+            return {};
+          }),
+        }),
       },
+      params: {},
+      build,
     });
 
     Load(root);

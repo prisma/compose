@@ -12,14 +12,23 @@ roadmap (typed interfaces, hexes, contracts, …) follows as later projects.
 
 ## Current position
 
-**All three build slices complete.** R1 →
-[PR #6](https://github.com/prisma/makerkit/pull/6) (merged); R2 →
-[PR #7](https://github.com/prisma/makerkit/pull/7) (open → main, mergeable); R3 →
-[PR #8](https://github.com/prisma/makerkit/pull/8) (open → main). The
-storefront-auth demo is live on the authoring layer through the ConfigAdapter
-pipeline. Remaining: merge #7 then #8 (operator), project close-out (verify spec
-DoD, sync docs, delete this project dir), then the Connection-primitive project
-(first capability-roadmap entry — its target picture is the hand-wired AUTH_URL).
+**R1–R3 merged** (R1 → [#6](https://github.com/prisma/makerkit/pull/6),
+R2 → [#7](https://github.com/prisma/makerkit/pull/7), R3 →
+[#8](https://github.com/prisma/makerkit/pull/8)). **R4 (Connection primitive)
+built and proven live** on `claude/plan-state-store` / [PR #10](https://github.com/prisma/makerkit/pull/10):
+the design settled through decisions 8–10, the code shipped, Opus-reviewed, the
+storefront→auth round trip runs on real Prisma Cloud, rebased onto main, strict-TS
+green, e2e switched to `storefront-auth`.
+
+**R5 (authoring-surface redesign) — active, on the same branch / PR #10.** A long
+design session (decision 11) resolved R4's two warts at the root: the framework-DI
+gap (Next page read `process.env` directly) and the packaging fragility (import
+cycle hidden behind a non-literal `serverModule` trick). The service becomes
+declarations only (`compute({deps,build})`, no handler); `run(address,boot)` is the
+process controller and `load()` is typed pull-DI; the app owns and bundles its own
+entry; build is a two-piece adapter (`@makerkit/node`/`@makerkit/nextjs`). Docs
+rewritten (core-model.md, design-note, decision 11); implementation dispatched;
+re-prove live is the headline proof. See the R5 slice below.
 
 ## Legend
 
@@ -28,6 +37,30 @@ DoD, sync docs, delete this project dir), then the Connection-primitive project
 ---
 
 ## Build slices (this project)
+
+### [~] Slice R5 — authoring-surface redesign (`compute({deps,build})`, `run`/`load`, build adapters)
+
+> **Active** on `claude/plan-state-store` / PR #10 (retrofits R4). Design settled
+> (decision 11); docs rewritten; implementation dispatched; re-prove live pending.
+
+**Outcome:** the service is declarations only (`compute({ deps, build })`, no
+handler); the node carries `run(address, boot)` (resolve → stash → boot) and
+`load()` (read stash → hydrate → memoize, typed); the app writes AND bundles its own
+entrypoint; build is a two-piece adapter (`@makerkit/node`, `@makerkit/nextjs`:
+descriptor + `/assemble`). R4's import cycle, non-literal `serverModule` trick,
+keep-alive, in-service error handlers, and the Next page's `process.env` read are
+all deleted; the framework-DI gap closes (`load()` is the one pull mechanism).
+Proof: both `storefront-auth` services on the new shape, live, storefront renders
+`Auth /verify says: 200 {"ok":true}`.
+**Contract:** rewritten `core-model.md` + `slices/r5-authoring-surface/design-note.md`.
+**Motivation:** operator design session — R4's framework-DI gap and packaging
+fragility resolved at the root (the service stops being a program).
+**Builds on:** R4 (same branch).
+**Closes:** the roadmap's **Framework-hosted DI** item (`use()` subsumed by
+`load()`).
+**Dispatches:** (1) core node reshape + `/deploy` `PackageInput`; (2) pack
+`run`/`load`/stash + `/target` `package`; (3) the two adapter packages; (4) examples
+refactor; (5) tests; (6) Opus review + fix rounds; (7) deploy/verify/destroy.
 
 ### [x] Slice R1 — core + pack rebuild, proven on the minimal example
 
@@ -106,15 +139,42 @@ decided at slice spec time.
 
 ## Capability roadmap (later projects, unchanged through-line)
 
-### [ ] Service → service dependency (HTTP, no interface) — the Connection primitive; replaces R2's hand-wired `AUTH_URL`
+### [x] Service → service dependency (HTTP, no interface) — the Connection primitive → **slice R4, done** (`slices/r4-connection-primitive/spec.md`). Shipped: `http()`/`connectionEnd`, minimal `hex()`, single-Project placement, `DATABASE_URL` poison, and the decision-8/9/10 reshape (bootstrap identity, node-carried `run`, core=structure/pack=encoding config round-trip). **Proven live on real Prisma Cloud** — storefront→auth round trip renders `Auth /verify says: 200 {"ok":true}` (config on the first version, PRO-211 race dead). Five real-cloud bugs found + fixed en route (Connection DSN, storefront artifact packaging, poison `"-"`, env-var upsert); PRO-212/PRO-213 filed. See its **Deferred** block below.
+
+**Deferred from R4 (decisions 8–10 + the deploy proof) — each is future work, not a regression:**
+
+### [ ] MakerKit-owned deploy entrypoint — `makerkit deploy` over a declarative `makerkit.config.ts` (decision 9)
+The standard deploy path: the user writes no stack file; the CLI reads `{ app, target, name, bundle(s) }` and calls `lower()` internally. `lower()`/`lowering()` stay as the mechanism + mixed-stack escape hatch. Documented as an extension point; examples use an interim `alchemy.run.ts` until it lands.
+### [ ] Environment-edge **propagation** (provenance-based) (decision 10 / Finding 2)
+The edge's ordering job is proven (fresh-deploy race dead); propagating a wire whose value *changes* after deploy is not yet wired — the env-var resource exposes only `{id,key}`, so a changed value doesn't diff the consumer. Fix is provenance-based (consumer depends on the **source node's** version/identity — never the value or a hash of it). Narrow in practice (promoted endpoints are stable); docs are scoped to ordering only.
+### [ ] Platform-sourced **secrets** wired to DI (decision 10)
+MakerKit *wires* a secret from the platform's secret store (user-set, or via a third-party manager like **Doppler**) into the consumer's DI — it never sources or persists it. R4 has no secrets (all wires); this is the mechanism for when an app needs one.
+### [ ] Provisioned credentials → transient platform secret (decision 10 hardening)
+A MakerKit-provisioned credential (the DB URL) should be written to the platform secret store transiently at provisioning and wired by reference, so its value never lands in (unencrypted, local) Alchemy state — where it does today.
+### [ ] Deterministic Next-standalone artifact / idempotent redeploy
+The storefront artifact bundles the standalone `node_modules` (self-contained fix); that copy is not yet byte-deterministic, so a Next-hex redeploy may re-version even when unchanged. The single-service (tsdown) artifact is deterministic; the Next case needs a stable copy (fixed mtimes/ordering) for a true no-op redeploy.
 ### [ ] Typed HTTP interface, enforced at Load
 ### [ ] Hex wiring (`hex`, `provision`, ownership, forwarding)
 ### [ ] Replace a dependency by interface (DIP swap)
 ### [ ] Data Contract for a data dependency (migrations open)
 ### [ ] Hex composition / app root (multi-hex deploy)
-### [ ] Framework-hosted DI (`use()` accessor; removes Next-internal env reads)
+### [x] Framework-hosted DI — **closed by R5**: `service.load()` is the one typed pull mechanism for both a Hono entry and a Next page; the Next-internal `process.env` read is gone. No separate `use()` accessor needed.
 ### [ ] Local emulation / test (Load + Hydrate with fakes)
 ### [ ] Streams (async connection style)
+### [ ] Prisma-hosted Alchemy state store (platform target)
+
+Implements Alchemy's `StateService` on the platform side: workspace-scoped,
+backed by Prisma Postgres, encrypted, authorized by workspace RBAC — the
+design already recorded in `docs/design/03-domain-model/layering.md` (Step 1
+of the provisioning-state spectrum). **Why it moved up the list:** CI
+ownership of the standing demo exposed the gap concretely — Alchemy state is
+local files, so any deployer without the live state creates duplicates and
+orphans the running system; the CI setup's committed-state-branch mechanism
+is the stopgap that deletes wholesale when this lands. Also unlocks: multiple
+operators/machines deploying the same stack, and the platform answering
+"what's provisioned in this project" (the inspectable-topology goal's
+platform half). Not a MakerKit-core capability — a target/platform
+deliverable (prisma-cloud pack + Management API surface).
 
 ## Parked / cross-cutting
 
@@ -134,6 +194,29 @@ decided at slice spec time.
 - **Client-factory typing** — tie the app factory's return type to the declared
   `postgres<C>()` phantom so a mismatch fails at compile (extension point in
   `core-model.md`).
+- **Filed platform gotchas (upstream, tracked in Linear "Compute Gotchas"):**
+  [PRO-212](https://linear.app/prisma-company/issue/PRO-212) (Connection response
+  buries the DSN under `endpoints.*`; `url` is a self-link),
+  [PRO-213](https://linear.app/prisma-company/issue/PRO-213) (Compute's bun runtime
+  auto-install masks incomplete artifacts + cross-platform native binaries as
+  ENOSPC), and the still-biting [FT-5219](https://linear.app/prisma-company/issue/FT-5219)
+  (Bun.SQL idle-connection close on scale-to-zero — auth 503s on idle, recovers on
+  wake). All have MakerKit-side workarounds in place; the asks are platform fixes.
+- **e2e-deploy CI reconciliation** — the workflow reads makerkit-hello's stack
+  `outputs.url`; confirm the R4 single-service `lower()` still surfaces it (or
+  update the example/CI). Validated by deploying makerkit-hello (also the
+  idempotence check).
+
+## R5 review follow-ups (Opus review of `e65bbfb` — verdict: ship; these are latent/pre-existing, none block)
+
+- **Config-key separator ambiguity** — `configKey` joins `address ▸ owner ▸ name` with `_` and uppercases, so `db_url` (a service param) and `db`.`url` (an input's param) both yield `AUTH_DB_URL`. Not triggered today (only param is `port`; inputs are `db`/`auth`). Fix: forbid `_` in param/input names at construction, or a collision-proof delimiter.
+- **`port` param ↔ listen port decoupling** — `Deployment` hardcodes `port: 3000`; `computeParams.port` defaults `3000`; `run()` stashes the param into `PORT` which the app entry binds. They agree only because all three are `3000` — set the param to anything else and the app binds a port the platform doesn't route to, silently unreachable. Pre-existing from R4, more visible now that `server.ts` reads `port` from `load()`. Fix: thread the resolved `port` into the `Deployment`.
+- **Graph is not topologically sorted** (pre-existing, R4) — `graph.ts`'s hex load preserves provision order and only validates acyclicity; a valid DAG authored consumer-before-producer would feed `undefined` into the consumer's `buildConfig`, contradicting the doc's "topo-ordered (deps first)". Not exercised (the example provisions `auth` first). Fix: real topological sort at Load, or correct the doc's claim.
+
+## PR-review follow-ups (operator review of PR #10)
+
+- **Dev-mode e2e for storefront-auth** (operator ask) — the primitives are runnable in dev today (`load()` reads the address-free `DB_URL`/`PORT` straight from the local env; `run()` is only for translating production's address-prefixed keys — verified by booting both examples). Needs a CI test that boots the services in dev against a local Postgres and asserts the round trip. Approach: a script that starts auth's dev server against a test Postgres, reads its URL, sets `STOREFRONT_AUTH_URL`, starts storefront's dev server, curls the page. Needs a Postgres service in the workflow. Operator noted this becomes a core framework concern later.
+- **`bundle-next.ts` belongs in `@makerkit/nextjs/assemble`** (operator ask #11) — `next.config.ts` already owns what it can (standalone output, tracing excludes); the residue (copy `.next/static`+`public`, bundle the wrapper, `bunfig`) can't move to `next.config` (Next omits those by design) but should not be an app-owned script. It moves into the adapter's assembler — folded into the `makerkit deploy` CLI brief.
 
 ## Close-out (required)
 

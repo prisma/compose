@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bun run src/main.ts",
-    "build": "bun run scripts/build.ts",
+    "dev": "bun run scripts/dev.ts",
+    "build": "tsdown",
     "typecheck": "tsc --noEmit",
     "deploy": "pnpm build && ( set -a; . ../../.env; set +a; bunx --bun alchemy deploy --yes )",
     "destroy": "( set -a; . ../../.env; set +a; bunx --bun alchemy destroy --yes )"
@@ -13,6 +13,7 @@
   "dependencies": {
     "@effect/platform-bun": "4.0.0-beta.92",
     "@makerkit/core": "workspace:*",
+    "@makerkit/node": "workspace:*",
     "@makerkit/prisma-cloud": "workspace:*",
     "alchemy": "2.0.0-beta.59"
   },

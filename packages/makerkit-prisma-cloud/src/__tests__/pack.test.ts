@@ -1,21 +1,23 @@
 import { describe, expect, test } from 'bun:test';
-import type { ConfigAdapter, ConfigRequest } from '@makerkit/core';
-import { configOf, isNode } from '@makerkit/core';
-import { ConfigError, runHost } from '@makerkit/core/runtime';
+import { configOf, hydrateSync, isNode } from '@makerkit/core';
 import { compute, postgres } from '../index.ts';
+import { configKey, deserialize } from '../serializer.ts';
 
-/** In-memory adapter keyed by param path — reads no environment. */
-const memoryAdapter = (values: Record<string, string>): ConfigAdapter => ({
-  async get(requests) {
-    const out: Record<string, string> = {};
-    for (const r of requests) {
-      const path = r.owner === 'service' ? r.name : `${r.owner.input}.${r.name}`;
-      const value = values[path];
-      if (value !== undefined) out[r.id] = value;
+const build = { kind: 'node', entry: 'server.js' };
+
+/** Sets env vars for the duration of `fn`, restoring whatever was there before. */
+async function withEnv<T>(values: Record<string, string>, fn: () => Promise<T> | T): Promise<T> {
+  const previous = new Map(Object.keys(values).map((k) => [k, process.env[k]]));
+  for (const [k, v] of Object.entries(values)) process.env[k] = v;
+  try {
+    return await fn();
+  } finally {
+    for (const [k, v] of previous) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
     }
-    return out;
-  },
-});
+  }
+}
 
 describe('postgres({ client })', () => {
   test('returns a branded resource node declaring { url: string, secret }', () => {
@@ -44,84 +46,207 @@ describe('postgres({ client })', () => {
 });
 
 describe('compute()', () => {
-  test('returns a branded service node declaring { port: number, default 3000 } with the platform adapter', () => {
-    const node = compute({}, () => null);
+  test('returns a branded, runnable service node declaring { port: number, default 3000 }', () => {
+    const node = compute({ deps: {}, build });
 
     expect(isNode(node)).toBe(true);
     expect(node.kind).toBe('service');
     expect(node.type).toBe('prisma-cloud/compute');
     expect(node.params).toEqual({ port: { type: 'number', default: 3000 } });
-    expect(typeof node.config.get).toBe('function');
-    expect(typeof node.config.describe).toBe('function');
+    expect(typeof node.run).toBe('function');
+    expect(typeof node.load).toBe('function');
   });
 
-  test('is inert until run', () => {
+  test('is inert until run or load — the client factory does not run at construction', () => {
     let calls = 0;
-    const db = postgres({ client: ({ url }) => ({ url }) });
-    const node = compute({ db }, () => {
-      calls += 1;
-      return null;
+    const db = postgres({
+      client: ({ url }) => {
+        calls += 1;
+        return { url };
+      },
     });
+    const node = compute({ deps: { db }, build });
 
     expect(node.inputs.db).toBe(db);
     expect(calls).toBe(0);
   });
-});
 
-describe('the platform adapter (private mapping)', () => {
-  const requestFor = (owner: ConfigRequest['owner'], name: string): ConfigRequest => ({
-    id: `test:${name}`,
-    owner,
-    name,
-    param: { type: 'string' },
-  });
+  test('DI without any environment: hydrateSync against a hand-built Config runs the real connection factories', () => {
+    const node = compute({ deps: { db: postgres({ client: ({ url }) => ({ url }) }) }, build });
 
-  test('maps url ↔ DATABASE_URL and other params to their uppercased names', async () => {
-    const node = compute({}, () => null);
-    const previousUrl = process.env['DATABASE_URL'];
-    const previousPort = process.env['PORT'];
-    process.env['DATABASE_URL'] = 'postgres://from-env';
-    process.env['PORT'] = '7777';
-    try {
-      const values = await node.config.get([
-        requestFor({ input: 'db' }, 'url'),
-        requestFor('service', 'port'),
-      ]);
-      expect(values).toEqual({ 'test:url': 'postgres://from-env', 'test:port': '7777' });
-    } finally {
-      if (previousUrl === undefined) delete process.env['DATABASE_URL'];
-      else process.env['DATABASE_URL'] = previousUrl;
-      if (previousPort === undefined) delete process.env['PORT'];
-      else process.env['PORT'] = previousPort;
-    }
-  });
-
-  test("describe names the physical location without exposing it to core's manifest", async () => {
-    const node = compute({}, () => null);
-
-    expect(await node.config.describe?.(requestFor({ input: 'db' }, 'url'))).toEqual({
-      location: 'env:DATABASE_URL',
+    const deps = hydrateSync(node, {
+      service: { port: 0 },
+      inputs: { db: { url: 'postgres://fake' } },
     });
-    expect(await node.config.describe?.(requestFor('service', 'port'))).toEqual({
-      location: 'env:PORT',
-    });
+
+    expect(deps).toEqual({ db: { url: 'postgres://fake' } });
   });
 });
 
-describe('importing a service module', () => {
-  test('runs nothing (invariant 3)', async () => {
-    const fixture = await import('./fixtures/side-effect-service.ts');
+describe("the config serializer (shared by run() and /target's serialize)", () => {
+  test("configKey: lone-service root (address '') is unprefixed — owner ▸ name", () => {
+    const app = compute({ deps: { db: postgres({ client: ({ url }) => ({ url }) }) }, build });
+    const [dbUrl, port] = configOf(app);
+    if (dbUrl === undefined || port === undefined) throw new Error('expected config declarations');
 
-    expect(fixture.handlerCallCount).toBe(0);
+    expect(configKey('', dbUrl)).toBe('DB_URL');
+    expect(configKey('', port)).toBe('PORT');
+  });
 
-    fixture.default.run({ db: { url: 'x' } }, { port: 3000 });
-    expect(fixture.handlerCallCount).toBe(1);
+  test('configKey: a hex-addressed service prefixes with its address segment', () => {
+    const app = compute({ deps: { db: postgres({ client: ({ url }) => ({ url }) }) }, build });
+    const [dbUrl] = configOf(app);
+    if (dbUrl === undefined) throw new Error('expected a config declaration');
+
+    expect(configKey('auth', dbUrl)).toBe('AUTH_DB_URL');
+  });
+
+  test('configKey: a connection-end input keys the same way as a resource input', () => {
+    const app = compute({ deps: {}, build });
+    // A synthetic declaration shaped like configOf would produce for a
+    // connection-end input named "auth".
+    const decl = {
+      owner: { input: 'auth' },
+      name: 'url',
+      type: 'string' as const,
+      secret: false,
+      optional: false,
+    };
+
+    expect(configKey('storefront', decl)).toBe('STOREFRONT_AUTH_URL');
+    void app;
+  });
+
+  test('deserialize round-trips what a service declares, reading process.env by configKey', async () => {
+    const app = compute({ deps: { db: postgres({ client: ({ url }) => ({ url }) }) }, build });
+    const shape = configOf(app);
+
+    await withEnv({ DB_URL: 'postgres://x', PORT: '4001' }, () => {
+      const config = deserialize(shape, '');
+      expect(config).toEqual({ service: { port: 4001 }, inputs: { db: { url: 'postgres://x' } } });
+    });
+  });
+
+  test('deserialize: an unset param with a default resolves to the default', async () => {
+    const app = compute({ deps: {}, build });
+    const shape = configOf(app);
+
+    await withEnv({}, () => {
+      expect(deserialize(shape, '')).toEqual({ service: { port: 3000 }, inputs: {} });
+    });
+  });
+
+  test('deserialize: a missing required param fails loudly, naming the param', async () => {
+    const app = compute({ deps: { db: postgres({ client: ({ url }) => ({ url }) }) }, build });
+    const shape = configOf(app);
+
+    await withEnv({}, () => {
+      expect(() => deserialize(shape, '')).toThrow(/db\.url|"url"/);
+    });
+  });
+
+  test('deserialize: an invalid number fails loudly even with a default present', async () => {
+    const app = compute({ deps: {}, build });
+    const shape = configOf(app);
+
+    await withEnv({ PORT: 'not-a-number' }, () => {
+      expect(() => deserialize(shape, '')).toThrow(/port/);
+    });
+  });
+
+  test('round-trip: a numeric leaf serializes to a string and deserializes back to the identical number', async () => {
+    // The gap that hid the serialize bug: /target's serialize encodes typed→
+    // string (3000 → "3000"), and this same module's deserialize must read it
+    // back as a number (3000). Emulate serialize's encoding for the `port`
+    // param, keyed by the SHARED configKey, then read it back through
+    // deserialize and assert the number is identical.
+    const app = compute({ deps: {}, build });
+    const shape = configOf(app);
+    const portDecl = shape.find((d) => d.name === 'port');
+    if (portDecl === undefined) throw new Error('expected a port declaration');
+
+    const original = 3000;
+    // serialize (in target.ts): a concrete number stringifies.
+    const encoded = typeof original === 'number' ? String(original) : original;
+    expect(encoded).toBe('3000');
+
+    await withEnv({ [configKey('auth', portDecl)]: encoded }, () => {
+      const config = deserialize(shape, 'auth');
+      expect(config.service['port']).toBe(original);
+      expect(typeof config.service['port']).toBe('number');
+    });
+  });
+});
+
+describe('compute().run(address, boot) → load() — the round trip', () => {
+  test('deploy-side serialize writes address-keyed env; run() re-keys it address-free; load() hydrates it', async () => {
+    const app = compute({ deps: { db: postgres({ client: ({ url }) => ({ url }) }) }, build });
+
+    let loaded: unknown;
+    await withEnv({ AUTH_DB_URL: 'postgres://x', AUTH_PORT: '4001', DB_URL: '', PORT: '' }, () =>
+      app.run('auth', async () => {
+        loaded = app.load();
+      }),
+    );
+
+    expect(loaded).toEqual({ db: { url: 'postgres://x' }, port: 4001 });
+  });
+
+  test("a lone-service deploy (address '') reads and re-stashes the same unprefixed keys", async () => {
+    const app = compute({ deps: { db: postgres({ client: ({ url }) => ({ url }) }) }, build });
+
+    let loaded: unknown;
+    await withEnv({ DB_URL: 'postgres://y', PORT: '' }, () =>
+      app.run('', async () => {
+        loaded = app.load();
+      }),
+    );
+
+    expect(loaded).toEqual({ db: { url: 'postgres://y' }, port: 3000 });
+  });
+
+  test('run() calls boot() exactly once, even with nothing to hydrate', async () => {
+    let bootCalls = 0;
+    const app = compute({ deps: {}, build });
+
+    await app.run('', async () => {
+      bootCalls += 1;
+    });
+
+    expect(bootCalls).toBe(1);
+  });
+});
+
+describe('compute().load()', () => {
+  test('returns hydrated deps merged with resolved params, memoized per process (hydrate runs once)', async () => {
+    let hydrateCalls = 0;
+    const app = compute({
+      deps: {
+        db: postgres({
+          client: ({ url }) => {
+            hydrateCalls += 1;
+            return { url };
+          },
+        }),
+      },
+      build,
+    });
+
+    await withEnv({ DB_URL: 'postgres://z', PORT: '' }, () => {
+      const first = app.load();
+      const second = app.load();
+
+      expect(first).toBe(second);
+      expect(first).toEqual({ db: { url: 'postgres://z' }, port: 3000 });
+    });
+
+    expect(hydrateCalls).toBe(1);
   });
 });
 
 describe('the config pipeline over pack nodes', () => {
   test('configOf is semantic — owner/name/type/secret, no platform keys', () => {
-    const app = compute({ db: postgres({ client: ({ url }) => ({ url }) }) }, () => null);
+    const app = compute({ deps: { db: postgres({ client: ({ url }) => ({ url }) }) }, build });
 
     expect(configOf(app)).toEqual([
       { owner: { input: 'db' }, name: 'url', type: 'string', secret: true, optional: false },
@@ -137,64 +262,32 @@ describe('the config pipeline over pack nodes', () => {
     expect(JSON.stringify(configOf(app))).not.toContain('DATABASE_URL');
   });
 
-  test('end to end with a swapped in-memory adapter', async () => {
-    let received: unknown;
-    let ctx: unknown;
-    const app = compute({ db: postgres({ client: ({ url }) => ({ url }) }) }, (deps, c) => {
-      received = deps;
-      ctx = c;
-      return 'served';
-    });
+  test('a dep-less service declares only its own params', () => {
+    const app = compute({ deps: {}, build });
 
-    const result = await runHost(app, {
-      config: memoryAdapter({ 'db.url': 'postgres://x', port: '4001' }),
-    });
-
-    expect(result).toBe('served');
-    expect(received).toEqual({ db: { url: 'postgres://x' } });
-    expect(ctx).toEqual({ port: 4001 });
-  });
-
-  test('per-param override boots with an empty adapter', async () => {
-    let received: unknown;
-    const app = compute({ db: postgres({ client: ({ url }) => ({ url }) }) }, (deps) => {
-      received = deps;
-      return null;
-    });
-
-    await runHost(app, { config: memoryAdapter({}), overrides: { 'db.url': 'postgres://test' } });
-
-    expect(received).toEqual({ db: { url: 'postgres://test' } });
-  });
-
-  test('a missing url is a ConfigError before the client factory runs', async () => {
-    let factoryCalls = 0;
-    const app = compute(
+    expect(configOf(app)).toEqual([
       {
-        db: postgres({
-          client: ({ url }) => {
-            factoryCalls += 1;
-            return { url };
-          },
-        }),
+        owner: 'service',
+        name: 'port',
+        type: 'number',
+        secret: false,
+        optional: false,
+        default: 3000,
       },
-      () => null,
-    );
-
-    expect(runHost(app, { config: memoryAdapter({}) })).rejects.toThrow(ConfigError);
-    expect(runHost(app, { config: memoryAdapter({}) })).rejects.toThrow(/db\.url/);
-    await runHost(app, { config: memoryAdapter({}) }).catch(() => {});
-    expect(factoryCalls).toBe(0);
+    ]);
   });
+});
 
-  test('a dep-less service boots with zero declared config', async () => {
-    let ctx: unknown;
-    const app = compute({}, (_deps, c) => {
-      ctx = c;
-      return 'booted';
+describe('importing a service module', () => {
+  test('runs nothing (invariant 3): the client factory only runs when load() hydrates it', async () => {
+    const fixture = await import('./fixtures/side-effect-service.ts');
+
+    expect(fixture.clientCalls).toBe(0);
+
+    await withEnv({ DB_URL: 'postgres://fixture', PORT: '' }, () => {
+      fixture.default.load();
     });
 
-    expect(await runHost(app, { config: memoryAdapter({}) })).toBe('booted');
-    expect(ctx).toEqual({ port: 3000 });
+    expect(fixture.clientCalls).toBe(1);
   });
 });

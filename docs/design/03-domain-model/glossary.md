@@ -78,17 +78,33 @@ you call but don't provision is **Configuration**, not a Resource.
 
 See `layering.md` → Resources: first-class vs BYO.
 
-### Configuration
+### Configuration — config and secrets
 
-Per-environment values an element needs but that MakerKit does **not** provision —
-API keys, connection URLs, secrets for an unmanaged external service. Configuration
-is **not a node**: it parameterises Services and Resources, is injected at the
-boundary (no-globals), and is supplied afresh per environment. This is where a
-genuinely unmanaged external dependency lives — you hold a key to a shared account
-nobody provisions. Lowers to Alchemy's `effect/Config` (secrets via
-`Config.redacted`), bound to the running environment. To pull such a dependency
-*into* the topology as a reproducible node, either provision it (making it a
-Resource) or wrap it in a Service that exposes your domain interface.
+Per-environment values a node needs at runtime but that are **not themselves
+nodes**: injected at the boundary (no-globals — user code never reads the
+environment; MakerKit injects), supplied per environment. Two kinds, distinguished
+by sensitivity (the `secret` flag on a config param):
+
+**Config** (non-secret) — endpoints, ports, feature flags, plain settings. Most of
+what MakerKit writes is **graph-materialized**: a connection or resource address it
+computes from the topology and writes to the platform. The "env vars" a service
+boots with are mostly these **wires**, not user input; a wire's change is a graph
+event (a node rewired or re-provisioned), detected by the source's provenance,
+never by inspecting the value.
+
+**Secret** — a sensitive credential (API key, token, password, a connection string
+carrying credentials). A secret is **always sourced from the platform's secret
+store**; MakerKit never computes it into the graph and never persists its value in
+deployment state. The platform secret may come from the user directly or from a
+third-party manager (e.g. **Doppler**) integrated at the platform — MakerKit doesn't
+care which. MakerKit's only job is the last hop: **wire the platform secret to the
+consumer's DI**. A credential MakerKit itself provisions (a database URL) is written
+to the platform secret store transiently during provisioning and thereafter treated
+as a platform secret — wired by reference, its value never persisted.
+
+To pull an unmanaged external dependency *into* the topology as a reproducible node,
+provision it (making it a Resource) or wrap it in a Service that exposes your domain
+interface.
 
 ### Topology
 
@@ -271,20 +287,20 @@ Resource** (`provision(postgres())`) or instantiates and wires an owned node
 Service only *requires*. Forwarding is just passing a Hex's Inputs down and
 returning owned nodes' Outputs up.
 
-### runHost — the boot entrypoint
+### run — the boot loop
 
-The boot [entrypoint](#entrypoint) the platform runs, over the code the app bundled
-(MakerKit does not bundle). **Core owns config management**: it enumerates the
-params the service and its Inputs declare (semantic names + type tags — no
-platform keys in the graph), requests raw values from the pack's **ConfigAdapter**
-(whose semantic↔physical mapping, e.g. `url` ↔ `DATABASE_URL`, is its private
-business), validates them against the declared types before hydrating, applies
-overrides (the interception point for tests and introspection), then lets each
-connection hydrate its client from the typed values — with the app-supplied driver
-factory. A framework server (Next.js) is
-wired in as an HTTP Output, its deps reached via a DI accessor (`use(…)`), never the
-environment. Env vars carry config into the VM but **terminate at hydration** — user
-code is dependency-injection only.
+The boot method the platform runs, carried on the pack's runnable service node
+(`main.run(address)`, called by the deploy-printed bootstrap). **Core owns
+structure, the pack owns encoding.** Core enumerates the config shape (semantic
+names + type tags — no platform keys in the graph) via `configOf`; the pack's
+`run` **deserializes** the platform environment into a typed `Config` by its own
+serializer (keyed from the address), the single sanctioned environment read; then
+core's `hydrate` turns each Input's typed values into a client — with the
+app-supplied driver factory — and calls the handler. Config validation is the
+pack reversing its own serialization (present, right type), failing loudly. A
+framework server (Next.js) is wired in as an HTTP Output, its deps reached via a
+DI accessor (`use(…)`), never the environment. Env vars carry config into the VM
+but **terminate at hydration** — user code is dependency-injection only.
 
 ### Load / Hydrate
 
@@ -310,10 +326,10 @@ is in `layering.md`; this is the term-by-term catalogue.
 ### Alchemy — definition language
 
 - **Stack** — the root of an Alchemy program; a set of Resources deployed as a
-  unit. `Alchemy.Stack(name, { providers, state }, Effect.gen(…))`. Our whole
-  example emits one Stack (`examples/storefront-auth/alchemy.run.ts`).
-  `→` **Topology / implicit root Hex** (today hand-written; MakerKit will
-  generate it).
+  unit. `Alchemy.Stack(name, { providers, state }, Effect.gen(…))`. `lower()`
+  emits one Stack for the whole app; `makerkit deploy` calls it from the app's
+  `makerkit.config.ts` (no hand-written stack file — a named extension point).
+  `→` **Topology / implicit root Hex**.
 - **Resource\<Type, Props, Attributes>** — a managed entity with a string type
   tag, desired-input **Props**, and cloud-returned **Attributes**. Declared, then
   `yield*`-ed. Ours: `Prisma.Project`, `Database`, `Connection`,

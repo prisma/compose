@@ -20,7 +20,7 @@ export default Alchemy.Stack(
   'PrismaSmoke',
   { providers: Prisma.providers(), state: localState() },
   Effect.gen(function* () {
-    const workspaceId = process.env.PRISMA_WORKSPACE_ID;
+    const workspaceId = process.env['PRISMA_WORKSPACE_ID'];
     if (!workspaceId) {
       return yield* Effect.die(new Error('PRISMA_WORKSPACE_ID is required'));
     }

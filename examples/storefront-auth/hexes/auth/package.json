@@ -4,12 +4,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bun run src/main.ts",
-    "build": "bun run scripts/build.ts",
+    "dev": "bun run scripts/dev.ts",
+    "build": "tsdown",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@makerkit/core": "workspace:*",
+    "@makerkit/node": "workspace:*",
     "@makerkit/prisma-cloud": "workspace:*",
     "hono": "^4.11.4"
   },

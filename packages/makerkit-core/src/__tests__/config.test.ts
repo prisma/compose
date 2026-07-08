@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { configOf } from '../config.ts';
-import { resource, service } from '../node.ts';
-import { conn, memoryAdapter } from './helpers.ts';
+import { connectionEnd, resource, service } from '../node.ts';
+import { conn } from './helpers.ts';
 
-const adapter = memoryAdapter({});
+const build = { kind: 'node', entry: 'server.js' };
 
 describe('configOf', () => {
   test('enumerates input params then service params — semantic, no platform keys', () => {
@@ -19,8 +19,7 @@ describe('configOf', () => {
         }),
       },
       params: { port: { type: 'number', default: 3000 } },
-      config: adapter,
-      handler: () => null,
+      build,
     });
 
     expect(configOf(root)).toEqual([
@@ -47,8 +46,7 @@ describe('configOf', () => {
         }),
       },
       params: { port: { type: 'number', default: 3000 } },
-      config: adapter,
-      handler: () => null,
+      build,
     });
 
     const owners = configOf(root).map((e) => ({ owner: e.owner, name: e.name }));
@@ -63,8 +61,7 @@ describe('configOf', () => {
       type: 'fake/app',
       inputs: {},
       params: { port: { type: 'number', default: 3000 } },
-      config: adapter,
-      handler: () => null,
+      build,
     });
 
     expect(configOf(root)).toEqual([
@@ -79,8 +76,7 @@ describe('configOf', () => {
     ]);
   });
 
-  test('executes nothing — no handler, no hydrate, no adapter', () => {
-    let handlerCalls = 0;
+  test('executes nothing — configOf never calls a connection hydrate', () => {
     let hydrateCalls = 0;
     const root = service({
       type: 'fake/app',
@@ -94,17 +90,44 @@ describe('configOf', () => {
         }),
       },
       params: {},
-      config: adapter,
-      handler: () => {
-        handlerCalls += 1;
-        return null;
-      },
+      build,
     });
 
     configOf(root);
 
-    expect(handlerCalls).toBe(0);
     expect(hydrateCalls).toBe(0);
-    expect(adapter.requested.length).toBe(0);
+  });
+});
+
+describe('configOf over connection-end inputs', () => {
+  test('connection-end params appear with owner { input } exactly like resource params', () => {
+    const root = service({
+      type: 'fake/app',
+      inputs: {
+        db: resource({
+          type: 'fake/db',
+          connection: conn({ url: { type: 'string', secret: true } }, () => ({})),
+        }),
+        auth: connectionEnd({
+          type: 'fake/http',
+          connection: conn({ url: { type: 'string' } }, () => ({})),
+        }),
+      },
+      params: { port: { type: 'number', default: 3000 } },
+      build,
+    });
+
+    expect(configOf(root)).toEqual([
+      { owner: { input: 'db' }, name: 'url', type: 'string', secret: true, optional: false },
+      { owner: { input: 'auth' }, name: 'url', type: 'string', secret: false, optional: false },
+      {
+        owner: 'service',
+        name: 'port',
+        type: 'number',
+        secret: false,
+        optional: false,
+        default: 3000,
+      },
+    ]);
   });
 });

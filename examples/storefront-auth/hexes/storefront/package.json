@@ -7,10 +7,11 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "build:compute": "next build && bun run ../../scripts/bundle-next.ts . dist/storefront.tar.gz"
+    "build:compute": "next build && bun run ../../scripts/bundle-next.ts ."
   },
   "dependencies": {
     "@makerkit/core": "workspace:*",
+    "@makerkit/nextjs": "workspace:*",
     "@makerkit/prisma-cloud": "workspace:*",
     "next": "^15.5.4",
     "react": "19.2.0",
