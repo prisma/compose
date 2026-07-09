@@ -16,11 +16,10 @@ export class StateLockContentionError extends Data.TaggedError('StateLockContent
 
 export interface StateLock {
   /**
-   * Re-verifies the lease is still held by round-tripping the reserved
-   * lock connection. Every state operation runs this first: if the
-   * connection has dropped (e.g. an idle-closed direct connection —
-   * FT-5219 class), the lease is gone and this fails loudly instead of
-   * letting the operation run unlocked.
+   * Re-verifies the lease is still held. Every state operation runs this
+   * first: if the lease is gone (e.g. an idle-closed direct connection —
+   * FT-5219 class), this fails loudly instead of letting the operation run
+   * unlocked.
    */
   readonly checkLive: Effect.Effect<void, StateStoreError, never>;
   /** Unlocks and releases the reserved connection. Safe to call once the run ends. */
@@ -55,26 +54,61 @@ export const acquireStateLock = (
 
     const acquired = yield* Effect.tryPromise({
       try: async () => {
-        const rows = await reserved<{ acquired: boolean }[]>`
-          select pg_try_advisory_lock(hashtextextended(${key}, 0)) as acquired
+        const rows = await reserved<{ acquired: boolean; pid: number }[]>`
+          select
+            pg_try_advisory_lock(hashtextextended(${key}, 0)) as acquired,
+            pg_backend_pid() as pid
         `;
-        return rows[0]?.acquired ?? false;
+        return rows[0];
       },
       catch: toStateStoreError,
     });
 
-    if (!acquired) {
+    if (acquired?.acquired !== true) {
       reserved.release();
       return yield* Effect.fail(new StateLockContentionError({ stack, stage }));
     }
 
+    const lockPid = acquired.pid;
+
+    // Deliberately does NOT run a query against the reserved connection
+    // itself. Once its backend session has been killed server-side (an
+    // idle-connection reaper, FT-5219 class), postgres.js does not
+    // transparently reconnect a reserved connection, but issuing a further
+    // query against it doesn't cleanly reject either — it throws deep
+    // inside postgres.js's deferred write path, outside the query's promise
+    // chain, which can crash the whole process instead of failing this
+    // check. Asking a *different* pool connection whether the backend pid
+    // captured at acquire time still holds this advisory lock in
+    // `pg_locks` gets the same answer (a dead or reused backend can't hold
+    // the lock) without ever touching the connection that might be dead.
     const checkLive: Effect.Effect<void, StateStoreError, never> = Effect.tryPromise({
-      try: () => reserved`select 1`,
-      catch: () =>
-        new StateStoreError({
-          message: `the state lock connection for ${stack}/${stage} was lost mid-run; refusing to continue unlocked`,
-        }),
-    }).pipe(Effect.asVoid);
+      try: async () => {
+        const rows = await sql<{ live: boolean }[]>`
+          select exists (
+            select 1 from pg_locks
+            where locktype = 'advisory'
+              and pid = ${lockPid}
+              and objsubid = 1
+              and granted
+              and ((classid::bigint << 32) | (objid::bigint & 4294967295))
+                = hashtextextended(${key}, 0)
+          ) as live
+        `;
+        return rows[0]?.live ?? false;
+      },
+      catch: toStateStoreError,
+    }).pipe(
+      Effect.flatMap((live) =>
+        live
+          ? Effect.void
+          : Effect.fail(
+              new StateStoreError({
+                message: `the state lock for ${stack}/${stage} was lost mid-run; refusing to continue unlocked`,
+              }),
+            ),
+      ),
+    );
 
     const release = async (): Promise<void> => {
       try {
