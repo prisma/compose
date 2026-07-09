@@ -130,7 +130,7 @@ function loadService(root: ServiceNode, rootId: NodeId): Graph {
     if (isNode(value) && value.kind === 'resource-end') {
       throw new LoadError(
         `Service "${rootId}" has an unwired resource input "${input}" — a resource is provisioned ` +
-          `by a composing hex, never implicitly; deploy a hex that provisions the resource and ` +
+          'by a composing hex, never implicitly; deploy a hex that provisions the resource and ' +
           `wires it to "${rootId}".`,
       );
     }
@@ -369,7 +369,9 @@ function loadHex(root: HexNode, opts?: { id?: NodeId }): Graph {
           typeof ref.satisfies !== 'function' ||
           !ref.satisfies(required)
         ) {
-          throw new LoadError(`Wiring for "${id}.${input}" does not satisfy its required contract.`);
+          throw new LoadError(
+            `Wiring for "${id}.${input}" does not satisfy its required contract.`,
+          );
         }
       }
 
