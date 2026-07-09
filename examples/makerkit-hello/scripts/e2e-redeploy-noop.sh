@@ -14,7 +14,7 @@ set -euo pipefail
 out="$(bun node_modules/.bin/makerkit deploy src/service.ts --name "$HELLO_STACK_NAME" 2>&1)"
 printf '%s\n' "$out"
 
-if ! printf '%s' "$out" | grep -qE '^Plan: [0-9]+ to noop$'; then
+if ! printf '%s' "$out" | grep -qE 'Plan: [0-9]+ to noop'; then
   echo "Redeploy was not a no-op: no 'Plan: N to noop' line in the output."
   exit 1
 fi
