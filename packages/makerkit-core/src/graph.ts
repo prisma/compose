@@ -170,6 +170,17 @@ function topoSort(nodes: readonly GraphNode[], edges: readonly Edge[]): GraphNod
     }
   }
 
+  // Kahn's leaves cyclic nodes unprocessed rather than looping. A cycle can't
+  // reach here (assertConnectionDag runs first; input edges never cycle), but
+  // if that guard were ever bypassed, dropping nodes silently would be far
+  // worse than failing — so assert completeness.
+  if (order.length !== nodes.length) {
+    throw new LoadError(
+      `topological sort processed ${order.length} of ${nodes.length} nodes — ` +
+        'the graph contains a cycle that slipped past the DAG validation.',
+    );
+  }
+
   return order.map((id) => byId.get(id)).filter((n): n is GraphNode => n !== undefined);
 }
 
@@ -213,6 +224,17 @@ function loadHex(root: HexNode, opts?: { id?: NodeId }): Graph {
     provision(id: string, service: ServiceNode, wiring?: Record<string, unknown>) {
       if (typeof id !== 'string' || id.length === 0) {
         throw new LoadError(`provision() requires a non-empty id (hex "${root.name}").`);
+      }
+      // The id becomes the service's address segment: configKey joins it with
+      // "_" (id "auth_db" + param "url" would collide with id "auth" + input
+      // "db" + param "url" — both AUTH_DB_URL), and node ids join path
+      // segments with "." — so neither may appear inside an id.
+      if (id.includes('_') || id.includes('.')) {
+        throw new LoadError(
+          `provision() id "${id}" (hex "${root.name}") may not contain "_" or "." — ` +
+            '"_" is the config-key separator and "." the node-id path separator; either ' +
+            'inside an id collides with the joined form of other names.',
+        );
       }
       if (ids.has(id)) {
         throw new LoadError(`Duplicate provision id "${id}" in hex "${root.name}".`);

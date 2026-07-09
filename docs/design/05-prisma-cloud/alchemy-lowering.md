@@ -117,6 +117,10 @@ How the pieces map:
 - Every `EnvironmentVariable` a Deployment boots with appears in its
   `environment` prop — database URLs and connection URLs alike — so the version
   depends on its config being written first.
+- The Deployment's `port` prop rides the same seam: `serialize` resolves the
+  service's `port` param from the typed Config and surfaces it in its outputs,
+  and `deploy` routes the platform to it — so the routed port and the `PORT`
+  the app binds trace to one value and cannot drift.
 
 The `environment` prop is essential and mirrors PDP's own dataflow — the
 version-create call literally contains the materialized env map, so the
