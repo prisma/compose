@@ -59,9 +59,12 @@ jobs:
           echo "::add-mask::$password"
           echo "ALCHEMY_PASSWORD=$password" >> "$GITHUB_ENV"
 
+      # storefront-auth's own `build` script is a no-op — turbo's ^build
+      # (from the workspace deps in its package.json) builds the two hexes.
+      # `pnpm build` alone wouldn't trigger that, so run it through turbo.
       - name: Build
         working-directory: examples/storefront-auth
-        run: pnpm build
+        run: pnpm turbo run build --filter @makerkit/example-storefront-auth...
 
       - name: Deploy
         # Do not use the package's `deploy` script: it sources ../../.env,
