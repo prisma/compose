@@ -18,18 +18,23 @@ import { pathToFileURL } from 'node:url';
 import { CliError } from './cli-error.ts';
 
 /**
- * Node's require.resolve() throws an Error with .code "MODULE_NOT_FOUND".
- * Bun's throws its own ResolveMessage — same .code, but NOT an Error
- * instance — so this checks the property directly rather than narrowing via
+ * The runtimes disagree on resolution-failure codes. A fully absent pack is
+ * "MODULE_NOT_FOUND" on both. A pack that is present but does not export the
+ * requested subpath is "ERR_PACKAGE_PATH_NOT_EXPORTED" on node but still
+ * "MODULE_NOT_FOUND" on bun. Bun also throws its own ResolveMessage — NOT an
+ * Error instance — so this checks .code directly rather than narrowing via
  * `instanceof Error` first.
  */
-function isModuleNotFound(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    error.code === 'MODULE_NOT_FOUND'
-  );
+const RESOLUTION_FAILURE_CODES = new Set([
+  'MODULE_NOT_FOUND',
+  'ERR_MODULE_NOT_FOUND',
+  'ERR_PACKAGE_PATH_NOT_EXPORTED',
+]);
+
+function resolutionFailureCode(error: unknown): string | undefined {
+  if (typeof error !== 'object' || error === null || !('code' in error)) return undefined;
+  const code = String(error.code);
+  return RESOLUTION_FAILURE_CODES.has(code) ? code : undefined;
 }
 
 /** The specifier `${pack}/${subpath}`, resolved from `entryPkgDir` and imported. */
@@ -45,10 +50,18 @@ export async function importFromEntry(
   try {
     resolved = require.resolve(specifier);
   } catch (error) {
-    if (isModuleNotFound(error)) {
+    const code = resolutionFailureCode(error);
+    if (code === 'ERR_PACKAGE_PATH_NOT_EXPORTED') {
       throw new CliError(
-        `Cannot resolve "${specifier}" from ${entryPkgDir} — the app's package must depend on ` +
-          `"${pack}".`,
+        `"${pack}" is installed but does not export "./${subpath}" ` +
+          `(resolved from ${entryPkgDir}) — the installed version may be too old or not a ` +
+          'MakerKit pack.',
+      );
+    }
+    if (code !== undefined) {
+      throw new CliError(
+        `Cannot resolve "${specifier}" from ${entryPkgDir} — the app's package (the one ` +
+          `containing the entry module) must depend on "${pack}".`,
       );
     }
     throw error;

@@ -97,12 +97,15 @@ describe('importFromEntry() — entry-anchored resolution', () => {
       importFromEntry(entryPkgDir, '@makerkit/does-not-exist', 'target'),
     ).rejects.toThrow(
       new RegExp(
-        `Cannot resolve "@makerkit/does-not-exist/target" from ${entryPkgDir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} — the app's package must depend on "@makerkit/does-not-exist"`,
+        `Cannot resolve "@makerkit/does-not-exist/target" from ${entryPkgDir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} — the app's package \\(the one containing the entry module\\) must depend on "@makerkit/does-not-exist"`,
       ),
     );
   });
 
-  test('a pack present but missing the requested subpath export throws the same way', async () => {
+  // The runtimes report this differently (node: ERR_PACKAGE_PATH_NOT_EXPORTED,
+  // bun: MODULE_NOT_FOUND), so the assertion is runtime-agnostic: a CliError
+  // naming the pack, whichever branch produced it.
+  test('a pack present but missing the requested subpath export throws a CliError naming the pack', async () => {
     const entryPkgDir = makeEntryPkgDir();
     const packDir = path.join(entryPkgDir, 'node_modules', 'fixture-pack');
     fs.mkdirSync(packDir, { recursive: true });
@@ -112,8 +115,9 @@ describe('importFromEntry() — entry-anchored resolution', () => {
     );
     fs.writeFileSync(path.join(packDir, 'index.ts'), 'export {};\n');
 
+    await expect(importFromEntry(entryPkgDir, 'fixture-pack', 'target')).rejects.toThrow(CliError);
     await expect(importFromEntry(entryPkgDir, 'fixture-pack', 'target')).rejects.toThrow(
-      /Cannot resolve "fixture-pack\/target"/,
+      /"?fixture-pack"?/,
     );
   });
 });
