@@ -2,9 +2,9 @@ import { defineConfig } from 'tsdown';
 
 // The app's own build (ADR-0005): only its runnable, src/server.ts, built to
 // dist/server.js. The MakerKit wrapper (bundling src/service.ts to main.js,
-// as an independent module instance) is no longer built here — it moves to
-// `@makerkit/node/assemble`, run by scripts/assemble.ts. @makerkit/* is
-// inlined (node_modules isn't shipped); `bun` is a Compute runtime built-in.
+// as an independent module instance) is no longer built here — `makerkit
+// deploy` assembles it via `@makerkit/node/assemble`. @makerkit/* is inlined
+// (node_modules isn't shipped); `bun` is a Compute runtime built-in.
 export default defineConfig({
   entry: { server: 'src/server.ts' },
   outDir: 'dist',
