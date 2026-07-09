@@ -7,8 +7,10 @@
  * the wrapper build besides `@makerkit/*` (already the assemblers' own
  * default).
  *
- * The rule: inline everything except `bun` and `node:*` builtins. Verified
- * (both `@makerkit/node/assemble` and `@makerkit/nextjs/assemble` set
+ * The rule: inline everything except the runtime's own modules — `bun`,
+ * `bun:*` (e.g. bun:sqlite), and `node:*` builtins — which resolve inside
+ * the deploy VM at runtime and must never be bundled. Verified (both
+ * `@makerkit/node/assemble` and `@makerkit/nextjs/assemble` set
  * `external: ['bun']` ahead of `noExternal` in their tsdown call, and tsdown/
  * rolldown's explicit `external` wins over a `noExternal` match — proven by
  * building examples/makerkit-hello's wrapper with this exact pattern: the
@@ -18,5 +20,5 @@
  * inlined with no other file changes there).
  */
 export const INLINE_EVERYTHING_EXCEPT_RUNTIME_BUILTINS: readonly RegExp[] = [
-  /^(?!bun$)(?!node:).+/,
+  /^(?!bun$)(?!bun:)(?!node:).+/,
 ];
