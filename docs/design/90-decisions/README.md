@@ -16,5 +16,10 @@ Keep ADRs short:
 
 ## Index
 
-_No active ADRs yet — earlier drafts (ADR-0001, ADR-0002) were retired as the high-level design settled. The next ADR will be ADR-0003._
+_Earlier drafts (ADR-0001, ADR-0002) were retired as the high-level design settled._
+
+- [ADR-0003](ADR-0003-deploy-derives-everything-from-the-root-node.md) — `makerkit deploy` derives everything from the root node; there is no deploy config file.
+- [ADR-0004](ADR-0004-service-nodes-carry-their-authoring-url.md) — Service nodes carry their authoring location (`url: import.meta.url`); nearest `package.json` anchors resolution.
+- [ADR-0005](ADR-0005-users-build-makerkit-assembles.md) — Users build their app; MakerKit assembles deploy artifacts from built output.
+- [ADR-0006](ADR-0006-every-node-is-named.md) — Every node is named; the root's name names the application.
 

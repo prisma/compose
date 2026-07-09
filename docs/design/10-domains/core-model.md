@@ -81,11 +81,14 @@ Who imports what, end to end:
 - the **user's entrypoint** (`server.ts`, or a Next page) imports the service
   module and calls `service.load()` for typed deps. The app author writes AND
   bundles this file (their bundler, or `next build`) — MakerKit never touches it;
-- the **deploy config** (`makerkit.config.ts`) imports the app (service or hex) +
-  `@makerkit/prisma-cloud/target` (heavy — deploy-time only). `makerkit deploy`
-  reads it and calls `@makerkit/core/deploy`'s `lower()` internally; the app
-  author writes no stack file (the CLI is a named extension point — until it
-  lands, examples use an interim `alchemy.run.ts` calling `lower()` directly).
+- the **deploy entry is the app module itself** — there is no config file
+  (ADR-0003). `makerkit deploy <entry>` imports it, infers the target pack from
+  the nodes, and constructs the target from the environment via the pack's
+  `/target` `fromEnv()` — the only place the heavy target import happens — then
+  calls `@makerkit/core/deploy`'s `lower()` internally. The app author writes no
+  stack file and no config file (until the CLI lands, examples use an interim
+  `alchemy.run.ts` calling `lower()` directly; see
+  [`deploy-cli.md`](deploy-cli.md)).
 
 At deploy, the build adapter's assembler produces a **normalized bundle dir**: the
 app's built entry, plus a MakerKit **wrapper** (the service module bundled with
@@ -897,15 +900,21 @@ A plain (self-served) service — Hono on Bun. The service module is declaration
 only; the app writes and bundles its own entry:
 
 ```ts
-// src/service.ts — the authored service: deps + build. No handler.
+// src/service.ts — the authored service: name + deps + build + where it lives.
+// No handler.
 import { compute, postgres } from "@makerkit/prisma-cloud"
 import node from "@makerkit/node"
 import { SQL } from "bun"                       // the APP's choice of client
 
-const db = postgres({ client: ({ url }) => new SQL({ url }) })
+const db = postgres({ name: "db", client: ({ url }) => new SQL({ url }) })
 // typeof hydrated db = SQL — inferred from the factory, no phantom declaration
 
-export default compute({ deps: { db }, build: node({ entry: "dist/server.js" }) })
+export default compute({
+  name: "hello",                                // ADR-0006: every node named; at root this names the app
+  url: import.meta.url,                         // ADR-0004: deploy-time anchor; inert at runtime
+  deps: { db },
+  build: node({ entry: "dist/server.js" }),     // where the APP's build puts the runnable
+})
 
 // src/server.ts — the app's OWN entrypoint. The app bundles this to dist/server.js
 // (its own bundler). It pulls typed deps from the service and serves.
@@ -915,17 +924,14 @@ const { db, port } = service.load()             // db: SQL, port: number — inf
 Bun.serve({ port, hostname: "0.0.0.0",
   fetch: async () => Response.json(await db`select 1 as ok`) })
 
-// makerkit.config.ts — declares the app and its target. The service's build
-// adapter already knows how to produce the artifact, so there is no bundle map.
-// `makerkit deploy` reads this, runs the adapter's assembler, and drives Alchemy;
-// the app author writes no stack file. (The CLI is a named extension point.)
-import app from "./src/service"
-import { prismaCloud } from "@makerkit/prisma-cloud/target"
-export default {
-  app,
-  target: prismaCloud({ workspaceId: requiredEnv("PRISMA_WORKSPACE_ID") }),
-  name: "hello",
-}
+// There is no deploy config file (ADR-0003). The app builds itself first
+// (its own bundler produces dist/server.js), then:
+//
+//   makerkit deploy src/service.ts
+//
+// The CLI infers the target pack from the nodes, constructs it from the
+// environment (the pack's /target fromEnv() reads PRISMA_WORKSPACE_ID), runs
+// each service's assembly, and drives Alchemy — no bundle map, no stack file.
 ```
 
 `service.load()` is typed end to end by the chain `postgres({ client })` → `C =
@@ -954,8 +960,9 @@ disappear into core's sequencing.
 // storefront/src/service.ts — declares the dependency; never learns how the URL arrives
 import { compute, http } from "@makerkit/prisma-cloud"
 import nextjs from "@makerkit/nextjs"
-const auth = http()
-export default compute({ deps: { auth }, build: nextjs() })
+const auth = http({ name: "auth" })
+export default compute({ name: "storefront", url: import.meta.url,
+  deps: { auth }, build: nextjs() })
 
 // storefront/app/page.tsx — the app's own Next code; `next build` bundles it.
 // It pulls the typed auth client via load() — the SAME mechanism the Hono entry
@@ -968,7 +975,8 @@ export default async function Home() {
   return <p>Auth /verify says: {res.status} {await res.text()}</p>
 }
 
-// the app's hex — transparent wiring, runs at Load
+// app.ts — the app's hex: transparent wiring, runs at Load. Its name becomes
+// the application (Project) name; each service's dir comes from its own `url`.
 import authService from "./hexes/auth/src/service"
 import storefrontService from "./hexes/storefront/src/service"
 export default hex("storefront-auth", (h) => {
@@ -976,12 +984,8 @@ export default hex("storefront-auth", (h) => {
   h.provision("storefront", storefrontService, { auth: authRef })  // wires the edge
 })
 
-// makerkit.config.ts — the whole deploy declaration; `makerkit deploy` drives it
-export default {
-  app: appHex,
-  target: prismaCloud({ workspaceId }),
-  name: "StorefrontAuth",
-}
+// No deploy config file (ADR-0003): build both apps, then
+//   makerkit deploy app.ts
 ```
 
 At deploy, core sequences: auth provision → auth deploy (URL now real) → storefront
@@ -1023,13 +1027,16 @@ entry hydrates `db`. Neither entry can tell a connection from a resource.
 ## Extension points (designed for, not yet built)
 
 - **MakerKit-owned deploy entrypoint** — the standard deploy path is `makerkit
-  deploy` over a declarative `makerkit.config.ts` (`{ app, target, name }`). It
-  owns the build→deploy pipeline in one pass: scan the app, run each service's
-  build-adapter assembler, then `lower()`. That single pass is what lets the
-  per-service bundle map drop from the wiring (it correlates each service value to
-  its assembled output). `lower()`/`lowering()` stay in `/deploy` as the mechanism
-  and the escape hatch for hand-composed / mixed-stack topologies. Until the CLI
-  lands, examples invoke `lower()` from an interim `alchemy.run.ts` that still
+  deploy <entry>` over the app module itself; there is no config file (ADR-0003,
+  designed in [`deploy-cli.md`](deploy-cli.md)). One pass: Load the root node's
+  graph, infer the target pack from the nodes (`fromEnv()` constructs it from
+  the environment), run each service's assembly from its `url` anchor
+  (ADR-0004; the user's build ran first — ADR-0005), then `lower()`. That
+  single pass is what lets the per-service bundle map drop from the wiring (it
+  correlates each service value to its assembled output).
+  `lower()`/`lowering()` stay in `/deploy` as the mechanism and the escape
+  hatch for hand-composed / mixed-stack topologies. Until the CLI lands,
+  examples invoke `lower()` from an interim `alchemy.run.ts` that still
   carries the assembled bundle dirs.
 - **Build-adapter ecosystem** — `node` and `nextjs` are the first two; the
   descriptor/assembler split is the seam for community adapters (Nuxt, TanStack

@@ -16,6 +16,9 @@ import { nextStandaloneDir } from './scripts/bundle-next.ts';
  *
  * Requires env (repo-root .env): PRISMA_SERVICE_TOKEN, PRISMA_WORKSPACE_ID,
  * ALCHEMY_PASSWORD.
+ *
+ * Interim hand-written stack until `makerkit deploy` lands (no config file —
+ * it reads the app module directly; see docs/design/10-domains/deploy-cli.md).
  */
 const workspaceId = process.env['PRISMA_WORKSPACE_ID'];
 if (!workspaceId) throw new Error('PRISMA_WORKSPACE_ID is required');

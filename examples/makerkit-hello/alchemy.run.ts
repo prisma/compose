@@ -7,8 +7,8 @@ import service from './src/service.ts';
  * Deploy script (heavy imports; never bundled): lowers the authored service
  * onto Prisma Cloud — one Project (poisoned DATABASE_URL/_POOLED, a real
  * named Database for `db`), one Compute service, one Deployment. Interim
- * hand-written stack until `makerkit deploy` (a declarative
- * makerkit.config.ts) lands — see core-model.md's Extension points.
+ * hand-written stack until `makerkit deploy` lands (no config file — it reads
+ * the app module directly; see docs/design/10-domains/deploy-cli.md).
  *
  *   pnpm build     # bundles src/server.ts + src/service.ts to dist/bundle
  *   pnpm deploy    # builds, sources ../../.env, runs `alchemy deploy`
