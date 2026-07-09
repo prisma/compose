@@ -112,6 +112,20 @@ describe('Load of a hex root', () => {
     expect(() => Load(root)).toThrow(/Duplicate provision id "auth"/);
   });
 
+  test('a provision id containing "_" or "." is a LoadError (config-key / node-id separator collision)', () => {
+    // "auth_db" + param "url" would serialize to the same env key as
+    // "auth" + input "db" + param "url" (both AUTH_DB_URL).
+    const underscored = hex('shop', (h) => {
+      h.provision('auth_db', makeAuthService());
+    });
+    expect(() => Load(underscored)).toThrow(/id "auth_db" \(hex "shop"\) may not contain/);
+
+    const dotted = hex('shop', (h) => {
+      h.provision('auth.db', makeAuthService());
+    });
+    expect(() => Load(dotted)).toThrow(/id "auth.db" \(hex "shop"\) may not contain/);
+  });
+
   test('a dangling ConnectionEnd input names the service and the input', () => {
     const root = hex('shop', (h) => {
       h.provision('auth', makeAuthService());
