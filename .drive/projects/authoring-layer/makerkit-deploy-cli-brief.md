@@ -5,8 +5,8 @@
 > `docs/design/10-domains/deploy-cli.md` — notably: there is **no**
 > `makerkit.config.ts` (§1 here is obsolete); value→location (§3) is
 > `url: import.meta.url`; build orchestration (§4) is user-owned builds. The
-> work is now the `deploy-cli-mvp` project
-> (`.drive/projects/deploy-cli-mvp/`). Kept for its absorbed constraints.
+> work SHIPPED as the deploy-cli-mvp project (PR #16; design in
+> docs/design/10-domains/deploy-cli.md). Kept for its absorbed constraints.
 
 A brief for the agent taking the CLI track. Runs **in parallel** with the typed-HTTP-connection track (a strict file boundary keeps them from colliding — see § Boundary). Forks off the R5 tip once R5 lands.
 
