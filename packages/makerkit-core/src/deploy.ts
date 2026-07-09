@@ -15,7 +15,7 @@ import * as Effect from 'effect/Effect';
 import type * as Layer from 'effect/Layer';
 import type { Config } from './config.ts';
 import { type Graph, Load, type NodeId } from './graph.ts';
-import type { HexNode, ResourceNode, ServiceNode } from './node.ts';
+import type { BuildAdapter, HexNode, ResourceNode, ServiceNode } from './node.ts';
 
 /** The Layer shape every Alchemy state store must satisfy — what `LowerOptions.state` and `Target.state` both traffic in. */
 export type AlchemyStateLayer = Layer.Layer<State, never, StackServices>;
@@ -98,7 +98,7 @@ export interface ServiceLowering {
  */
 export interface PackageInput {
   /** The build adapter's normalized output: the bundle dir + the app's runnable. */
-  readonly assembled: AssembledBundle;
+  readonly assembled: Bundle;
   /** The node's graph address — baked into the printed bootstrap. */
   readonly address: string;
 }
@@ -135,8 +135,8 @@ export interface LoweredNode {
 export interface LowerOptions {
   /** Stack + root node id. */
   readonly name: string;
-  // The interim carrier of assembled bundle dirs (the makerkit-deploy CLI runs
-  // each service's build-adapter assembler and drops this map). Service root:
+  // The interim carrier of assembled bundle dirs (deploy tooling runs each
+  // service's build-adapter assembler and drops this map). Service root:
   // one bundle. Hex root: one per provisioned service, keyed by provision id.
   readonly bundle?: Bundle;
   readonly bundles?: Record<string, Bundle>;
@@ -146,19 +146,32 @@ export interface LowerOptions {
 }
 
 /**
- * The interim assembled-bundle carrier: the dir the adapter's assembler
- * produced (wrapper + app entry + fixups) and the app's runnable relative to
- * it (for the bootstrap's boot import). Identical shape to AssembledBundle.
+ * A build adapter's normalized product — and the interim assembled-bundle
+ * carrier `LowerOptions.bundle`/`bundles` hands to `package()`: the dir the
+ * adapter's assembler produced (wrapper + app entry + fixups) plus the app's
+ * runnable entry relative to it (for the bootstrap's boot import). One name,
+ * one shape, defined once — every deploy-side package (the CLI, `@makerkit/
+ * assemble`, each build adapter's `/assemble`) imports this instead of
+ * redeclaring it.
  */
 export interface Bundle {
   readonly dir: string;
   readonly entry: string;
 }
 
-/** A build adapter's normalized product: the bundle dir + the app's runnable entry. */
-export interface AssembledBundle {
-  readonly dir: string;
-  readonly entry: string;
+/**
+ * The assembler seam's input — `@makerkit/assemble` and every build adapter's
+ * `/assemble` entry (`@makerkit/node`, `@makerkit/nextjs`, …) import this one
+ * definition rather than each declaring their own `Assemble(r)Input`.
+ */
+export interface AssembleInput {
+  readonly build: BuildAdapter;
+  /**
+   * Extra patterns to inline into the wrapper besides `@makerkit/*` — the
+   * service module's own imports that are neither shipped in the bundle dir
+   * nor runtime built-ins (e.g. the app's workspace packages).
+   */
+  readonly wrapperNoExternal?: readonly RegExp[];
 }
 
 /** package()'s product. */

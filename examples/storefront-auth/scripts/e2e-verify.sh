@@ -5,7 +5,7 @@
 # deploy (PRO-200) and auth's DB ping can transiently fail right after idle
 # (FT-5219), recovering on the next hit. Run from examples/storefront-auth.
 # Requires PRISMA_SERVICE_TOKEN; STOREFRONT_STACK_NAME optionally overrides the
-# project name (defaults to storefront-auth, matching alchemy.run.ts).
+# project name (defaults to storefront-auth, matching the stack name the CLI deploys).
 set -euo pipefail
 
 stack="${STOREFRONT_STACK_NAME:-storefront-auth}"
