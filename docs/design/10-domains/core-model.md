@@ -58,6 +58,7 @@ The boundary is decided; only the carve is deferred.
 | `@makerkit/core` | node factories (`service`, `resource`, `connectionEnd`, `hex`), `Load`, `configOf`, `hydrate`, `BuildAdapter` type, model types (incl. `Config`) | nothing |
 | `@makerkit/core/deploy` | `lower()`, `lowering()`, `Target` types, `Bundle`/`AssembleInput` (the assembler seam's contract, defined once here) | `alchemy`, `effect` |
 | `@makerkit/prisma-cloud` | `compute()` (declares a service; carries `run`/`load`), `postgres({ client })`, `http()` | `@makerkit/core` only |
+| `@makerkit/rpc` | the RPC Contract kind — `contract()`, `rpc()`, `serve()`, the typed client binding (see [`connection-contracts.md`](connection-contracts.md)) | `@makerkit/core` + a Standard Schema validator |
 | `@makerkit/prisma-cloud/target` | `prismaCloud()` | `@makerkit/prisma-alchemy`, `alchemy`, `effect` |
 | `@makerkit/node` · `@makerkit/nextjs` (build adapters) | `node()` · `nextjs()` — the authoring **descriptor** (lean, rides in `service.ts`), stamped with the adapter's own `pack` | `@makerkit/core` only |
 | `@makerkit/node/assemble` · `@makerkit/nextjs/assemble` | the deploy-side assembler (called by `package`) | `node:fs`/framework tooling — deploy machine only |
@@ -1084,10 +1085,15 @@ entry hydrates `db`. Neither entry can tell a connection from a resource.
 - **Framework-hosted DI is `load()`** — the Next page pulls its typed deps via
   `service.load()`, the same mechanism the Hono entry uses. No separate `use()`
   accessor is needed; the earlier framework-DI gap is closed by `load()`.
-- **Typed connection interfaces + generated clients** — today `http()` hydrates to
-  a plain URL-anchored client; the next step is declaring the interface of a
-  connection (routes, request/response bodies), enforcing compatibility at Load,
-  and hydrating a generated, strongly-typed client.
+- **Typed connection interfaces — shipped as Contracts.** A service-to-service
+  dependency is declared against a Contract (`@makerkit/rpc`'s `contract()` +
+  `rpc()`), compatibility is checked at the wiring site, at Load
+  (`satisfies()`), and per call, and the consumer's `load()` returns a typed
+  client. `http()` remains the untyped escape hatch. The mechanism — including
+  `expose` on the service node, ref-ports on `provision()`'s return, and
+  `serve()` — is documented in
+  [`connection-contracts.md`](connection-contracts.md); this document's type
+  sketches predate it and show the pre-contract shapes.
 - **Full Hex composition** — the minimal hex wires services; boundary ports
   (a hex's own Inputs/Outputs), nesting, and forwarding per the authoring-surface
   design come next. Services stay opaque leaves.

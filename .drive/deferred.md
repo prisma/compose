@@ -66,3 +66,10 @@
 - **CI workspace sweep** (operator/token): ~17 duplicate `makerkit-state`
   projects accumulated in the CI workspace during the id-shape bug; deploys
   are stable (deterministic oldest-first adoption) but they're quota noise.
+- **core-model.md R6 absorption**: the doc's type sketches (Nodes, factories,
+  Graph, HexBuilder) predate R6 — `expose`, `ConnectionEnd.required`,
+  ref-ports, the two-overload `provision()`, and required `name`/`pack` are
+  shipped but absent from the sketches. The false "not yet built" claims and
+  the missing `@makerkit/rpc` entry-map row were fixed at close-out; absorbing
+  the full mechanism into the sketches is a docs slice of its own
+  (connection-contracts.md is the accurate record meanwhile).
