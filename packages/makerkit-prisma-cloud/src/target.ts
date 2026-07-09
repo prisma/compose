@@ -18,6 +18,9 @@ export interface PrismaCloudOptions {
   region?: Prisma.ComputeRegion;
 }
 
+// The `satisfies` proves membership (no typo can sneak in); exhaustiveness —
+// every ComputeRegion member is listed — is proven by KNOWN_REGION_SET's
+// conditional annotation below.
 const KNOWN_REGIONS = [
   'us-east-1',
   'us-west-1',
@@ -27,9 +30,17 @@ const KNOWN_REGIONS = [
   'ap-southeast-1',
 ] as const satisfies readonly Prisma.ComputeRegion[];
 
+/** `never` while KNOWN_REGIONS lists every ComputeRegion; any newly added member lands here. */
+type MissingRegions = Exclude<Prisma.ComputeRegion, (typeof KNOWN_REGIONS)[number]>;
+
 // Widened to a plain ReadonlySet<string> (a type annotation, not a cast) so
-// `.has()` accepts an arbitrary env-var string, not just a known region literal.
-const KNOWN_REGION_SET: ReadonlySet<string> = new Set(KNOWN_REGIONS);
+// `.has()` accepts an arbitrary env-var string, not just a known region
+// literal. The conditional makes the annotation collapse to `never` if
+// KNOWN_REGIONS ever falls behind Prisma.ComputeRegion, failing typecheck
+// right here until the new region is added to the list above.
+const KNOWN_REGION_SET: MissingRegions extends never ? ReadonlySet<string> : never = new Set(
+  KNOWN_REGIONS,
+);
 
 function isComputeRegion(value: string): value is Prisma.ComputeRegion {
   return KNOWN_REGION_SET.has(value);
