@@ -7,10 +7,9 @@ import { authContract } from './contract.ts';
 // it, so the next request reconnects instead of erroring (FT-5219).
 export default compute({
   name: 'auth',
-  url: import.meta.url,
   deps: {
     db: postgres({ name: 'db', client: ({ url }) => new SQL({ url, max: 1, idleTimeout: 10 }) }),
   },
-  build: node({ entry: 'dist/server.js' }),
+  build: node({ module: import.meta.url, entry: '../dist/server.js' }),
   expose: { rpc: authContract },
 });

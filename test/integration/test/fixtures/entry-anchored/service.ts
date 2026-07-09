@@ -10,7 +10,6 @@ import { compute } from '@makerkit/prisma-cloud';
  */
 export default compute({
   name: 'entry-anchored-fixture',
-  url: import.meta.url,
   deps: {},
-  build: node({ entry: 'dist/server.js' }),
+  build: node({ module: import.meta.url, entry: 'dist/server.js' }),
 });
