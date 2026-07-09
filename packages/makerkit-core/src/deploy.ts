@@ -1,5 +1,5 @@
 /**
- * The router. Core's only job at deploy: Load (a service or hex root), then
+ * The router. Core's only job at deploy: Load (a hex root), then
  * for each node walk the target's lowering tables and run what they find —
  * application once, then per service: resources → provision → build the
  * typed Config → serialize → package → deploy. Deps before dependents,
@@ -109,10 +109,8 @@ export type Lowering = (ctx: LowerContext) => Effect.Effect<LoweredNode, unknown
 export interface LowerContext {
   readonly id: NodeId;
   /**
-   * The node's deployment address (graph position): the path of provision
-   * ids from the app root, excluding the root itself. Empty ("") for a lone
-   * service root — the config serializer's "unprefixed" case. The config-key
-   * namespace and the bootstrap parameter.
+   * The node's deployment address (graph position): its provision id in the
+   * hex root. The config-key namespace and the bootstrap parameter.
    */
   readonly address: string;
   readonly node: ServiceNode | ResourceNode;
@@ -146,7 +144,7 @@ export interface LowerOptions {
 
 /**
  * A build adapter's normalized product — and the interim assembled-bundle
- * carrier `LowerOptions.bundle`/`bundles` hands to `package()`: the dir the
+ * carrier `LowerOptions.bundles` hands to `package()`: the dir the
  * adapter's assembler produced (wrapper + app entry + fixups) plus the app's
  * runnable entry relative to it (for the bootstrap's boot import). One name,
  * one shape, defined once — every deploy-side package (the CLI, `@makerkit/
