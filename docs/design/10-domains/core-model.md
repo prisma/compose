@@ -376,6 +376,8 @@ interface Target {
   readonly application: ApplicationLowering             // once per lowering, before anything else
   readonly resources: Record<string, Lowering>          // resource type id → one-shot lowering
   readonly services: Record<string, ServiceLowering>    // service type id → phased SPI
+  readonly state?: () => AlchemyStateLayer              // the target's default state backend, if any;
+                                                        // explicit opts.state always wins; default localState()
 }
 
 // The application's shared infrastructure: on Prisma Cloud, the one Project
@@ -460,8 +462,8 @@ interface LowerOptions {
   readonly bundle?: Bundle
   readonly bundles?: Record<string, Bundle>
   readonly stage?: string
-  readonly state?: AlchemyStateLayer                     // default: localState(); the
-                                                         // hosted-state store slots in here
+  readonly state?: AlchemyStateLayer                     // explicit override — wins over the target's own
+                                                         // default (Target.state) and the localState() fallback
 }
 interface Bundle { readonly dir: string }                            // interim: an assembled bundle dir
 interface AssembledBundle { readonly dir: string; readonly entry: string }  // adapter product: dir + runtime entry
@@ -485,9 +487,10 @@ function lowering(root: ServiceNode, target: Target, opts: LowerOptions):
 ```
 
 `lower()` is nothing but the whole-stack wrapper:
-`Alchemy.Stack(opts.name, { providers: target.providers(), state: opts.state ?? localState() }, lowering(root, target, opts))`
-— Alchemy requires a state layer; local state is the default and a hosted store is
-config, not a code change. Two type-level notes the wrapper carries (both commented
+`Alchemy.Stack(opts.name, { providers: target.providers(), state: opts.state ?? target.state?.() ?? localState() }, lowering(root, target, opts))`
+— Alchemy requires a state layer; a target may supply its own default (prisma-cloud
+defaults to a Prisma-hosted store), an explicit `opts.state` always wins, and local
+state is the ultimate fallback. Two type-level notes the wrapper carries (both commented
 at the single site): a `LowerError` is fatal at deploy (`Effect.orDie`), and the
 effect's requirements channel is narrowed to what `Alchemy.Stack` accepts —
 `lowering()` itself stays `unknown`-requirements for composability.
