@@ -219,6 +219,15 @@ operators/machines deploying the same stack, and the platform answering
 platform half). Not a MakerKit-core capability — a target/platform
 deliverable (prisma-cloud pack + Management API surface).
 
+### [ ] Prisma Next for the state store's data access — **deferred** (operator call, PR #17 review)
+
+Replace the state store's hand SQL with a PN contract + `db.orm` + the
+programmatic control API (`createPostgresControlClient` → `dbUpdate(mode:
+'apply')`, which exists and fits the bootstrap shape — verified against
+published 0.14.0). Deferred: complex, rabbit-hole risk, little to gain while
+the store is 12 trivial CRUD queries. Facts, costs, and pick-up triggers:
+[`slices/r8-hosted-state-store/pn-adoption-design-note.md`](slices/r8-hosted-state-store/pn-adoption-design-note.md).
+
 ## Parked / cross-cutting
 
 - **Hex-to-hex addressing** — URL baking today → runtime name resolution (cycles,
