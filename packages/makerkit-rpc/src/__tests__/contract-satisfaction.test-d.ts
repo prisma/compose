@@ -62,9 +62,21 @@ const legacyEnd = () =>
   });
 
 const provider = <C extends Contract<string, unknown>>(exposed: C) =>
-  service({ type: 'fake/compute', inputs: {}, params: {}, build, expose: { auth: exposed } });
+  service({
+    name: 'test-service',
+    pack: 'test/pack',
+    url: 'file:///test/service.ts',
+    type: 'fake/compute',
+    inputs: {},
+    params: {},
+    build,
+    expose: { auth: exposed },
+  });
 
 const storefront = service({
+  name: 'test-service',
+  pack: 'test/pack',
+  url: 'file:///test/service.ts',
   type: 'fake/compute',
   inputs: { auth: rpc(authContract), legacy: legacyEnd() },
   params: {},

@@ -5,8 +5,11 @@ import { compute, postgres } from '../../index.ts';
 export let clientCalls = 0;
 
 export default compute({
+  name: 'test-service',
+  url: 'file:///test/service.ts',
   deps: {
     db: postgres({
+      name: 'test-resource',
       client: ({ url }) => {
         clientCalls += 1;
         return { url };

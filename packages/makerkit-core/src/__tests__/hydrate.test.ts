@@ -7,6 +7,8 @@ const build = { kind: 'node', entry: 'server.js' };
 
 const dbNode = (record?: (values: { url: string }) => void) =>
   resource({
+    name: 'test-resource',
+    pack: 'test/pack',
     type: 'fake/db',
     connection: conn({ url: { type: 'string', secret: true } }, (v) => {
       record?.(v);
@@ -20,6 +22,9 @@ describe('hydrate', () => {
   test("calls each input's connection.hydrate with its typed Config slice", async () => {
     const made: unknown[] = [];
     const root = service({
+      name: 'test-service',
+      pack: 'test/pack',
+      url: 'file:///test/service.ts',
       type: 'fake/app',
       inputs: { db: dbNode((v) => made.push(v)) },
       params: portParams,
@@ -37,6 +42,9 @@ describe('hydrate', () => {
 
   test('a ConnectionEnd hydrates through identical machinery — the app cannot tell it apart', async () => {
     const root = service({
+      name: 'test-service',
+      pack: 'test/pack',
+      url: 'file:///test/service.ts',
       type: 'fake/app',
       inputs: {
         auth: connectionEnd({
@@ -58,9 +66,14 @@ describe('hydrate', () => {
 
   test('async hydrate is awaited', async () => {
     const root = service({
+      name: 'test-service',
+      pack: 'test/pack',
+      url: 'file:///test/service.ts',
       type: 'fake/app',
       inputs: {
         db: resource({
+          name: 'test-resource',
+          pack: 'test/pack',
           type: 'fake/db',
           connection: conn({ url: { type: 'string' } }, async (v) => {
             await Promise.resolve();
@@ -78,7 +91,15 @@ describe('hydrate', () => {
   });
 
   test('a dep-less service hydrates to an empty deps object', async () => {
-    const root = service({ type: 'fake/app', inputs: {}, params: portParams, build });
+    const root = service({
+      name: 'test-service',
+      pack: 'test/pack',
+      url: 'file:///test/service.ts',
+      type: 'fake/app',
+      inputs: {},
+      params: portParams,
+      build,
+    });
 
     expect(await hydrate(root, { service: { port: 3000 }, inputs: {} })).toEqual({});
   });
@@ -88,6 +109,9 @@ describe('hydrateSync', () => {
   test('hydrates every input synchronously — no await required', () => {
     const made: unknown[] = [];
     const root = service({
+      name: 'test-service',
+      pack: 'test/pack',
+      url: 'file:///test/service.ts',
       type: 'fake/app',
       inputs: { db: dbNode((v) => made.push(v)) },
       params: portParams,
@@ -105,9 +129,14 @@ describe('hydrateSync', () => {
 
   test('throws, naming the input, when a connection hydrate returns a Promise', () => {
     const root = service({
+      name: 'test-service',
+      pack: 'test/pack',
+      url: 'file:///test/service.ts',
       type: 'fake/app',
       inputs: {
         db: resource({
+          name: 'test-resource',
+          pack: 'test/pack',
           type: 'fake/db',
           connection: conn({ url: { type: 'string' } }, async (v) => ({ asyncClient: v.url })),
         }),

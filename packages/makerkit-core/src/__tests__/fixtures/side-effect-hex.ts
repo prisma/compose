@@ -5,6 +5,9 @@ import { hex, service } from '../../index.ts';
 export let bodyCallCount = 0;
 
 const svc = service({
+  name: 'test-service',
+  pack: 'test/pack',
+  url: 'file:///test/service.ts',
   type: 'fixture/app',
   inputs: {},
   params: {},

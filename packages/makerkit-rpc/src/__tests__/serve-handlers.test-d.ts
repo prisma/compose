@@ -21,10 +21,15 @@ interface FakeDb {
 }
 
 const db: ResourceNode<FakeDb> = resource({
+  name: 'test-resource',
+  pack: 'test/pack',
   type: 'fake/db',
   connection: { params: {}, hydrate: () => ({ validTokens: [] }) },
 });
 const node = service({
+  name: 'test-service',
+  pack: 'test/pack',
+  url: 'file:///test/service.ts',
   type: 'fake/rpc-test',
   inputs: { db },
   params: {},

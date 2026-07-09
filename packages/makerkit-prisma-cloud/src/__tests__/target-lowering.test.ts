@@ -140,7 +140,14 @@ describe("prismaCloud().services['prisma-cloud/compute']", () => {
   test('serialize writes one env var per Config leaf, keyed by configKey(address, decl)', () => {
     const target = prismaCloud({ workspaceId: 'ws_1' });
     const node = compute({
-      deps: { db: postgres({ client: ({ url }) => ({ url }) }) },
+      name: 'test-service',
+      url: 'file:///test/service.ts',
+      deps: {
+        db: postgres({
+          name: 'test-resource',
+          client: ({ url }) => ({ url }),
+        }),
+      },
       build: { kind: 'node', entry: 'server.js' },
     });
     const ctx = { address: 'auth', node } as unknown as LowerContext;

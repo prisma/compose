@@ -3,6 +3,8 @@
 import { configOf, connectionEnd, hex, hydrate, Load, resource, service } from '../../index.ts';
 
 const db = resource({
+  name: 'test-resource',
+  pack: 'test/pack',
   type: 'probe/db',
   connection: {
     params: { url: { type: 'string', secret: true } },
@@ -11,6 +13,9 @@ const db = resource({
 });
 
 const app = service({
+  name: 'test-service',
+  pack: 'test/pack',
+  url: 'file:///test/service.ts',
   type: 'probe/app',
   inputs: { db },
   params: { port: { type: 'number', default: 3000 } },
@@ -23,6 +28,9 @@ const peer = connectionEnd({
 });
 
 const caller = service({
+  name: 'test-service',
+  pack: 'test/pack',
+  url: 'file:///test/service.ts',
   type: 'probe/app',
   inputs: { peer },
   params: {},

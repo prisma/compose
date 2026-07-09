@@ -5,7 +5,14 @@ import { configOf, Load } from '@makerkit/core';
 import { compute, postgres } from '@makerkit/prisma-cloud';
 
 const app = compute({
-  deps: { db: postgres({ client: ({ url }) => ({ url }) }) },
+  name: 'test-service',
+  url: 'file:///test/service.ts',
+  deps: {
+    db: postgres({
+      name: 'test-resource',
+      client: ({ url }) => ({ url }),
+    }),
+  },
   build: { kind: 'node', entry: 'server.js' },
 });
 
