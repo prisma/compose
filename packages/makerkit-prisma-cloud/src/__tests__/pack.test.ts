@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { Contract } from '@makerkit/core';
 import { configOf, hydrateSync, isNode } from '@makerkit/core';
-import { compute, postgres } from '../index.ts';
+import { compute, postgres, postgresDep } from '../index.ts';
 import { configKey, deserialize } from '../serializer.ts';
 
 const build = {
@@ -25,33 +25,50 @@ async function withEnv<T>(values: Record<string, string>, fn: () => Promise<T> |
   }
 }
 
-describe('postgres({ client })', () => {
-  test('returns a branded resource node declaring { url: string, secret }', () => {
-    const node = postgres({
-      name: 'test-resource',
-      client: ({ url }) => ({ url }),
-    });
+describe('postgres()', () => {
+  test('returns a branded resource identity — name, pack, type; no connection face', () => {
+    const node = postgres({ name: 'db' });
 
     expect(isNode(node)).toBe(true);
     expect(node.kind).toBe('resource');
     expect(node.type).toBe('postgres');
-    expect(node.connection.params).toEqual({ url: { type: 'string', secret: true } });
+    expect(node.pack).toBe('@makerkit/prisma-cloud');
+    expect(node.name).toBe('db');
+    expect('connection' in node).toBe(false);
+  });
+});
+
+describe('postgresDep({ client })', () => {
+  test('returns a branded resource end declaring { url: string, secret }', () => {
+    const end = postgresDep({
+      client: ({ url }) => ({ url }),
+    });
+
+    expect(isNode(end)).toBe(true);
+    expect(end.kind).toBe('resource-end');
+    expect(end.type).toBe('postgres');
+    expect(end.name).toBe('postgres');
+    expect(end.connection.params).toEqual({ url: { type: 'string', secret: true } });
   });
 
   test("hydrate delegates to the app's client factory; C is inferred", async () => {
     const made: unknown[] = [];
-    const node = postgres({
-      name: 'test-resource',
+    const end = postgresDep({
       client: (config) => {
         made.push(config);
         return { fake: 'client', ...config };
       },
     });
 
-    const client = await node.connection.hydrate({ url: 'postgres://u:p@host:5432/db' });
+    const client = await end.connection.hydrate({ url: 'postgres://u:p@host:5432/db' });
 
     expect(made).toEqual([{ url: 'postgres://u:p@host:5432/db' }]);
     expect(client).toEqual({ fake: 'client', url: 'postgres://u:p@host:5432/db' });
+  });
+
+  test('a given name overrides the "postgres" fallback', () => {
+    const end = postgresDep({ name: 'main-db', client: ({ url }) => ({ url }) });
+    expect(end.name).toBe('main-db');
   });
 });
 
@@ -73,8 +90,7 @@ describe('compute()', () => {
 
   test('is inert until run or load — the client factory does not run at construction', () => {
     let calls = 0;
-    const db = postgres({
-      name: 'test-resource',
+    const db = postgresDep({
       client: ({ url }) => {
         calls += 1;
         return { url };
@@ -94,8 +110,7 @@ describe('compute()', () => {
     const node = compute({
       name: 'test-service',
       deps: {
-        db: postgres({
-          name: 'test-resource',
+        db: postgresDep({
           client: ({ url }) => ({ url }),
         }),
       },
@@ -149,8 +164,7 @@ describe("the config serializer (shared by run() and /target's serialize)", () =
     const app = compute({
       name: 'test-service',
       deps: {
-        db: postgres({
-          name: 'test-resource',
+        db: postgresDep({
           client: ({ url }) => ({ url }),
         }),
       },
@@ -167,8 +181,7 @@ describe("the config serializer (shared by run() and /target's serialize)", () =
     const app = compute({
       name: 'test-service',
       deps: {
-        db: postgres({
-          name: 'test-resource',
+        db: postgresDep({
           client: ({ url }) => ({ url }),
         }),
       },
@@ -205,8 +218,7 @@ describe("the config serializer (shared by run() and /target's serialize)", () =
     const app = compute({
       name: 'test-service',
       deps: {
-        db: postgres({
-          name: 'test-resource',
+        db: postgresDep({
           client: ({ url }) => ({ url }),
         }),
       },
@@ -237,8 +249,7 @@ describe("the config serializer (shared by run() and /target's serialize)", () =
     const app = compute({
       name: 'test-service',
       deps: {
-        db: postgres({
-          name: 'test-resource',
+        db: postgresDep({
           client: ({ url }) => ({ url }),
         }),
       },
@@ -297,8 +308,7 @@ describe('compute().run(address, boot) → load() — the round trip', () => {
     const app = compute({
       name: 'test-service',
       deps: {
-        db: postgres({
-          name: 'test-resource',
+        db: postgresDep({
           client: ({ url }) => ({ url }),
         }),
       },
@@ -319,8 +329,7 @@ describe('compute().run(address, boot) → load() — the round trip', () => {
     const app = compute({
       name: 'test-service',
       deps: {
-        db: postgres({
-          name: 'test-resource',
+        db: postgresDep({
           client: ({ url }) => ({ url }),
         }),
       },
@@ -359,8 +368,7 @@ describe('compute().load()', () => {
     const app = compute({
       name: 'test-service',
       deps: {
-        db: postgres({
-          name: 'test-resource',
+        db: postgresDep({
           client: ({ url }) => {
             hydrateCalls += 1;
             return { url };
@@ -387,8 +395,7 @@ describe('the config pipeline over pack nodes', () => {
     const app = compute({
       name: 'test-service',
       deps: {
-        db: postgres({
-          name: 'test-resource',
+        db: postgresDep({
           client: ({ url }) => ({ url }),
         }),
       },
