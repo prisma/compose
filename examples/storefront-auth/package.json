@@ -6,8 +6,8 @@
   "scripts": {
     "build": "pnpm --filter @storefront-auth/auth build && pnpm --filter @storefront-auth/storefront build",
     "typecheck": "tsc --noEmit",
-    "deploy": "pnpm build && ( set -a; . ../../.env; set +a; makerkit deploy hex.ts ${STOREFRONT_STACK_NAME:+--name \"$STOREFRONT_STACK_NAME\"} )",
-    "destroy": "( set -a; . ../../.env; set +a; makerkit destroy hex.ts ${STOREFRONT_STACK_NAME:+--name \"$STOREFRONT_STACK_NAME\"} )"
+    "deploy": "pnpm build && ( set -a; . ../../.env; set +a; bun node_modules/.bin/makerkit deploy hex.ts ${STOREFRONT_STACK_NAME:+--name \"$STOREFRONT_STACK_NAME\"} )",
+    "destroy": "( set -a; . ../../.env; set +a; bun node_modules/.bin/makerkit destroy hex.ts ${STOREFRONT_STACK_NAME:+--name \"$STOREFRONT_STACK_NAME\"} )"
   },
   "dependencies": {
     "@effect/platform-bun": "4.0.0-beta.92",

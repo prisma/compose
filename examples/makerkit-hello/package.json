@@ -7,8 +7,8 @@
     "dev": "bun run scripts/dev.ts",
     "build": "tsdown",
     "typecheck": "tsc --noEmit",
-    "deploy": "pnpm build && ( set -a; . ../../.env; set +a; makerkit deploy src/service.ts )",
-    "destroy": "( set -a; . ../../.env; set +a; makerkit destroy src/service.ts )"
+    "deploy": "pnpm build && ( set -a; . ../../.env; set +a; bun node_modules/.bin/makerkit deploy src/service.ts )",
+    "destroy": "( set -a; . ../../.env; set +a; bun node_modules/.bin/makerkit destroy src/service.ts )"
   },
   "dependencies": {
     "@effect/platform-bun": "4.0.0-beta.92",
