@@ -29,11 +29,10 @@ const db: ResourceNode<FakeDb> = resource({
 const node = service({
   name: 'test-service',
   pack: 'test/pack',
-  url: 'file:///test/service.ts',
   type: 'fake/rpc-test',
   inputs: { db },
   params: {},
-  build: { kind: 'fake', entry: 'x' },
+  build: { kind: 'fake', module: 'file:///test/service.ts', entry: 'x' },
   expose: { rpc: authContract },
 });
 

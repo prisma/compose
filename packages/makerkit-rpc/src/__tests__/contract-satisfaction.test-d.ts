@@ -14,7 +14,11 @@ import { type } from 'arktype';
 import { contract } from '../contract.ts';
 import { type Client, rpc } from '../rpc.ts';
 
-const build: BuildAdapter = { kind: 'node', entry: 'server.js' };
+const build: BuildAdapter = {
+  kind: 'node',
+  module: 'file:///test/service.ts',
+  entry: 'server.js',
+};
 
 const authContract = contract({
   verify: rpc({ input: type({ token: 'string' }), output: type({ ok: 'boolean' }) }),
@@ -65,7 +69,6 @@ const provider = <C extends Contract<string, unknown>>(exposed: C) =>
   service({
     name: 'test-service',
     pack: 'test/pack',
-    url: 'file:///test/service.ts',
     type: 'fake/compute',
     inputs: {},
     params: {},
@@ -76,7 +79,6 @@ const provider = <C extends Contract<string, unknown>>(exposed: C) =>
 const storefront = service({
   name: 'test-service',
   pack: 'test/pack',
-  url: 'file:///test/service.ts',
   type: 'fake/compute',
   inputs: { auth: rpc(authContract), legacy: legacyEnd() },
   params: {},
