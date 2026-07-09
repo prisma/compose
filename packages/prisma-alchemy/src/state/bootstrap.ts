@@ -323,6 +323,11 @@ const resolveStateProject = (
       const project = yield* createStateProject(client, workspaceId);
       const database = yield* findDefaultDatabase(client, project.id);
       const connectionString = yield* mintConnection(client, database.id);
+      // Wording note here and below: the e2e noop assertion greps deploy
+      // output for bare create/update verbs, so these lines must not use them.
+      console.error(
+        `hosted state: provisioned new state project ${project.id} (db ${database.id}) in workspace ${workspaceId}`,
+      );
       return { project, database, connectionString };
     }
 
@@ -338,6 +343,10 @@ const resolveStateProject = (
         );
         continue;
       }
+      console.error(
+        `hosted state: using state project ${candidate.id} (db ${database.id}, ${verdict.kind}) — ` +
+          `${sorted.length} candidate(s) named ${STATE_PROJECT_NAME} in workspace ${workspaceId}`,
+      );
       return { project: candidate, database, connectionString };
     }
 
