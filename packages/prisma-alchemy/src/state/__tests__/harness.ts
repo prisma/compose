@@ -18,6 +18,20 @@ const PG_ENV = { ...process.env, LC_ALL: 'C', LANG: 'C' };
 const probe = (bin: string): boolean =>
   spawnSync(bin, ['--version'], { stdio: 'ignore', env: PG_ENV }).status === 0;
 
+// Ubuntu's postgresql-common packaging installs versioned server binaries
+// under /usr/lib/postgresql/<version>/bin, never on PATH and not covered by
+// the Homebrew paths above — this is what a plain `ubuntu-latest` CI runner
+// has after `apt-get install postgresql`. Glob every installed version
+// rather than pinning one.
+const globUbuntuPostgresqlBinCandidates = (name: string): string[] => {
+  const base = '/usr/lib/postgresql';
+  try {
+    return fs.readdirSync(base).map((version) => path.join(base, version, 'bin', name));
+  } catch {
+    return [];
+  }
+};
+
 const findBinary = (name: string): string | undefined => {
   const candidates = [
     name,
@@ -25,6 +39,7 @@ const findBinary = (name: string): string | undefined => {
     `/opt/homebrew/bin/${name}`,
     `/usr/local/opt/postgresql@15/bin/${name}`,
     `/usr/local/bin/${name}`,
+    ...globUbuntuPostgresqlBinCandidates(name),
   ];
   return candidates.find(probe);
 };
@@ -43,8 +58,11 @@ const findBinary = (name: string): string | undefined => {
  *    ephemeral cluster under `STATE_TEST_PG_TMPDIR` (falls back to the OS
  *    temp dir) on a random high port, and tears it down in `stop()`.
  *
- * Returns `undefined` when neither is available. Callers must skip loudly —
- * never silently pass — when this returns `undefined`.
+ * Returns `undefined` when neither is available and `process.env.CI` is
+ * unset (a local dev machine without Postgres installed) — callers must skip
+ * loudly, never silently pass, when this returns `undefined`. On CI, the
+ * absence of both is a configuration bug, not a skip condition: this throws
+ * instead, so the state/lock suites can never quietly go unexecuted.
  */
 export const startTestPostgres = (): TestPostgres | undefined => {
   const fromEnv = process.env['STATE_TEST_DATABASE_URL'];
@@ -54,7 +72,21 @@ export const startTestPostgres = (): TestPostgres | undefined => {
 
   const initdb = findBinary('initdb');
   const pgCtl = findBinary('pg_ctl');
-  if (initdb === undefined || pgCtl === undefined) return undefined;
+  if (initdb === undefined || pgCtl === undefined) {
+    if (process.env['CI'] !== undefined) {
+      // On CI this suite must never silently skip: a green `pnpm test` has
+      // to mean the store/lock suites actually ran. Throwing here (instead
+      // of returning undefined, which `describe.skipIf` would swallow)
+      // fails the build loudly when the CI job forgot to wire a Postgres.
+      throw new Error(
+        'CI is set but no Postgres is available for the state-store tests: neither ' +
+          'STATE_TEST_DATABASE_URL nor initdb/pg_ctl (PATH, Homebrew, or Ubuntu ' +
+          '/usr/lib/postgresql/*/bin) were found. Wire a `services: postgres:` container ' +
+          'and STATE_TEST_DATABASE_URL on the CI test job (see .github/workflows/ci.yml).',
+      );
+    }
+    return undefined;
+  }
 
   const baseDir = process.env['STATE_TEST_PG_TMPDIR'] ?? os.tmpdir();
   fs.mkdirSync(baseDir, { recursive: true });
