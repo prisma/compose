@@ -244,6 +244,12 @@ function requireUrl(url: string, factory: string): void {
   }
 }
 
+function requirePack(pack: string, factory: string): void {
+  if (typeof pack !== 'string' || pack.length === 0) {
+    throw new Error(`${factory}() requires a non-empty pack (the authoring pack's package name).`);
+  }
+}
+
 function freezeParams<P extends Params>(params: P): P {
   const frozen: Record<string, ConfigParam> = {};
   for (const [name, param] of Object.entries(params)) {
@@ -268,6 +274,7 @@ export function resource<P extends Params, C>(def: {
   connection: Connection<P, C>;
 }): ResourceNode<C> {
   requireName(def.name, 'resource');
+  requirePack(def.pack, 'resource');
   requireType(def.type, 'resource');
   const connection: Connection<P, C> = Object.freeze({
     params: freezeParams(def.connection.params),
@@ -303,6 +310,7 @@ export function service<
   expose?: E;
 }): ServiceNode<D, P, E> {
   requireName(def.name, 'service');
+  requirePack(def.pack, 'service');
   requireType(def.type, 'service');
   requireUrl(def.url, 'service');
   const node: ServiceNode<D, P, E> = {

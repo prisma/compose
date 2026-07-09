@@ -58,6 +58,12 @@ describe('resource()', () => {
       resource({ name: '', pack: 'test/pack', type: 'fake/db', connection: conn({}, () => ({})) }),
     ).toThrow(/non-empty name/);
   });
+
+  test('throws on an empty pack', () => {
+    expect(() =>
+      resource({ name: 'db', pack: '', type: 'fake/db', connection: conn({}, () => ({})) }),
+    ).toThrow(/non-empty pack/);
+  });
 });
 
 describe('service()', () => {

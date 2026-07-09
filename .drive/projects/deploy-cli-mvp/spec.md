@@ -54,12 +54,12 @@ adapters, `run`/`load`, pack `package()`/`deploy()` — all merged to main).
 Consumes: Alchemy `2.0.0-beta.59` as the provisioning engine, Prisma Cloud as
 the (only) target pack, the repo e2e workflow as the proving ground.
 
-**Parallel-track coordination:** `claude/rpc-contracts` (R6, docs-only so far)
-owns connection *interface* semantics. This project owns node *identity*
-(name/url/pack fields), `Load` error quality, deploy-side assembly, and the
-CLI package. It must not change `http.ts` hydrate/interface semantics or the
-config/hydrate runtime path beyond adding the new node fields. Whichever track
-lands second rebases.
+**Parallel-track coordination (resolved):** R6 rpc-contracts merged mid-flight
+(PR #13, `packages/makerkit-rpc`); this project rebased onto it. The one
+collision was benign and is recorded in ADR-0006's consequences:
+`rpc(contract)` has no name slot, so core's `connectionEnd()` name is optional
+(defaults to the type) while pack factories require it. This project still
+does not change `http.ts`/rpc hydrate or interface semantics.
 
 ## Cross-cutting requirements
 

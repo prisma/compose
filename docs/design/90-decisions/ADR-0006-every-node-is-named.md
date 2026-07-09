@@ -41,6 +41,11 @@ collide with a standing deployment in a shared workspace.
 
 - Node factories gain a name parameter; authoring gets slightly more verbose
   and considerably more debuggable.
+- One nuance at the core layer: a connection end constructed by a surface with
+  no room for a name argument (e.g. `rpc(contract)`, which takes only the
+  contract) defaults its name to the connection's type. Pack factories that
+  take an options object (`http({ name })`, `postgres({ name, … })`) still
+  require the explicit name.
 - Only the root's name has provisioning semantics; every other node's name is
   diagnostic. Identity remains the deploy address.
 - Renaming a root remains a destructive operation — the docs and eventually the
