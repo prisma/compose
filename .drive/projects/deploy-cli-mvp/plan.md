@@ -111,7 +111,17 @@ redeploy is `Plan: … to noop`, `makerkit destroy` is clean (404 after).
 **Builds on:** S1 + S2.
 **Hands to:** S4 — a working CLI and one migrated example as the pattern.
 
-### [ ] Slice S4 — storefront-auth migration + CI flip
+### [~] Slice S4 — storefront-auth migration + CI flip
+
+> **Implemented + reviewed; awaiting the live CI proof on the PR.** Commits
+> `9819223` (cherry-picked) + `77aa655`. Opus review NEEDS-FIXES → the one
+> blocker fixed: CI/scripts ran the CLI under node (bin shebang), which dies
+> at Load on the apps' `import "bun"`; now `bun node_modules/.bin/makerkit`
+> everywhere (which also makes the spawned alchemy launcher re-exec under bun
+> via npm_config_user_agent). Both examples verified failing only at missing
+> credentials locally. Same latent `build.entry` bug found+fixed in auth's
+> descriptor as S3 found in hello's. Slice closes when the PR's e2e run
+> deploys, verifies the round trip, and destroys clean.
 
 **Outcome:** `examples/storefront-auth` deploys via `makerkit deploy app.ts`
 (hex root; per-service dirs from `url`); its `alchemy.run.ts`, bundle scripts,
