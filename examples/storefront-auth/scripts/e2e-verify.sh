@@ -22,7 +22,12 @@ project_id="$(curl -sS -H "$auth_header" "$api/projects?limit=100" \
 domain="$(curl -sS -H "$auth_header" "$api/projects/$project_id/compute-services?limit=100" \
   | node -e "let d='';process.stdin.on('data',(c)=>{d+=c}).on('end',()=>{const s=(JSON.parse(d).data??[]).find((x)=>x.name==='storefront');console.log(s?.serviceEndpointDomain??'')})")"
 [ -n "$domain" ] || { echo "Project $project_id has no 'storefront' compute service with an endpoint domain."; exit 1; }
-url="https://$domain/"
+# serviceEndpointDomain arrives WITH the https:// scheme (see the PRO-200
+# gotcha's captured responses); tolerate either shape.
+case "$domain" in
+  http://*|https://*) url="$domain" ;;
+  *) url="https://$domain/" ;;
+esac
 echo "Storefront URL: $url"
 
 deadline=$((SECONDS + 180))
