@@ -16,7 +16,7 @@ export const postgres = <C>(opts: {
   resource({
     name: opts.name,
     pack: '@makerkit/prisma-cloud',
-    type: 'prisma-cloud/postgres',
+    type: 'postgres',
     connection: {
       params: { url: { type: 'string', secret: true } },
       // v: { url: string } — enforced by the declaration.

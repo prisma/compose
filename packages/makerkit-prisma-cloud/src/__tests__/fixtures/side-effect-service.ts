@@ -6,7 +6,6 @@ export let clientCalls = 0;
 
 export default compute({
   name: 'test-service',
-  url: 'file:///test/service.ts',
   deps: {
     db: postgres({
       name: 'test-resource',
@@ -16,5 +15,5 @@ export default compute({
       },
     }),
   },
-  build: { kind: 'node', entry: 'server.js' },
+  build: { kind: 'node', module: 'file:///test/service.ts', entry: 'server.js' },
 });

@@ -24,7 +24,7 @@ export const http = <C = HttpClient>(opts: {
 }): ConnectionEnd<C> =>
   connectionEnd({
     name: opts.name,
-    type: 'prisma-cloud/http',
+    type: 'http',
     connection: {
       params: { url: { type: 'string' } },
       hydrate: (v) => (opts.client ?? defaultHttpClient)({ url: v.url }) as C,

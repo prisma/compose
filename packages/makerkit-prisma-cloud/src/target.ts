@@ -18,29 +18,10 @@ export interface PrismaCloudOptions {
   region?: Prisma.ComputeRegion;
 }
 
-// The `satisfies` proves membership (no typo can sneak in); exhaustiveness —
-// every ComputeRegion member is listed — is proven by KNOWN_REGION_SET's
-// conditional annotation below.
-const KNOWN_REGIONS = [
-  'us-east-1',
-  'us-west-1',
-  'eu-west-3',
-  'eu-central-1',
-  'ap-northeast-1',
-  'ap-southeast-1',
-] as const satisfies readonly Prisma.ComputeRegion[];
-
-/** `never` while KNOWN_REGIONS lists every ComputeRegion; any newly added member lands here. */
-type MissingRegions = Exclude<Prisma.ComputeRegion, (typeof KNOWN_REGIONS)[number]>;
-
-// Widened to a plain ReadonlySet<string> (a type annotation, not a cast) so
-// `.has()` accepts an arbitrary env-var string, not just a known region
-// literal. The conditional makes the annotation collapse to `never` if
-// KNOWN_REGIONS ever falls behind Prisma.ComputeRegion, failing typecheck
-// right here until the new region is added to the list above.
-const KNOWN_REGION_SET: MissingRegions extends never ? ReadonlySet<string> : never = new Set(
-  KNOWN_REGIONS,
-);
+// Prisma.COMPUTE_REGIONS is the runtime source of truth ComputeRegion is
+// derived from, so this can never fall behind — no hand-maintained list, no
+// exhaustiveness gymnastics to keep it honest.
+const KNOWN_REGION_SET: ReadonlySet<string> = new Set(Prisma.COMPUTE_REGIONS);
 
 function isComputeRegion(value: string): value is Prisma.ComputeRegion {
   return KNOWN_REGION_SET.has(value);
@@ -66,7 +47,7 @@ export function fromEnv(): Target {
   if (!isComputeRegion(region)) {
     throw new Error(
       `fromEnv(): environment variable PRISMA_REGION="${region}" is not a known region ` +
-        `(expected one of: ${KNOWN_REGIONS.join(', ')}).`,
+        `(expected one of: ${Prisma.COMPUTE_REGIONS.join(', ')}).`,
     );
   }
   return prismaCloud({ workspaceId, region });
@@ -111,7 +92,7 @@ export const prismaCloud = (o: PrismaCloudOptions): Target => ({
     // Each postgres input gets its own Database in the application's project.
     // The url output fills the service's db.url Config leaf and is encoded by
     // serialize under the service's own named key — never the platform default.
-    'prisma-cloud/postgres': ({ id, application }) =>
+    postgres: ({ id, application }) =>
       Effect.gen(function* () {
         const db = yield* Prisma.Database(`${id}-db`, {
           projectId: application.outputs['projectId'] as string,
@@ -125,7 +106,7 @@ export const prismaCloud = (o: PrismaCloudOptions): Target => ({
   },
 
   services: {
-    'prisma-cloud/compute': {
+    compute: {
       // The service as a PLACE inside the application's Project: the App,
       // identity-bearing only, no code runs.
       provision: ({ id, application }) =>

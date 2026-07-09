@@ -98,7 +98,7 @@ describe('prismaCloud().application.provision', () => {
   });
 });
 
-describe("prismaCloud().resources['prisma-cloud/postgres']", () => {
+describe("prismaCloud().resources['postgres']", () => {
   test("creates a Database + Connection in the application's project; url unwraps the Redacted connection string", () => {
     const target = prismaCloud({ workspaceId: 'ws_1' });
     const ctx = {
@@ -106,7 +106,7 @@ describe("prismaCloud().resources['prisma-cloud/postgres']", () => {
       application: { outputs: { projectId: 'shop-project#cloud-id' } },
     } as unknown as LowerContext;
 
-    const result = run<LoweredNode>(target.resources['prisma-cloud/postgres']!(ctx));
+    const result = run<LoweredNode>(target.resources['postgres']!(ctx));
 
     expect(result.outputs).toEqual({ url: 'postgres://auth.db-conn' });
     expect(recorded.db).toEqual([
@@ -118,7 +118,7 @@ describe("prismaCloud().resources['prisma-cloud/postgres']", () => {
   });
 });
 
-describe("prismaCloud().services['prisma-cloud/compute']", () => {
+describe("prismaCloud().services['compute']", () => {
   test("provision creates a ComputeService inside the application's project", () => {
     const target = prismaCloud({ workspaceId: 'ws_1' });
     const ctx = {
@@ -126,7 +126,7 @@ describe("prismaCloud().services['prisma-cloud/compute']", () => {
       application: { outputs: { projectId: 'shop-project#cloud-id' } },
     } as unknown as LowerContext;
 
-    const result = run<LoweredNode>(target.services['prisma-cloud/compute']!.provision(ctx));
+    const result = run<LoweredNode>(target.services['compute']!.provision(ctx));
 
     expect(result.outputs).toEqual({
       serviceId: 'auth-svc#cloud-id',
@@ -141,14 +141,13 @@ describe("prismaCloud().services['prisma-cloud/compute']", () => {
     const target = prismaCloud({ workspaceId: 'ws_1' });
     const node = compute({
       name: 'test-service',
-      url: 'file:///test/service.ts',
       deps: {
         db: postgres({
           name: 'test-resource',
           client: ({ url }) => ({ url }),
         }),
       },
-      build: { kind: 'node', entry: 'server.js' },
+      build: { kind: 'node', module: 'file:///test/service.ts', entry: 'server.js' },
     });
     const ctx = { address: 'auth', node } as unknown as LowerContext;
     const provisioned: LoweredNode = {
@@ -157,7 +156,7 @@ describe("prismaCloud().services['prisma-cloud/compute']", () => {
     const config = { service: { port: 3000 }, inputs: { db: { url: 'postgres://real-db' } } };
 
     const result = run<LoweredNode>(
-      target.services['prisma-cloud/compute']!.serialize(ctx, provisioned, config),
+      target.services['compute']!.serialize(ctx, provisioned, config),
     );
 
     expect(recorded.envVar.slice(-2)).toEqual([
@@ -194,7 +193,7 @@ describe("prismaCloud().services['prisma-cloud/compute']", () => {
     const ctx = { id: 'auth' } as unknown as LowerContext;
 
     const result = run(
-      target.services['prisma-cloud/compute']!.package(ctx, {
+      target.services['compute']!.package(ctx, {
         assembled: { dir: 'hexes/auth/dist/bundle', entry: 'server.js' },
         address: 'auth',
       }),
@@ -225,7 +224,7 @@ describe("prismaCloud().services['prisma-cloud/compute']", () => {
     };
 
     const result = run<LoweredNode>(
-      target.services['prisma-cloud/compute']!.deploy(ctx, provisioned, artifact, serialized),
+      target.services['compute']!.deploy(ctx, provisioned, artifact, serialized),
     );
 
     expect(recorded.deploy).toEqual([

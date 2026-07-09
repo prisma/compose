@@ -39,7 +39,7 @@ describe('invariant 2: authoring imports stay lean (core + pack)', () => {
 
     const js = await out.outputs[0]!.text();
     // Positive marker: the probe genuinely bundled the pack's vocabulary.
-    expect(js).toContain('prisma-cloud/postgres');
+    expect(js).toContain('@makerkit/prisma-cloud');
     for (const token of [
       'alchemy',
       'effect',

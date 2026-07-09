@@ -6,14 +6,13 @@ import { compute, postgres } from '@makerkit/prisma-cloud';
 
 const app = compute({
   name: 'test-service',
-  url: 'file:///test/service.ts',
   deps: {
     db: postgres({
       name: 'test-resource',
       client: ({ url }) => ({ url }),
     }),
   },
-  build: { kind: 'node', entry: 'server.js' },
+  build: { kind: 'node', module: 'file:///test/service.ts', entry: 'server.js' },
 });
 
 export const graph = Load(app, { id: 'probe' });

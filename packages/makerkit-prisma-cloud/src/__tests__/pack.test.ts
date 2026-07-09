@@ -4,7 +4,7 @@ import { configOf, hydrateSync, isNode } from '@makerkit/core';
 import { compute, postgres } from '../index.ts';
 import { configKey, deserialize } from '../serializer.ts';
 
-const build = { kind: 'node', entry: 'server.js' };
+const build = { kind: 'node', module: 'file:///test/service.ts', entry: 'server.js' };
 
 /** Sets env vars for the duration of `fn`, restoring whatever was there before. */
 async function withEnv<T>(values: Record<string, string>, fn: () => Promise<T> | T): Promise<T> {
@@ -29,7 +29,7 @@ describe('postgres({ client })', () => {
 
     expect(isNode(node)).toBe(true);
     expect(node.kind).toBe('resource');
-    expect(node.type).toBe('prisma-cloud/postgres');
+    expect(node.type).toBe('postgres');
     expect(node.connection.params).toEqual({ url: { type: 'string', secret: true } });
   });
 
@@ -54,14 +54,13 @@ describe('compute()', () => {
   test('returns a branded, runnable service node declaring { port: number, default 3000 }', () => {
     const node = compute({
       name: 'test-service',
-      url: 'file:///test/service.ts',
       deps: {},
       build,
     });
 
     expect(isNode(node)).toBe(true);
     expect(node.kind).toBe('service');
-    expect(node.type).toBe('prisma-cloud/compute');
+    expect(node.type).toBe('compute');
     expect(node.params).toEqual({ port: { type: 'number', default: 3000 } });
     expect(typeof node.run).toBe('function');
     expect(typeof node.load).toBe('function');
@@ -78,7 +77,6 @@ describe('compute()', () => {
     });
     const node = compute({
       name: 'test-service',
-      url: 'file:///test/service.ts',
       deps: { db },
       build,
     });
@@ -90,7 +88,6 @@ describe('compute()', () => {
   test('DI without any environment: hydrateSync against a hand-built Config runs the real connection factories', () => {
     const node = compute({
       name: 'test-service',
-      url: 'file:///test/service.ts',
       deps: {
         db: postgres({
           name: 'test-resource',
@@ -121,7 +118,6 @@ describe('compute({ expose })', () => {
 
     const node = compute({
       name: 'test-service',
-      url: 'file:///test/service.ts',
       deps: {},
       build,
       expose: { rpc: authContract },
@@ -135,7 +131,6 @@ describe('compute({ expose })', () => {
   test('expose is absent when not declared — services without it keep working unchanged', () => {
     const node = compute({
       name: 'test-service',
-      url: 'file:///test/service.ts',
       deps: {},
       build,
     });
@@ -148,7 +143,6 @@ describe("the config serializer (shared by run() and /target's serialize)", () =
   test("configKey: lone-service root (address '') is unprefixed — owner ▸ name", () => {
     const app = compute({
       name: 'test-service',
-      url: 'file:///test/service.ts',
       deps: {
         db: postgres({
           name: 'test-resource',
@@ -167,7 +161,6 @@ describe("the config serializer (shared by run() and /target's serialize)", () =
   test('configKey: a hex-addressed service prefixes with its address segment', () => {
     const app = compute({
       name: 'test-service',
-      url: 'file:///test/service.ts',
       deps: {
         db: postgres({
           name: 'test-resource',
@@ -185,7 +178,6 @@ describe("the config serializer (shared by run() and /target's serialize)", () =
   test('configKey: a connection-end input keys the same way as a resource input', () => {
     const app = compute({
       name: 'test-service',
-      url: 'file:///test/service.ts',
       deps: {},
       build,
     });
@@ -207,7 +199,6 @@ describe("the config serializer (shared by run() and /target's serialize)", () =
   test('deserialize round-trips what a service declares, reading process.env by configKey', async () => {
     const app = compute({
       name: 'test-service',
-      url: 'file:///test/service.ts',
       deps: {
         db: postgres({
           name: 'test-resource',
@@ -227,7 +218,6 @@ describe("the config serializer (shared by run() and /target's serialize)", () =
   test('deserialize: an unset param with a default resolves to the default', async () => {
     const app = compute({
       name: 'test-service',
-      url: 'file:///test/service.ts',
       deps: {},
       build,
     });
@@ -241,7 +231,6 @@ describe("the config serializer (shared by run() and /target's serialize)", () =
   test('deserialize: a missing required param fails loudly, naming the param', async () => {
     const app = compute({
       name: 'test-service',
-      url: 'file:///test/service.ts',
       deps: {
         db: postgres({
           name: 'test-resource',
@@ -260,7 +249,6 @@ describe("the config serializer (shared by run() and /target's serialize)", () =
   test('deserialize: an invalid number fails loudly even with a default present', async () => {
     const app = compute({
       name: 'test-service',
-      url: 'file:///test/service.ts',
       deps: {},
       build,
     });
@@ -279,7 +267,6 @@ describe("the config serializer (shared by run() and /target's serialize)", () =
     // deserialize and assert the number is identical.
     const app = compute({
       name: 'test-service',
-      url: 'file:///test/service.ts',
       deps: {},
       build,
     });
@@ -304,7 +291,6 @@ describe('compute().run(address, boot) → load() — the round trip', () => {
   test('deploy-side serialize writes address-keyed env; run() re-keys it address-free; load() hydrates it', async () => {
     const app = compute({
       name: 'test-service',
-      url: 'file:///test/service.ts',
       deps: {
         db: postgres({
           name: 'test-resource',
@@ -327,7 +313,6 @@ describe('compute().run(address, boot) → load() — the round trip', () => {
   test("a lone-service deploy (address '') reads and re-stashes the same unprefixed keys", async () => {
     const app = compute({
       name: 'test-service',
-      url: 'file:///test/service.ts',
       deps: {
         db: postgres({
           name: 'test-resource',
@@ -351,7 +336,6 @@ describe('compute().run(address, boot) → load() — the round trip', () => {
     let bootCalls = 0;
     const app = compute({
       name: 'test-service',
-      url: 'file:///test/service.ts',
       deps: {},
       build,
     });
@@ -369,7 +353,6 @@ describe('compute().load()', () => {
     let hydrateCalls = 0;
     const app = compute({
       name: 'test-service',
-      url: 'file:///test/service.ts',
       deps: {
         db: postgres({
           name: 'test-resource',
@@ -398,7 +381,6 @@ describe('the config pipeline over pack nodes', () => {
   test('configOf is semantic — owner/name/type/secret, no platform keys', () => {
     const app = compute({
       name: 'test-service',
-      url: 'file:///test/service.ts',
       deps: {
         db: postgres({
           name: 'test-resource',
@@ -432,7 +414,6 @@ describe('the config pipeline over pack nodes', () => {
   test('a dep-less service declares only its own params', () => {
     const app = compute({
       name: 'test-service',
-      url: 'file:///test/service.ts',
       deps: {},
       build,
     });
