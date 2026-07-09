@@ -79,7 +79,19 @@ allowed only outside authoring entries).
 **Builds on:** main (R5) — parallel with S1, no shared files.
 **Hands to:** S3 — assembly callable by kind with explicit path inputs.
 
-### [ ] Slice S3 — the CLI, proven live on hello
+### [x] Slice S3 — the CLI, proven live on hello
+
+> **Done** (proof level: credentials-blocked; live proof rides on S4's CI run).
+> Commits `dd4b6d2`…`1feccfe`. Opus review NEEDS-FIXES → all five findings
+> fixed and re-verified (bun:-scheme externals, inert stage dropped, region
+> exhaustiveness at compile time, run() orchestration tests, destroy
+> build-requirement error). Wrapper inlining settled: everything except
+> bun/bun:*/node:* (recorded in deploy-cli.md, verified against both
+> examples). Found+fixed a latent hello descriptor bug (entry was
+> 'server.js', masked by the interim script override). Known limitations
+> documented in deploy-cli.md; follow-ups in deferred.md. Hex correlation
+> (bundles keyed by provision id) verified against lower()'s lookup —
+> S4-ready. storefront-auth untouched, per plan.
 
 **Outcome:** `packages/makerkit-cli` (bin `makerkit`, runtime-agnostic — no
 bun-only APIs; runs under node ≥ 22.18 and bun) with
