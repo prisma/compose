@@ -28,3 +28,6 @@ packages/e2e-tests/.tmp-output
 ignite/
 pdp-control-plane/
 prisma-next/
+
+# Local clone of the datahub repo; not part of this repo.
+/datahub/

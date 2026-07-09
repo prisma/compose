@@ -62,6 +62,7 @@ jobs:
         run: pnpm turbo run build --filter @makerkit/example-storefront-auth...
 
       - name: Deploy
+        id: deploy
         # Do not use the package's `deploy` script: it sources ../../.env,
         # which doesn't exist in CI; env vars are already set on this job.
         # The CLI must run under BUN: Load imports the app's service modules,
@@ -77,10 +78,16 @@ jobs:
         run: bash scripts/e2e-verify.sh
 
       - name: Destroy
-        # Always runs, even on failure above: alchemy state is local to this
-        # runner and dies with it, so a failed run without destroy leaves
-        # orphaned cloud resources nobody else can clean up.
-        if: always()
+        # Runs whenever the Deploy step actually started (success or
+        # failure) — even on failure above, so a failed run doesn't leave
+        # orphaned cloud resources nobody else can clean up. Deploy state is
+        # hosted by default (the workspace's `makerkit-state` project, via
+        # PRISMA_SERVICE_TOKEN + PRISMA_WORKSPACE_ID — both already set on
+        # this job), not local to the runner, so `.alchemy/` presence is not
+        # a reliable signal of whether a deploy ran; gate on the Deploy
+        # step's own outcome instead (`skipped` only when Deploy itself never
+        # ran, e.g. Build failed first).
+        if: always() && steps.deploy.outcome != 'skipped'
         working-directory: examples/storefront-auth
         run: bash ../scripts/destroy-guard.sh "" hex.ts "$STOREFRONT_STACK_NAME"
 
@@ -91,6 +98,7 @@ jobs:
       # build must be a no-op (the Next path is knowingly non-deterministic —
       # see deploy-cli.md — so the noop assertion lives here, not above).
       - name: Deploy hello (service root)
+        id: deploy-hello
         working-directory: examples/makerkit-hello
         env:
           HELLO_STACK_NAME: hello-ci-${{ github.run_id }}
@@ -103,7 +111,9 @@ jobs:
         run: bash scripts/e2e-redeploy-noop.sh
 
       - name: Destroy hello
-        if: always()
+        # State is hosted (see the storefront Destroy comment) — gate on the
+        # deploy step's outcome, not local .alchemy presence.
+        if: always() && steps.deploy-hello.outcome != 'skipped'
         working-directory: examples/makerkit-hello
         env:
           HELLO_STACK_NAME: hello-ci-${{ github.run_id }}

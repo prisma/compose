@@ -1,22 +1,19 @@
 #!/usr/bin/env bash
-# Shared destroy guard for e2e-deploy.yml's cleanup steps (always-on, so it
-# also runs after a failed deploy). Alchemy state is local to the runner: if
-# a .alchemy dir was never written, deploy never started, and running
-# `makerkit destroy` would just fail looking for state that doesn't exist.
+# Shared destroy step for e2e-deploy.yml's cleanup (runs even after a failed
+# deploy, so a broken run doesn't leave orphaned cloud resources). Deploy
+# state is hosted (the workspace's makerkit-state project), not local to the
+# runner, so `.alchemy/` presence says nothing about whether a deploy ran —
+# the workflow gates this step on the deploy step's own outcome instead, and
+# a destroy against a stack that never deployed is a cheap no-op plan.
 # Used by both the storefront-auth and hello destroy steps.
 #
-# Usage: destroy-guard.sh <no-deploy-label> <entry-file> <stack-name>
-# <no-deploy-label> is prefixed to "deploy never started" in the skip
-# message (e.g. "hello " for hello, "" for storefront-auth).
+# Usage: destroy-guard.sh <label> <entry-file> <stack-name>
+# <label> prefixes log lines (e.g. "hello " for hello, "" for storefront-auth).
 set -euo pipefail
 
 label="$1"
 entry="$2"
 stack_name="$3"
 
-if [ ! -d .alchemy ]; then
-  echo "No .alchemy state dir — ${label}deploy never started, nothing to destroy."
-  exit 0
-fi
-
+echo "Destroying ${label}stack $stack_name…"
 bun node_modules/.bin/makerkit destroy "$entry" --name "$stack_name"
