@@ -7,6 +7,7 @@ import postgres from 'postgres';
 import * as client from '../client.ts';
 import * as credentials from '../credentials.ts';
 import { bootstrapStateConnection } from './bootstrap.ts';
+import { hostedStateBootstrapError } from './errors.ts';
 import { acquireStateLock } from './lock.ts';
 import { migratePrismaState } from './schema.ts';
 import { guardStateService, makePrismaStateService } from './service.ts';
@@ -21,11 +22,13 @@ import { guardStateService, makePrismaStateService } from './service.ts';
  * only requirements are the ones alchemy itself already provides to every
  * state store (`StackServices`).
  *
- * Any bootstrap/lock/migration failure dies the layer (loud, immediate,
- * unrecoverable) rather than surfacing as a typed error — matching core's
- * `LowerOptions.state: Layer.Layer<State, never, StackServices>` contract
- * and alchemy's own convention (e.g. a missing state store is `Effect.die`
- * in `Stack.make`).
+ * Any bootstrap/lock/migration failure is wrapped into an operator-facing
+ * `HostedStateBootstrapError` (naming the workspace and the step that
+ * failed, never the raw driver/API error — see `errors.ts`) before dying the
+ * layer (loud, immediate, unrecoverable) rather than surfacing as a typed
+ * error — matching core's `LowerOptions.state: Layer.Layer<State, never,
+ * StackServices>` contract and alchemy's own convention (e.g. a missing
+ * state store is `Effect.die` in `Stack.make`).
  */
 export const prismaState = (opts: {
   workspaceId: string;
@@ -34,9 +37,12 @@ export const prismaState = (opts: {
     State,
     Effect.gen(function* () {
       const stack = yield* Stack;
+      const bootstrapError = (step: string) => (cause: unknown) =>
+        hostedStateBootstrapError(opts.workspaceId, step, cause);
 
       const { connectionString } = yield* bootstrapStateConnection(opts.workspaceId).pipe(
         Effect.provide(client.layer().pipe(Layer.provide(credentials.fromEnv()))),
+        Effect.mapError(bootstrapError('finding/creating the makerkit-state project')),
       );
 
       // The pool reconnects on demand for ordinary (non-reserved) queries —
@@ -50,9 +56,11 @@ export const prismaState = (opts: {
       });
       yield* Effect.addFinalizer(() => Effect.promise(() => sql.end({ timeout: 5 })));
 
-      yield* migratePrismaState(sql);
+      yield* migratePrismaState(sql).pipe(Effect.mapError(bootstrapError('schema migration')));
 
-      const lock = yield* acquireStateLock(sql, stack.name, stack.stage);
+      const lock = yield* acquireStateLock(sql, stack.name, stack.stage).pipe(
+        Effect.mapError(bootstrapError('lock acquisition')),
+      );
       yield* Effect.addFinalizer(() => Effect.promise(() => lock.release()));
 
       const service = guardStateService(makePrismaStateService(sql), lock.checkLive);
