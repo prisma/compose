@@ -343,7 +343,7 @@ describe('sharing: one system-provisioned postgres, two compute consumers — th
 describe('name validation — fail fast on Prisma name constraints, before creating anything', () => {
   const build = {
     kind: 'node',
-    pack: '@prisma/app-node',
+    assembler: '@prisma/app-node/assemble',
     module: 'file:///test/service.ts',
     entry: 'server.js',
   };
@@ -363,11 +363,12 @@ describe('name validation — fail fast on Prisma name constraints, before creat
 
   test('a too-short postgres provision id throws the framework error at lower time, before any Database is recorded', () => {
     const target = prismaCloud({ workspaceId: 'ws_1' });
-    const root = system('shop', (h) => {
-      const db = h.provision('db', postgres({ name: 'db' }));
-      h.provision('auth', compute({ name: 'auth', deps: { main: postgres() }, build }), {
+    const root = system('shop', {}, ({ provision }) => {
+      const db = provision('db', postgres({ name: 'db' }));
+      provision('auth', compute({ name: 'auth', deps: { main: postgres() }, build }), {
         main: db,
       });
+      return {};
     });
     const before = recorded.db.length;
 
@@ -384,8 +385,9 @@ describe('name validation — fail fast on Prisma name constraints, before creat
 
   test('a too-short service provision id throws the framework error naming the service name', () => {
     const target = prismaCloud({ workspaceId: 'ws_1' });
-    const root = system('shop', (h) => {
-      h.provision('a', compute({ name: 'a', deps: {}, build }));
+    const root = system('shop', {}, ({ provision }) => {
+      provision('a', compute({ name: 'a', deps: {}, build }));
+      return {};
     });
     const before = recorded.svc.length;
 
@@ -400,11 +402,12 @@ describe('name validation — fail fast on Prisma name constraints, before creat
 
   test('a valid-name system lowers unchanged — no throw, the Database is created', () => {
     const target = prismaCloud({ workspaceId: 'ws_1' });
-    const root = system('shop', (h) => {
-      const db = h.provision('data', postgres({ name: 'data' }));
-      h.provision('auth', compute({ name: 'auth', deps: { main: postgres() }, build }), {
+    const root = system('shop', {}, ({ provision }) => {
+      const db = provision('data', postgres({ name: 'data' }));
+      provision('auth', compute({ name: 'auth', deps: { main: postgres() }, build }), {
         main: db,
       });
+      return {};
     });
     const before = recorded.db.length;
 
