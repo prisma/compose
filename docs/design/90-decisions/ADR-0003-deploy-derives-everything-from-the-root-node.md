@@ -26,11 +26,11 @@ service and its dependencies, in vocabulary imported from a target pack:
 
 ```ts
 // src/service.ts
-import { compute, postgresDep } from "@makerkit/prisma-cloud";
+import { compute, postgres } from "@makerkit/prisma-cloud";
 import node from "@makerkit/node";
 import { SQL } from "bun";
 
-const db = postgresDep({ client: ({ url }) => new SQL({ url }) });
+const db = postgres({ client: ({ url }) => new SQL({ url }) });
 
 export default compute({
   name: "hello",

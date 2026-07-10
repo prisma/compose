@@ -58,7 +58,7 @@ The boundary is decided; only the carve is deferred.
 | --- | --- | --- |
 | `@makerkit/core` | node factories (`service`, `resource`, `resourceEnd`, `connectionEnd`, `hex`), `Load`, `configOf`, `hydrate`, `BuildAdapter` type, model types (incl. `Config`) | nothing |
 | `@makerkit/core/deploy` | `lower()`, `lowering()`, `Target` types, `Bundle`/`AssembleInput` (the assembler seam's contract, defined once here) | `alchemy`, `effect` |
-| `@makerkit/prisma-cloud` | `compute()` (declares a service; carries `run`/`load`), `postgres({ name })` + `postgresDep({ client })`, `http()` | `@makerkit/core` only |
+| `@makerkit/prisma-cloud` | `compute()` (declares a service; carries `run`/`load`), `postgres()` (identity, dependency, or the Dependable dual — by argument shape), `http()` | `@makerkit/core` only |
 | `@makerkit/rpc` | the RPC Contract kind — `contract()`, `rpc()`, `serve()`, the typed client binding (see [`connection-contracts.md`](connection-contracts.md)) | `@makerkit/core` + a Standard Schema validator |
 | `@makerkit/prisma-cloud/target` | `prismaCloud()` | `@makerkit/prisma-alchemy`, `alchemy`, `effect` |
 | `@makerkit/node` · `@makerkit/nextjs` (build adapters) | `node()` · `nextjs()` — the authoring **descriptor** (lean, rides in `service.ts`), stamped with the adapter's own `pack` | `@makerkit/core` only |
@@ -299,11 +299,22 @@ interface ConnectionEnd<C = unknown> extends NodeBase {
   readonly connection: Connection<Params, C>
 }
 
-// Dependency map: name → the slot the service declares. Only declarations
-// (ends) are admitted — a concrete ResourceNode can never sit in deps, so a
-// service cannot cause infrastructure to exist by mentioning it. Loaded types
-// are inferred from each entry's hydrate return type — identical mechanics.
-type Deps = Record<string, ResourceEnd<any, any> | ConnectionEnd<any>>
+// A value that can DESCRIBE a service's dependency on itself — e.g. a pack's
+// dual-form resource, provisionable by a hex AND usable directly in deps.
+// toDependency() must be pure: it constructs the slot node and runs no user
+// behavior (the same rule a factory obeys at import). service() calls it at
+// construction and stores the returned end, so everything downstream of the
+// factory (Load, configOf, hydrate, deploy) only ever sees ends.
+interface Dependable<C = unknown, T extends string = string> {
+  toDependency(): ResourceEnd<C, T>
+}
+
+// Dependency map: name → the slot the service declares, or a Dependable that
+// describes one (converted by service() at construction). A concrete
+// ResourceNode never sits in deps, so a service cannot cause infrastructure
+// to exist by mentioning it. Loaded types are inferred from each entry's
+// hydrate return type — identical mechanics for every member.
+type Deps = Record<string, ResourceEnd<any, any> | ConnectionEnd<any> | Dependable<any, any>>
 
 // A Hex: transparent wiring, no code of its own. The body runs at Load (it is
 // wiring, not user code) and provisions the services it owns, supplying a
@@ -330,8 +341,10 @@ interface HexBuilder {
 type ProvisionedRef = { readonly id: string }   // opaque handle within the hex body
 interface ResourceRef<T extends string = string> { readonly id: string; readonly type: T }
 
-type Hydrated<N> =
-  N extends ResourceEnd<infer C, any> ? C : N extends ConnectionEnd<infer C> ? C : never
+type Hydrated<N> =                             // sees through Dependable: its entry hydrates to the end's C
+  N extends ResourceEnd<infer C, any> ? C
+  : N extends ConnectionEnd<infer C> ? C
+  : N extends Dependable<infer C, any> ? C : never
 type HydratedDeps<D extends Deps> = { readonly [K in keyof D]: Hydrated<D[K]> }
 
 // What load() returns: the hydrated deps and the service's resolved params, merged
@@ -374,15 +387,18 @@ function connectionEnd<P extends Params, C>(def: {
 function hex(name: string, body: (h: HexBuilder) => void): HexNode   // body runs at Load, not here
 ```
 
-`service()` freezes `inputs`/`params`/`build`; `resourceEnd()` and
-`connectionEnd()` freeze the connection's declared params. All throw on an empty
-`type`; `service()`, `resourceEnd()`, and `connectionEnd()` also reject an input
-or param name containing `_`, and a hex's `provision()` rejects an id containing
-`_` or `.` — the pack's config-key serializer joins address segments and names
-with `_` (node ids join path segments with `.`), so either character inside a
-name would collide with that separator. Nothing executes: constructing nodes is
-pure. The pack's authoring factory (`compute()`) calls `service()` and returns a
-subclass carrying `run` and `load`.
+`service()` freezes `inputs`/`params`/`build` and **normalizes** its inputs: a
+branded end passes through; a `Dependable` is converted via its `toDependency()`
+(which must return a branded `ResourceEnd` — junk throws). The node therefore
+stores only ends. `resourceEnd()` and `connectionEnd()` freeze the connection's
+declared params. All throw on an empty `type`; `service()`, `resourceEnd()`, and
+`connectionEnd()` also reject an input or param name containing `_`, and a hex's
+`provision()` rejects an id containing `_` or `.` — the pack's config-key
+serializer joins address segments and names with `_` (node ids join path segments
+with `.`), so either character inside a name would collide with that separator.
+Nothing executes: constructing nodes is pure — `toDependency()` constructs a
+node, which is the same class of purity. The pack's authoring factory
+(`compute()`) calls `service()` and returns a subclass carrying `run` and `load`.
 
 ## Graph and Load (`@makerkit/core`)
 
@@ -734,28 +750,46 @@ Authoring entry — nodes carrying their connection/host knowledge; the driver i
 
 ```ts
 import { resource, resourceEnd, service, connectionEnd, configOf, hydrate,
-  type BuildAdapter, type Config, type ConfigDeclaration, type Connection, type Deps,
-  type Loaded, type ResourceNode, type ResourceEnd, type ConnectionEnd,
-  type RunnableServiceNode } from "@makerkit/core"
+  type BuildAdapter, type Config, type ConfigDeclaration, type Connection,
+  type Dependable, type Deps, type Loaded, type ResourceNode, type ResourceEnd,
+  type ConnectionEnd, type RunnableServiceNode } from "@makerkit/core"
 
 export interface PostgresConfig { readonly url: string }
 
-// The resource identity a hex provisions — the ONE place the database exists.
-// Return type declared explicitly so the "postgres" literal never widens.
-export const postgres = (opts: { name: string }): ResourceNode<"postgres"> =>
-  resource({ name: opts.name, pack: "@makerkit/prisma-cloud", type: "postgres" })
+type ClientFactory<C> = (config: PostgresConfig) => C | Promise<C>
 
-// The consumer's slot — what a hex wires a provisioned postgres() into. The
-// app supplies the client factory; C is inferred from its return type.
-export const postgresDep = <C>(opts: {
-  client: (config: PostgresConfig) => C | Promise<C>
-  name?: string
-}): ResourceEnd<C, "postgres"> =>
+// ONE postgres factory; the argument shape picks the role. The shapes are
+// mutually exclusive at compile time (`?: never`), re-checked at runtime for
+// plain JS. { name }: the identity a hex provisions — the ONE place the
+// database exists (return type declared explicitly so the "postgres" literal
+// never widens). { client }: the consumer's ResourceEnd slot; the app supplies
+// the client factory and C is inferred from it. { name, client }: the dual —
+// a provisionable identity that also describes the dependency on itself via
+// Dependable, so a single-consumer app can define it once and use it in deps.
+export function postgres(opts: { name: string; client?: never }): ResourceNode<"postgres">
+export function postgres<C>(opts: { client: ClientFactory<C>; name?: never }): ResourceEnd<C, "postgres">
+export function postgres<C>(opts: { name: string; client: ClientFactory<C> }):
+  ResourceNode<"postgres"> & Dependable<C, "postgres">
+export function postgres<C>(opts: { name?: string; client?: ClientFactory<C> }): unknown {
+  const { name, client } = opts
+  if (name !== undefined && client !== undefined) {
+    // resource() freezes its result, so the dual is the pack's own composed
+    // value: the identity's fields plus the lazy conversion, frozen again. The
+    // built end carries `name` as its diagnostic name; the client never runs here.
+    const identity = resource({ name, pack: "@makerkit/prisma-cloud", type: "postgres" })
+    return Object.freeze({ ...identity, toDependency: () => dependency(client, name) })
+  }
+  if (name !== undefined) return resource({ name, pack: "@makerkit/prisma-cloud", type: "postgres" })
+  if (client !== undefined) return dependency(client)
+  throw new Error("postgres() requires `name` (a provisionable identity), `client` (a dependency), or both.")
+}
+
+const dependency = <C>(client: ClientFactory<C>, name?: string): ResourceEnd<C, "postgres"> =>
   resourceEnd({
-    name: opts.name, type: "postgres",
+    name, type: "postgres",
     connection: {
       params: { url: { type: "string", secret: true } },
-      hydrate: (v) => opts.client({ url: v.url }),   // v: { url: string } — enforced by the declaration
+      hydrate: (v) => client({ url: v.url }),   // v: { url: string } — enforced by the declaration
     },
   })
 
@@ -949,7 +983,7 @@ There is **no public runtime entry**: the boot loop rides on the node itself
 the whole thing), so the wrapper bundle carries the runtime with a single copy of
 core and the bootstrap needs nothing but `./main.js` and a dynamic import of the
 app's entry. (A missing client factory is impossible by construction —
-`postgresDep({ client })` requires it at authoring, at compile time.)
+the dependency shapes of `postgres()` require `client` at compile time.)
 
 ## The build adapter — worked instances
 
@@ -1000,12 +1034,14 @@ only; the app writes and bundles its own entry:
 
 ```ts
 // src/service.ts — the authored service: name + deps + build + where it lives.
-// No handler. The db dep is a DECLARATION (a slot) — nothing is created for it.
-import { compute, postgresDep } from "@makerkit/prisma-cloud"
+// No handler. `db` is the DUAL form: one value is both the provisionable
+// identity (src/hex.ts provisions this same object) and this service's
+// dependency on it — service() converts it to its slot via toDependency().
+import { compute, postgres } from "@makerkit/prisma-cloud"
 import node from "@makerkit/node"
 import { SQL } from "bun"                       // the APP's choice of client
 
-const db = postgresDep({ client: ({ url }) => new SQL({ url }) })
+export const db = postgres({ name: "db", client: ({ url }) => new SQL({ url }) })
 // typeof hydrated db = SQL — inferred from the factory, no phantom declaration
 
 export default compute({
@@ -1016,15 +1052,15 @@ export default compute({
   build: node({ module: import.meta.url, entry: "../dist/server.js" }),
 })
 
-// src/hex.ts — the app root: the hex OWNS the database. It provisions `db` and
-// wires it into the service's slot; its name names the app (ADR-0006).
+// src/hex.ts — the app root: the hex OWNS the database. It provisions the
+// service module's own dual `db` and wires it back into the service's slot;
+// its name names the app (ADR-0006).
 import { hex } from "@makerkit/core"
-import { postgres } from "@makerkit/prisma-cloud"
-import service from "./service.ts"
+import service, { db } from "./service.ts"
 
 export default hex("hello", (h) => {
-  const db = h.provision("db", postgres({ name: "db" }))
-  h.provision("hello", service, { db })
+  const dbRef = h.provision("db", db)
+  h.provision("hello", service, { db: dbRef })
 })
 
 // src/server.ts — the app's OWN entrypoint. The app bundles this to dist/server.js
@@ -1045,7 +1081,7 @@ Bun.serve({ port, hostname: "0.0.0.0",
 // each service's assembly, and drives Alchemy — no bundle map, no stack file.
 ```
 
-`service.load()` is typed end to end by the chain `postgresDep({ client })` →
+`service.load()` is typed end to end by the chain `postgres({ name, client })` →
 `C = SQL` → `compute({ deps: { db } })` captures `{ db: SQL }` → `load()` returns it.
 The app never annotates a dependency type. Note where Bun appears: only in
 `service.ts` (the `new SQL` factory) and `server.ts` (`Bun.serve`, the app's own
@@ -1061,8 +1097,11 @@ model promises. The config round-trip is proven separately at the pack level
 
 ### Two services, connected — the hex (a framework-hosted consumer)
 
-The storefront-auth shape: `auth` is a self-served Hono service (as above);
-`storefront` is a **framework-hosted** Next.js service whose page pulls the `auth`
+The storefront-auth shape: `auth` is a self-served Hono service shaped like the
+one above, except its `db` is the SPLIT form — a client-only
+`postgres({ client })` slot, because the resource is owned away from the
+consumer, by the composing hex below; `storefront` is a **framework-hosted**
+Next.js service whose page pulls the `auth`
 client via `load()`. This replaces the hand-written mixed stack — the URL plumbing,
 the `requireStringOutput` guard, and the hand-named `EnvironmentVariable` all
 disappear into core's sequencing.
