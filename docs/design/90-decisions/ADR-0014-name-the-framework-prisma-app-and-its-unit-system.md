@@ -97,7 +97,7 @@ CLI — a separate project — without stranding users on a name we had to walk 
   `@makerkit/prisma-alchemy` becoming the independent `@prisma/alchemy`), `hex()`
   becomes `system()`, the `makerkit` binary becomes `prisma-app`, and design docs, the
   glossary, the README, and earlier ADRs move from "Hex"/"MakerKit" to
-  "System"/"Prisma App" — including [ADR-0005](ADR-0005-users-build-makerkit-assembles.md),
+  "System"/"Prisma App" — including [ADR-0005](ADR-0005-users-build-the-framework-assembles.md),
   whose title and body name the framework directly.
 - **The registry name is reopened.** "Hexicon" derived from "Hex" and no longer fits;
   a replacement (or a plain descriptive name) is a separate decision, deferred until
