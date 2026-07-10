@@ -1,5 +1,5 @@
-import node from '@makerkit/node';
-import { compute, postgres } from '@makerkit/prisma-cloud';
+import node from '@prisma/app-node';
+import { compute, postgres } from '@prisma/app-cloud';
 import { SQL } from 'bun';
 import { authContract } from './contract.ts';
 

@@ -1,5 +1,5 @@
-import { hex } from '@makerkit/core';
-import { postgres } from '@makerkit/prisma-cloud';
+import { hex } from '@prisma/app';
+import { postgres } from '@prisma/app-cloud';
 import authService from '@storefront-auth/auth';
 import storefrontService from '@storefront-auth/storefront';
 

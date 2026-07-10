@@ -1,10 +1,10 @@
-import { hex } from '@makerkit/core';
-import node from '@makerkit/node';
-import { compute } from '@makerkit/prisma-cloud';
+import { hex } from '@prisma/app';
+import node from '@prisma/app-node';
+import { compute } from '@prisma/app-cloud';
 
 /**
- * A real (not faked) service: `@makerkit/integration-tests` genuinely
- * depends on `@makerkit/node` and `@makerkit/prisma-cloud`, so `makerkit
+ * A real (not faked) service: `@prisma/integration-tests` genuinely
+ * depends on `@prisma/app-node` and `@prisma/app-cloud`, so `makerkit
  * deploy` resolves both packs' `/target` and `/assemble` entries for real,
  * anchored at this fixture's entry package (test/integration itself) — see
  * `../cli.entry-anchored-resolution.test.ts`. The deploy root must be a hex.

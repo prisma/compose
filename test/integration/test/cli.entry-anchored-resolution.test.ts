@@ -1,10 +1,10 @@
 /**
- * Proves the CLI's entry-anchored module resolution (packages/makerkit-cli/
+ * Proves the CLI's entry-anchored module resolution (packages/app-cli/
  * src/resolve-from-entry.ts) against REAL target/adapter packs — not
- * fixtures. This cannot live in packages/makerkit-cli's own suite: the CLI
+ * fixtures. This cannot live in packages/app-cli's own suite: the CLI
  * itself must not depend on any specific pack (see test/README.md), but this
  * package genuinely does, so `makerkit deploy` here resolves
- * `@makerkit/prisma-cloud/target` and `@makerkit/node/assemble` for real.
+ * `@prisma/app-cloud/target` and `@prisma/app-node/assemble` for real.
  *
  * Drives the CLI as a binary (`node_modules/.bin/makerkit`), the same way
  * the example apps do, rather than importing the CLI's internals.

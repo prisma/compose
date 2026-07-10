@@ -1,6 +1,6 @@
-import nextjs from '@makerkit/nextjs';
-import { compute } from '@makerkit/prisma-cloud';
-import { rpc } from '@makerkit/rpc';
+import nextjs from '@prisma/app-nextjs';
+import { compute } from '@prisma/app-cloud';
+import { rpc } from '@prisma/app-rpc';
 import { authContract } from '@storefront-auth/auth/contract';
 
 export default compute({

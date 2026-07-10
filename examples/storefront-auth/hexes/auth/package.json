@@ -13,10 +13,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@makerkit/core": "workspace:*",
-    "@makerkit/node": "workspace:*",
-    "@makerkit/prisma-cloud": "workspace:*",
-    "@makerkit/rpc": "workspace:*",
+    "@prisma/app": "workspace:*",
+    "@prisma/app-node": "workspace:*",
+    "@prisma/app-cloud": "workspace:*",
+    "@prisma/app-rpc": "workspace:*",
     "arktype": "^2.2.3"
   },
   "devDependencies": {
