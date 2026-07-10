@@ -147,9 +147,10 @@ the path and build rules:
   hex source builds it like the rest of its code; a prebuilt package ships its
   runnables and satisfies the requirement at publish time (ADR-0004 makes the
   paths resolve correctly either way, including from inside `node_modules`).
-- **Each service's build adapter resolves from that service's own authoring
-  module** (`build.module` — ADR-0004), so a hex's internal adapter choice
-  travels with it instead of becoming the consuming app's dependency.
+- **Each service's build adapter travels with the service** — a hex's
+  internal adapter choice never becomes the consuming app's dependency. The
+  loading mechanism is the deploy tooling's own decision, recorded separately;
+  this design only pins the requirement.
 - **For prebuilt distribution, versioning is the package manager's job, used
   as designed**: the hex declares `@makerkit/*` and its target pack as peer
   dependencies, and the declared range asserts that the reader code frozen

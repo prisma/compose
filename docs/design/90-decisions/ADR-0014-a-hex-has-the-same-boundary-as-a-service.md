@@ -81,12 +81,12 @@ assertion only means something if the serialized-config and stash encoding
 are treated as public protocol under semver — a breaking format change is a
 major version of the pack.
 
-One resolution rule shifts to match. Each service's build adapter is resolved
-from the *service's own* authoring module (`build.module`) rather than from
-the deploy entry, so a hex's internal choice of adapter stays internal — the
-consuming app does not declare `@makerkit/nextjs` because some installed hex
-happens to use Next inside. The target pack, by contrast, stays entry-anchored:
-one target per application is the application's own declaration (ADR-0003).
+One requirement follows for the deploy tooling: a hex's internal choice of
+build adapter stays internal — the consuming app must not have to declare
+`@makerkit/nextjs` because some installed hex happens to use Next inside. How
+deploy tooling loads adapter and target modules is its own decision, recorded
+separately; this ADR only pins the requirement. The target itself remains the
+application's own declaration — one target per application (ADR-0003).
 
 ## Consequences
 
@@ -126,7 +126,7 @@ one target per application is the application's own declaration (ADR-0003).
 ## Related
 
 - [`ADR-0003`](ADR-0003-deploy-derives-everything-from-the-root-node.md) —
-  target inference; why the target stays entry-anchored while adapters move.
+  target inference; one target per application.
 - [`ADR-0013`](ADR-0013-resources-are-provisioned-by-hexes-deps-are-declarations.md)
   — the unified dependency model a boundary input rides: a resource reaches a
   slot as the same contract-carrying ref a service port does, so forwarding
