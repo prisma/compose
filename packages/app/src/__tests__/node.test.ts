@@ -1,4 +1,8 @@
-import { describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import type { Contract } from '../contract.ts';
 import { dependency, isNode, resource, service, system } from '../node.ts';
 import { conn, providerContract } from './helpers.ts';
@@ -10,6 +14,28 @@ const fakeContract = <Cmp>(cmp: Cmp): Contract<'rpc', Cmp> => ({
 });
 
 const dbContract = () => providerContract('fake/db', { url: '' });
+
+// A real, importable ES module written to a throwaway temp file — data: URL
+// imports proved unreliable under bun for anything beyond a trivial body
+// (member-expression-heavy sources silently fell back to a CJS-interop
+// namespace), so this uses the same real-file approach every other package's
+// dynamic-import test already relies on.
+const tmpDirs: string[] = [];
+
+afterEach(() => {
+  while (tmpDirs.length > 0) {
+    const dir = tmpDirs.pop();
+    if (dir !== undefined) fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+function dataModule(source: string): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'prisma-app-core-node-test-'));
+  tmpDirs.push(dir);
+  const file = path.join(dir, 'mod.mjs');
+  fs.writeFileSync(file, source);
+  return pathToFileURL(file).href;
+}
 
 describe('resource()', () => {
   test('returns a branded, frozen resource identity — the routing type is the provided contract kind', () => {
@@ -55,6 +81,19 @@ describe('resource()', () => {
     expect(() => resource({ name: 'db', pack: '', provides: dbContract() })).toThrow(
       /non-empty pack/,
     );
+  });
+
+  test('targetModule is absent by default, and set when given', () => {
+    const bare = resource({ name: 'db', pack: 'test/pack', provides: dbContract() });
+    expect(bare.targetModule).toBeUndefined();
+
+    const withTarget = resource({
+      name: 'db',
+      pack: 'test/pack',
+      provides: dbContract(),
+      targetModule: '@prisma/app-cloud/target',
+    });
+    expect(withTarget.targetModule).toBe('@prisma/app-cloud/target');
   });
 });
 
@@ -127,12 +166,20 @@ describe('dependency()', () => {
       }),
     ).toThrow(/param name "db_url" may not contain "_"/);
   });
+
+  test('declares no targetModule — loadTarget() is a guarded error naming the node', async () => {
+    const end = dependency({ type: 'fake/db', connection: conn({}, () => ({})) });
+    expect(end.targetModule).toBeUndefined();
+    await expect(end.loadTarget()).rejects.toThrow(
+      /"fake\/db" \(kind "dependency"\) declares no targetModule/,
+    );
+  });
 });
 
 describe('service()', () => {
   const build = {
     kind: 'node',
-    pack: '@prisma/app-node',
+    assembler: '@prisma/app-node/assemble',
     module: 'file:///app/src/service.ts',
     entry: 'dist/server.js',
   };
@@ -161,7 +208,7 @@ describe('service()', () => {
     expect(node.params).toEqual({ port: { type: 'number', default: 3000 } });
     expect(node.build).toEqual({
       kind: 'node',
-      pack: '@prisma/app-node',
+      assembler: '@prisma/app-node/assemble',
       module: 'file:///app/src/service.ts',
       entry: 'dist/server.js',
     });
@@ -278,13 +325,146 @@ describe('service()', () => {
     expect(node.expose?.rpc).toBe(authContract);
     expect(Object.isFrozen(node.expose)).toBe(true);
   });
+
+  test('targetModule is absent by default, and set when given', () => {
+    const bare = service({
+      name: 'hello',
+      pack: 'test/pack',
+      type: 'fake/app',
+      inputs: {},
+      params: {},
+      build,
+    });
+    expect(bare.targetModule).toBeUndefined();
+
+    const withTarget = service({
+      name: 'hello',
+      pack: 'test/pack',
+      type: 'fake/app',
+      inputs: {},
+      params: {},
+      build,
+      targetModule: '@prisma/app-cloud/target',
+    });
+    expect(withTarget.targetModule).toBe('@prisma/app-cloud/target');
+  });
+});
+
+describe('Node.loadTarget() — node-owned target loading', () => {
+  test('imports a real module at targetModule and returns its namespace', async () => {
+    const specifier = dataModule("export function fromEnv() { return 'ok'; }");
+    const node = service({
+      name: 'hello',
+      pack: 'test/pack',
+      type: 'fake/app',
+      inputs: {},
+      params: {},
+      build: {
+        kind: 'node',
+        assembler: '@prisma/app-node/assemble',
+        module: 'file:///app/src/service.ts',
+        entry: 'dist/server.js',
+      },
+      targetModule: specifier,
+    });
+
+    const mod = await node.loadTarget();
+    expect(
+      typeof mod === 'object' &&
+        mod !== null &&
+        'fromEnv' in mod &&
+        typeof mod.fromEnv === 'function'
+        ? mod.fromEnv()
+        : undefined,
+    ).toBe('ok');
+  });
+
+  test('a failed resolution is wrapped naming the specifier and the fix, not a bare stack trace', async () => {
+    const node = resource({
+      name: 'db',
+      pack: 'test/pack',
+      provides: dbContract(),
+      targetModule: '@prisma/does-not-exist-xyz/target',
+    });
+
+    await expect(node.loadTarget()).rejects.toThrow(
+      /Cannot resolve the target module "@prisma\/does-not-exist-xyz\/target".*must depend on the package/s,
+    );
+  });
+
+  test('a system declares no targetModule — loadTarget() is a guarded error', async () => {
+    const node = system('shop', {}, () => ({}));
+    await expect(node.loadTarget()).rejects.toThrow(
+      /"shop" \(kind "system"\) declares no targetModule/,
+    );
+  });
+});
+
+describe('ServiceNode.loadAssembler()/assemble() — node-owned build-adapter loading', () => {
+  const makeService = (assembler: string) =>
+    service({
+      name: 'hello',
+      pack: 'test/pack',
+      type: 'fake/app',
+      inputs: {},
+      params: {},
+      build: {
+        kind: 'node',
+        assembler,
+        module: 'file:///app/src/service.ts',
+        entry: 'dist/server.js',
+      },
+    });
+
+  test('loadAssembler() imports build.assembler and returns its namespace', async () => {
+    const specifier = dataModule("export function assemble() { return 'unused'; }");
+    const mod = await makeService(specifier).loadAssembler();
+    expect(
+      typeof mod === 'object' &&
+        mod !== null &&
+        'assemble' in mod &&
+        typeof mod.assemble === 'function'
+        ? mod.assemble()
+        : undefined,
+    ).toBe('unused');
+  });
+
+  test('assemble() loads the assembler, calls it with { build, ...opts }, and returns its Bundle', async () => {
+    const specifier = dataModule(
+      'export async function assemble(input) { ' +
+        "return { dir: '/bundles/' + input.build.kind, entry: input.wrapperNoExternal ? 'inlined.js' : 'server.js' }; " +
+        '}',
+    );
+    const node = makeService(specifier);
+
+    const bundle = await node.assemble({ wrapperNoExternal: [/^@storefront-auth\//] });
+
+    expect(bundle).toEqual({ dir: '/bundles/node', entry: 'inlined.js' });
+  });
+
+  test('assemble() throws naming the specifier when the module has no assemble() export', async () => {
+    const specifier = dataModule('export const notAssemble = 1;');
+    await expect(makeService(specifier).assemble()).rejects.toThrow(
+      new RegExp(
+        `"${specifier.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}" has no assemble\\(\\) export`,
+      ),
+    );
+  });
+
+  test('a failed assembler resolution is wrapped naming the specifier and the fix', async () => {
+    const node = makeService('@prisma/does-not-exist-xyz/assemble');
+    await expect(node.assemble()).rejects.toThrow(
+      /Cannot resolve the build assembler "@prisma\/does-not-exist-xyz\/assemble".*must depend on the package/s,
+    );
+  });
 });
 
 describe('system()', () => {
   test('construction is INERT — the body runs only at Load', () => {
     let bodyCalls = 0;
-    const node = system('shop', () => {
+    const node = system('shop', {}, () => {
       bodyCalls += 1;
+      return {};
     });
 
     expect(bodyCalls).toBe(0);
@@ -295,6 +475,6 @@ describe('system()', () => {
   });
 
   test('throws on an empty name', () => {
-    expect(() => system('', () => {})).toThrow(/non-empty name/);
+    expect(() => system('', {}, () => ({}))).toThrow(/non-empty name/);
   });
 });
