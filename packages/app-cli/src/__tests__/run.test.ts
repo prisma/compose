@@ -74,9 +74,9 @@ function makeAppDir(name = 'fixture-app'): { dir: string; entryPath: string } {
   fs.writeFileSync(
     entryPath,
     [
-      `import { hex, service } from ${JSON.stringify(coreIndex)};`,
+      `import { service, system } from ${JSON.stringify(coreIndex)};`,
       '',
-      `export default hex(${JSON.stringify(name)}, (h) => {`,
+      `export default system(${JSON.stringify(name)}, (h) => {`,
       `  h.provision(${JSON.stringify(name)}, service({`,
       `    name: ${JSON.stringify(name)},`,
       "    pack: 'fixture-target-pack',",

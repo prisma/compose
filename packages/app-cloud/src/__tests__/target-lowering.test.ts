@@ -59,7 +59,7 @@ mock.module('@prisma/alchemy', () => ({
 
 const { prismaCloud } = await import('../target.ts');
 const { compute, postgres } = await import('../index.ts');
-const { hex } = await import('@prisma/app');
+const { system } = await import('@prisma/app');
 const { lowering } = await import('@prisma/app/deploy');
 
 const run = <A>(eff: Effect.Effect<A, unknown, unknown>): A =>
@@ -102,7 +102,7 @@ describe('prismaCloud().application.provision', () => {
 describe("prismaCloud().resources['postgres']", () => {
   test("creates a Database + Connection in the application's project; url unwraps the Redacted connection string", () => {
     const target = prismaCloud({ workspaceId: 'ws_1' });
-    // ctx.id is the hex provision id — one Database per provisioned resource.
+    // ctx.id is the system provision id — one Database per provisioned resource.
     const ctx = {
       id: 'db',
       application: { outputs: { projectId: 'shop-project#cloud-id' } },
@@ -282,7 +282,7 @@ describe("prismaCloud().services['compute']", () => {
   });
 });
 
-describe('sharing: one hex-provisioned postgres, two compute consumers — through core lowering()', () => {
+describe('sharing: one system-provisioned postgres, two compute consumers — through core lowering()', () => {
   test("ONE Database + Connection; both services' env writes carry its url under their own keys", () => {
     const target = prismaCloud({ workspaceId: 'ws_1' });
     const build = {
@@ -292,7 +292,7 @@ describe('sharing: one hex-provisioned postgres, two compute consumers — throu
       entry: 'server.js',
     };
     const client = ({ url }: { url: string }) => ({ url });
-    const root = hex('shop', (h) => {
+    const root = system('shop', (h) => {
       const db = h.provision('db', postgres({ name: 'db' }));
       h.provision('auth', compute({ name: 'auth', deps: { main: postgres({ client }) }, build }), {
         main: db,

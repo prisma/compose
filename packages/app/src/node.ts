@@ -44,9 +44,9 @@ export interface PackAuthoredNode extends NodeBase {
 
 /**
  * A Resource's identity: the one place a piece of infrastructure exists.
- * Provisioned by a hex (`h.provision(id, postgres({ name }))`), never embedded
+ * Provisioned by a system (`h.provision(id, postgres({ name }))`), never embedded
  * in a service's deps — a service declares a DependencyEnd slot instead and
- * the hex wires this node's ref into it. `provides` is the Contract the
+ * the system wires this node's ref into it. `provides` is the Contract the
  * resource offers consumers (its one port); `type` — the routing key — is
  * derived from `provides.kind`, so wiring a slot to a resource whose contract
  * doesn't satisfy the slot's requirement fails at compile time and at Load,
@@ -146,7 +146,7 @@ export interface RunnableServiceNode<
 
 /**
  * A service's dependency declaration — THE slot, whoever the producer is.
- * Nothing is provisioned FOR it: at Load the enclosing hex wires a provisioned
+ * Nothing is provisioned FOR it: at Load the enclosing system wires a provisioned
  * producer's ref into it (a service's exposed port, or a resource — the
  * contract determines validity, never the producer's kind), and at deploy it
  * becomes an EDGE from that producer to the consumer. At run it hydrates a
@@ -154,7 +154,7 @@ export interface RunnableServiceNode<
  * producer's address reached it.
  *
  * `Req` is the contract this end requires — `unknown` for an untyped end
- * (e.g. `http()`, the escape hatch that accepts anything). `HexBuilder.provision`
+ * (e.g. `http()`, the escape hatch that accepts anything). `SystemBuilder.provision`
  * checks each wired ref against `Req` at compile time; `required` carries the
  * same contract as a runtime value so Load can call its `satisfies()` as the
  * backstop.
@@ -167,16 +167,16 @@ export interface DependencyEnd<C = unknown, Req = unknown> extends NodeBase {
 }
 
 /**
- * A Hex: transparent wiring, no code of its own. The body runs at Load (it
+ * A System: transparent wiring, no code of its own. The body runs at Load (it
  * is wiring, not user code) and provisions the resources and services it
  * owns, supplying a producer for every dependency input. Minimal form —
- * boundary ports and nesting arrive with full Hex composition.
+ * boundary ports and nesting arrive with full System composition.
  */
-export interface HexNode {
+export interface SystemNode {
   readonly [NODE]: true;
-  readonly kind: 'hex';
+  readonly kind: 'system';
   readonly name: string;
-  body(h: HexBuilder): void;
+  body(h: SystemBuilder): void;
 }
 
 /**
@@ -206,7 +206,7 @@ export type ProvisionedRef<E extends Expose = Record<never, never>> = { readonly
 type ReqOf<DE> = DE extends DependencyEnd<any, infer Req> ? Req : never;
 
 /**
- * `HexBuilder.provision`'s wiring argument: one producer ref per dependency
+ * `SystemBuilder.provision`'s wiring argument: one producer ref per dependency
  * slot, each checked against the slot's required contract — an untyped
  * input's Req is `unknown`, so it accepts anything (http()'s escape hatch).
  * `NoInfer` keeps the check honest — without it, an incompatible ref would
@@ -214,7 +214,7 @@ type ReqOf<DE> = DE extends DependencyEnd<any, infer Req> ? Req : never;
  */
 type Wiring<D extends Deps> = { [K in keyof D]: NoInfer<ReqOf<D[K]>> };
 
-export interface HexBuilder {
+export interface SystemBuilder {
   /**
    * Provisions an owned resource under a stable id — the ONE place that
    * resource exists. Returns the ref (the provided contract, tagged with the
@@ -342,7 +342,7 @@ function frozenShallowCopy<T extends object>(obj: T): T {
 /**
  * Constructs a branded, frozen Resource node — an identity plus the Contract
  * it provides; the routing `type` is the contract's `kind`. Pure — nothing
- * executes; nothing is provisioned until a hex provisions it.
+ * executes; nothing is provisioned until a system provisions it.
  */
 // biome-ignore lint/suspicious/noExplicitAny: opaque per-contract Cmp — matches ResourceNode's own bound.
 export function resource<C extends Contract<any, any>>(def: {
@@ -445,14 +445,14 @@ export function dependency<P extends Params, C, Req = unknown>(def: {
 }
 
 /**
- * Constructs a branded, frozen Hex node. Construction is INERT — the body is
- * wiring, not user code, and runs only when the hex is Loaded.
+ * Constructs a branded, frozen System node. Construction is INERT — the body is
+ * wiring, not user code, and runs only when the system is Loaded.
  */
-export function hex(name: string, body: (h: HexBuilder) => void): HexNode {
-  requireName(name, 'hex');
-  const node: HexNode = {
+export function system(name: string, body: (h: SystemBuilder) => void): SystemNode {
+  requireName(name, 'system');
+  const node: SystemNode = {
     [NODE]: true,
-    kind: 'hex',
+    kind: 'system',
     name,
     body,
   };
@@ -460,10 +460,10 @@ export function hex(name: string, body: (h: HexBuilder) => void): HexNode {
 }
 
 /**
- * True if `value` was constructed by this module's factories. Includes hexes:
- * a HexNode carries the same brand even though it is not a routable NodeBase.
+ * True if `value` was constructed by this module's factories. Includes systems:
+ * a SystemNode carries the same brand even though it is not a routable NodeBase.
  */
-export function isNode(value: unknown): value is NodeBase | HexNode {
+export function isNode(value: unknown): value is NodeBase | SystemNode {
   return (
     typeof value === 'object' &&
     value !== null &&

@@ -1,9 +1,9 @@
 /**
  * Pipeline step 5 (deploy-cli.md § The pipeline, ADR-0004/0005): for every
  * service node in the loaded graph, route its build adapter's `pack` to the
- * matching `/assemble` entry and run it. The root is always a hex, so this
+ * matching `/assemble` entry and run it. The root is always a system, so this
  * produces one bundle per provision id (graph.nodes' own ids for provisioned
- * services — the same correlation the interim `hex.ts` hand-wrote). Each
+ * services — the same correlation the interim `system.ts` hand-wrote). Each
  * build adapter carries its own
  * authoring module (`build.module`) and resolves its paths (`build.entry`,
  * etc.) relative to it — this package does no path resolution of its own

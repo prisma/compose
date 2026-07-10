@@ -1,4 +1,4 @@
-import { hex, service } from '@prisma/app';
+import { service, system } from '@prisma/app';
 
 const makeService = (name: string) =>
   service({
@@ -10,7 +10,7 @@ const makeService = (name: string) =>
     build: { kind: 'node', pack: '@prisma/app-node', module: import.meta.url, entry: 'server.js' },
   });
 
-export default hex('fixture-hex', (h) => {
+export default system('fixture-system', (h) => {
   h.provision('one', makeService('one'));
   h.provision('two', makeService('two'));
 });

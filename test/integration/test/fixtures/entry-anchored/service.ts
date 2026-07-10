@@ -1,4 +1,4 @@
-import { hex } from '@prisma/app';
+import { system } from '@prisma/app';
 import node from '@prisma/app-node';
 import { compute } from '@prisma/app-cloud';
 
@@ -7,9 +7,9 @@ import { compute } from '@prisma/app-cloud';
  * depends on `@prisma/app-node` and `@prisma/app-cloud`, so `makerkit
  * deploy` resolves both packs' `/target` and `/assemble` entries for real,
  * anchored at this fixture's entry package (test/integration itself) — see
- * `../cli.entry-anchored-resolution.test.ts`. The deploy root must be a hex.
+ * `../cli.entry-anchored-resolution.test.ts`. The deploy root must be a system.
  */
-export default hex('entry-anchored-fixture', (h) => {
+export default system('entry-anchored-fixture', (h) => {
   h.provision(
     'entry-anchored-fixture',
     compute({

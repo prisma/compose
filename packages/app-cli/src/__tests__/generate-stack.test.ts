@@ -5,7 +5,7 @@ import { renderStackFile } from '../generate-stack.ts';
 import { collectPacks, resolveSinglePack } from '../infer-target.ts';
 import { loadEntry } from '../load-entry.ts';
 
-describe('renderStackFile() — a hex root', () => {
+describe('renderStackFile() — a system root', () => {
   test('renders imports, the name literal, and the bundles dir/entry literals', () => {
     const content = renderStackFile({
       entryPath: '/repo/app/hex.ts',
@@ -62,13 +62,13 @@ describe('renderStackFile() — a hex root', () => {
   });
 });
 
-describe('the generated stack file for a real hex entry (no alchemy run)', () => {
+describe('the generated stack file for a real system entry (no alchemy run)', () => {
   test('matches the pipeline’s Load → infer target → render sequence', async () => {
     const fixtureDir = path.join(import.meta.dir, 'fixtures');
-    const entry = await loadEntry('valid-hex.ts', fixtureDir);
+    const entry = await loadEntry('valid-system.ts', fixtureDir);
 
-    expect(entry.root.kind).toBe('hex');
-    expect(entry.root.name).toBe('fixture-hex');
+    expect(entry.root.kind).toBe('system');
+    expect(entry.root.name).toBe('fixture-system');
 
     const graph = Load(entry.root);
     const pack = resolveSinglePack(collectPacks(graph));
@@ -88,8 +88,8 @@ describe('the generated stack file for a real hex entry (no alchemy run)', () =>
     });
 
     expect(content).toContain('import { fromEnv } from "test/pack/target";');
-    expect(content).toContain('import app from "../valid-hex.ts";');
-    expect(content).toContain('name: "fixture-hex"');
+    expect(content).toContain('import app from "../valid-system.ts";');
+    expect(content).toContain('name: "fixture-system"');
     expect(content).toContain(
       `"one": { dir: ${JSON.stringify(path.join(fixtureDir, 'one', 'dist', 'bundle'))}, entry: "server.js" }`,
     );

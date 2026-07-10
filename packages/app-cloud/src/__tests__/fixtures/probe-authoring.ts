@@ -1,7 +1,7 @@
 // Bundle probe for the import-split guard: uses BOTH authoring entries (core
 // and pack) the way a user service module would, with real value usage so
 // nothing tree-shakes away.
-import { configOf, hex, Load } from '@prisma/app';
+import { configOf, Load, system } from '@prisma/app';
 import { compute, postgres } from '@prisma/app-cloud';
 
 const app = compute({
@@ -20,7 +20,7 @@ const app = compute({
 });
 
 export const graph = Load(
-  hex('probe-hex', (h) => {
+  system('probe-system', (h) => {
     const db = h.provision('db', postgres({ name: 'db' }));
     h.provision('app', app, { db });
   }),

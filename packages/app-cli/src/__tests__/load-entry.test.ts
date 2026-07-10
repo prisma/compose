@@ -11,20 +11,20 @@ describe('loadEntry()', () => {
     expect(entry.path).toBe(fixture('valid-service.ts'));
   });
 
-  test('accepts a hex default export', async () => {
-    const entry = await loadEntry(fixture('valid-hex.ts'), import.meta.dir);
-    expect(entry.root.kind).toBe('hex');
+  test('accepts a system default export', async () => {
+    const entry = await loadEntry(fixture('valid-system.ts'), import.meta.dir);
+    expect(entry.root.kind).toBe('system');
   });
 
   test('rejects a plain-object default export — names what the module must export', async () => {
     await expect(loadEntry(fixture('non-node-export.ts'), import.meta.dir)).rejects.toThrow(
-      /must default-export a node \(a service or a hex\)/,
+      /must default-export a node \(a service or a system\)/,
     );
   });
 
   test('rejects a resource default export — a resource is not a valid root', async () => {
     await expect(loadEntry(fixture('resource-export.ts'), import.meta.dir)).rejects.toThrow(
-      /must default-export a node \(a service or a hex\)/,
+      /must default-export a node \(a service or a system\)/,
     );
   });
 

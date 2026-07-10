@@ -96,8 +96,8 @@ export const prismaCloud = (o: PrismaCloudOptions): Target => ({
   },
 
   resources: {
-    // One Database per hex-provisioned postgres resource, in the application's
-    // project — `id` is the hex provision id (e.g. "db"), so a resource shared
+    // One Database per system-provisioned postgres resource, in the application's
+    // project — `id` is the system provision id (e.g. "db"), so a resource shared
     // by several consumers is created exactly once. The url output fills each
     // consumer's Config leaf and is encoded by serialize under that service's
     // own named key — never the platform default.

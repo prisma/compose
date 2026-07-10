@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { Graph } from '@prisma/app';
-import { hex, Load, service } from '@prisma/app';
+import { Load, service, system } from '@prisma/app';
 import { AssembleError } from '../assemble-error.ts';
 import { assembleServices } from '../assemble-services.ts';
 
@@ -14,7 +14,7 @@ const fakeRun = async (_pack: string, input: { build: { module: string } }) => (
 });
 
 describe('assembleServices()', () => {
-  test('a hex root produces `bundles` keyed by each service’s provision id', async () => {
+  test('a system root produces `bundles` keyed by each service’s provision id', async () => {
     const dirOne = '/fixtures/auth';
     const dirTwo = '/fixtures/storefront';
     const makeService = (name: string, dir: string) =>
@@ -31,7 +31,7 @@ describe('assembleServices()', () => {
           entry: 'server.js',
         },
       });
-    const root = hex('fixture-hex', (h) => {
+    const root = system('fixture-system', (h) => {
       h.provision('auth', makeService('auth', dirOne));
       h.provision('storefront', makeService('storefront', dirTwo));
     });
@@ -45,8 +45,8 @@ describe('assembleServices()', () => {
     });
   });
 
-  test('a hex with no provisioned services throws AssembleError', async () => {
-    const root = hex('empty-hex', () => {});
+  test('a system with no provisioned services throws AssembleError', async () => {
+    const root = system('empty-system', () => {});
     const graph: Graph = Load(root);
 
     await expect(assembleServices(graph, '/fixtures/entry.ts', fakeRun)).rejects.toThrow(
@@ -72,7 +72,7 @@ describe('assembleServices()', () => {
           entry: 'x',
         },
       });
-    const root = hex('fixture-hex', (h) => {
+    const root = system('fixture-system', (h) => {
       h.provision('svc', makeService());
     });
     const graph = Load(root);

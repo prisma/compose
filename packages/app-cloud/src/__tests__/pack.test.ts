@@ -186,7 +186,7 @@ describe("the config serializer (shared by run() and /target's serialize)", () =
     expect(configKey('', port)).toBe('PORT');
   });
 
-  test('configKey: a hex-addressed service prefixes with its address segment', () => {
+  test('configKey: a system-addressed service prefixes with its address segment', () => {
     const app = compute({
       name: 'test-service',
       deps: {

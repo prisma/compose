@@ -1,5 +1,5 @@
 /**
- * The router. Core's only job at deploy: Load (a hex root), then
+ * The router. Core's only job at deploy: Load (a system root), then
  * for each node walk the target's lowering tables and run what they find —
  * application once, then per service: resources → provision → build the
  * typed Config → serialize → package → deploy. Deps before dependents,
@@ -15,7 +15,7 @@ import * as Effect from 'effect/Effect';
 import type * as Layer from 'effect/Layer';
 import type { Config } from './config.ts';
 import { type Graph, Load, type NodeId } from './graph.ts';
-import type { BuildAdapter, HexNode, ResourceNode, ServiceNode } from './node.ts';
+import type { BuildAdapter, SystemNode, ResourceNode, ServiceNode } from './node.ts';
 
 /** The Layer shape every Alchemy state store must satisfy — what `LowerOptions.state` and `Target.state` both traffic in. */
 export type AlchemyStateLayer = Layer.Layer<State, never, StackServices>;
@@ -110,7 +110,7 @@ export interface LowerContext {
   readonly id: NodeId;
   /**
    * The node's deployment address (graph position): its provision id in the
-   * hex root. The config-key namespace and the bootstrap parameter.
+   * system root. The config-key namespace and the bootstrap parameter.
    */
   readonly address: string;
   readonly node: ServiceNode | ResourceNode;
@@ -189,7 +189,7 @@ export class LowerError extends Error {
  * input's params matched by name to its producer's lowered outputs, plus
  * service-param defaults. Leaf values are provisioning refs, not strings.
  * Every slot resolves the same way, via its "dependency" edge to whatever
- * the hex wired in: a resource's lowered outputs (shared by every consumer
+ * the system wired in: a resource's lowered outputs (shared by every consumer
  * wired to it), or a producer service's deploy outputs (already fully
  * deployed in topo order, so its URL is real — PRO-200).
  */
@@ -241,7 +241,7 @@ export function resolveStateLayer(opts: LowerOptions, target: Target): AlchemySt
  * Composable form — for MIXED topologies: MakerKit-authored nodes beside
  * hand-wired Alchemy resources in one stack. Runs the same Load → route walk
  * inside the caller's stack effect and returns the root's LoweredNode, whose
- * outputs (e.g. the deployed URL) hand-wired resources may consume. A hex
+ * outputs (e.g. the deployed URL) hand-wired resources may consume. A system
  * root has no outputs of its own yet (boundary ports are future work) — its
  * lowering returns `{ outputs: {} }`.
  *
@@ -251,7 +251,7 @@ export function resolveStateLayer(opts: LowerOptions, target: Target): AlchemySt
  * only inhabitant.
  */
 export function lowering(
-  root: HexNode,
+  root: SystemNode,
   target: Target,
   opts: LowerOptions,
 ): Effect.Effect<LoweredNode, LowerError, unknown> {
@@ -259,8 +259,8 @@ export function lowering(
     const graph = Load(root, { id: opts.name });
     const lowered = new Map<NodeId, LoweredNode>();
 
-    // Every hex-provisioned service's own graph id IS its address (single-
-    // level hex only — nesting is out of scope).
+    // Every system-provisioned service's own graph id IS its address (single-
+    // level system only — nesting is out of scope).
     const serviceAddress = new Map<NodeId, string>();
     for (const { id, node } of graph.nodes) {
       if (node.kind === 'service') serviceAddress.set(id, id);
@@ -279,8 +279,8 @@ export function lowering(
     const application = yield* target.application.provision(appCtx);
 
     for (const { id, node } of graph.nodes) {
-      if (node.kind === 'hex') continue; // the transparent root itself — nothing to lower
-      // Dependency slots are edges only, never lowered — only hex-provisioned
+      if (node.kind === 'system') continue; // the transparent root itself — nothing to lower
+      // Dependency slots are edges only, never lowered — only system-provisioned
       // resources and services are.
       if (node.kind === 'dependency') continue;
 
@@ -341,7 +341,7 @@ export function lowering(
  * The whole-stack wrapper: Load → route each node through the target's
  * tables → an Alchemy Stack (the default export the alchemy CLI consumes).
  */
-export function lower(root: HexNode, target: Target, opts: LowerOptions) {
+export function lower(root: SystemNode, target: Target, opts: LowerOptions) {
   // A LowerError at deploy is fatal; orDie moves it off the error channel so
   // the stack effect matches what Alchemy.Stack accepts. The requirements
   // channel is `unknown` by design (the pack's lowerings carry their own

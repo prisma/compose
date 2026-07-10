@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { Contract } from '../contract.ts';
-import { dependency, hex, isNode, resource, service } from '../node.ts';
+import { dependency, isNode, resource, service, system } from '../node.ts';
 import { conn, providerContract } from './helpers.ts';
 
 const fakeContract = <Cmp>(cmp: Cmp): Contract<'rpc', Cmp> => ({
@@ -280,21 +280,21 @@ describe('service()', () => {
   });
 });
 
-describe('hex()', () => {
+describe('system()', () => {
   test('construction is INERT — the body runs only at Load', () => {
     let bodyCalls = 0;
-    const node = hex('shop', () => {
+    const node = system('shop', () => {
       bodyCalls += 1;
     });
 
     expect(bodyCalls).toBe(0);
     expect(isNode(node)).toBe(true);
-    expect(node.kind).toBe('hex');
+    expect(node.kind).toBe('system');
     expect(node.name).toBe('shop');
     expect(Object.isFrozen(node)).toBe(true);
   });
 
   test('throws on an empty name', () => {
-    expect(() => hex('', () => {})).toThrow(/non-empty name/);
+    expect(() => system('', () => {})).toThrow(/non-empty name/);
   });
 });

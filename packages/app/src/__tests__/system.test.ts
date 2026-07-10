@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import type { Contract } from '../contract.ts';
 import { Load, LoadError } from '../graph.ts';
 import type { ProvisionedRef } from '../node.ts';
-import { dependency, hex, resource, service } from '../node.ts';
+import { dependency, resource, service, system } from '../node.ts';
 import { conn, providerContract } from './helpers.ts';
 
 const build = {
@@ -50,16 +50,16 @@ const makeStorefrontService = () =>
     build,
   });
 
-const twoServiceHex = () =>
-  hex('shop', (h) => {
+const twoServiceSystem = () =>
+  system('shop', (h) => {
     const db = h.provision('db', dbResource());
     const authRef = h.provision('auth', makeAuthService(), { db });
     h.provision('storefront', makeStorefrontService(), { auth: authRef });
   });
 
-describe('Load of a hex root', () => {
+describe('Load of a system root', () => {
   test('executes the body, producing owned resources and services, input edges, and dependency edges', () => {
-    const root = twoServiceHex();
+    const root = twoServiceSystem();
 
     const graph = Load(root);
 
@@ -71,7 +71,7 @@ describe('Load of a hex root', () => {
       { id: 'auth', kind: 'service' },
       { id: 'storefront.auth', kind: 'dependency' },
       { id: 'storefront', kind: 'service' },
-      { id: 'shop', kind: 'hex' },
+      { id: 'shop', kind: 'system' },
     ]);
     expect(graph.edges).toEqual([
       { from: 'auth.db', to: 'auth', input: 'db', kind: 'input' },
@@ -81,11 +81,11 @@ describe('Load of a hex root', () => {
     ]);
   });
 
-  test('opts.id overrides the hex name as root id', () => {
-    const graph = Load(twoServiceHex(), { id: 'prod' });
+  test('opts.id overrides the system name as root id', () => {
+    const graph = Load(twoServiceSystem(), { id: 'prod' });
 
     expect(graph.root.id).toBe('prod');
-    // Provision ids are hex-local and unaffected by the root id.
+    // Provision ids are system-local and unaffected by the root id.
     expect(graph.nodes.map((n) => n.id)).toContain('auth');
   });
 
@@ -99,7 +99,7 @@ describe('Load of a hex root', () => {
       params: {},
       build,
     });
-    const root = hex('shop', (h) => {
+    const root = system('shop', (h) => {
       bodyCalls += 1;
       h.provision('only', svc);
     });
@@ -110,7 +110,7 @@ describe('Load of a hex root', () => {
   });
 
   test('duplicate provision ids are a LoadError — resources and services share one id space', () => {
-    const root = hex('shop', (h) => {
+    const root = system('shop', (h) => {
       h.provision('auth', dbResource());
       const db = h.provision('db', dbResource());
       h.provision('auth', makeAuthService(), { db });
@@ -121,16 +121,16 @@ describe('Load of a hex root', () => {
   });
 
   test('a provision id containing "_" or "." is a LoadError naming the separators', () => {
-    const root = hex('shop', (h) => {
+    const root = system('shop', (h) => {
       h.provision('auth_db', dbResource());
     });
 
     expect(() => Load(root)).toThrow(LoadError);
-    expect(() => Load(root)).toThrow(/id "auth_db" \(hex "shop"\) may not contain "_" or "\."/);
+    expect(() => Load(root)).toThrow(/id "auth_db" \(system "shop"\) may not contain "_" or "\."/);
   });
 
   test('a dangling dependency input names the service and the input', () => {
-    const root = hex('shop', (h) => {
+    const root = system('shop', (h) => {
       const db = h.provision('db', dbResource());
       h.provision('auth', makeAuthService(), { db });
       h.provision('storefront', makeStorefrontService()); // auth input left unwired
@@ -143,7 +143,7 @@ describe('Load of a hex root', () => {
   });
 
   test('wiring to an unknown producer id is a LoadError', () => {
-    const root = hex('shop', (h) => {
+    const root = system('shop', (h) => {
       h.provision('storefront', makeStorefrontService(), {
         auth: { id: 'nope' } as ProvisionedRef,
       });
@@ -154,7 +154,7 @@ describe('Load of a hex root', () => {
   });
 
   test('wiring a name that is not a dependency slot of the service is a LoadError', () => {
-    const root = hex('shop', (h) => {
+    const root = system('shop', (h) => {
       const db = h.provision('db', dbResource());
       const authRef = h.provision('auth', makeAuthService(), { db });
       h.provision('other', makeStorefrontService(), { auth: authRef, extra: authRef } as never);
@@ -168,7 +168,7 @@ describe('Load of a hex root', () => {
     // The API hands a ref back only after the producer is provisioned, so an
     // honest body cannot express a forward reference, let alone a cycle.
     const seen: string[] = [];
-    const root = hex('shop', (h) => {
+    const root = system('shop', (h) => {
       const db = h.provision('db', dbResource());
       const ref = h.provision('auth', makeAuthService(), { db });
       seen.push(ref.id);
@@ -197,7 +197,7 @@ describe('Load of a hex root', () => {
       params: {},
       build,
     });
-    const root = hex('shop', (h) => {
+    const root = system('shop', (h) => {
       // Forged ref: the builder API cannot produce this — the DAG check can.
       h.provision('a', a, { peer: { id: 'b' } as ProvisionedRef });
       h.provision('b', b, { peer: { id: 'a' } as ProvisionedRef });
@@ -215,12 +215,12 @@ describe('Load of a hex root', () => {
     }
   });
 
-  test('topo sort: a hex authored consumer-before-producer (forged ref) places the producer before the consumer in graph.nodes', () => {
+  test('topo sort: a system authored consumer-before-producer (forged ref) places the producer before the consumer in graph.nodes', () => {
     // Forged ref: normal authoring cannot reference a producer before
     // provisioning it (provision() is the only source of a ref) — this
     // hand-builds one pointing at "auth", which the body provisions AFTER
     // storefront, so authored order and dependency order disagree.
-    const root = hex('shop', (h) => {
+    const root = system('shop', (h) => {
       h.provision('storefront', makeStorefrontService(), {
         auth: { id: 'auth' } as ProvisionedRef,
       });
@@ -243,19 +243,19 @@ describe('Load of a hex root', () => {
     expect(authIndex).toBeLessThan(storefrontIndex);
   });
 
-  test('a lone service Loaded directly with an unwired dependency input is a LoadError naming the input and pointing at the composing hex', () => {
+  test('a lone service Loaded directly with an unwired dependency input is a LoadError naming the input and pointing at the composing system', () => {
     const lone = makeStorefrontService();
 
     expect(() => Load(lone, { id: 'storefront' })).toThrow(LoadError);
     expect(() => Load(lone, { id: 'storefront' })).toThrow(
-      /"storefront" has an unwired dependency input "auth".*composed by a hex.*deploy the hex/s,
+      /"storefront" has an unwired dependency input "auth".*composed by a system.*deploy the system/s,
     );
   });
 });
 
-describe('Load of a hex root — provisioned resources', () => {
+describe('Load of a system root — provisioned resources', () => {
   test('one provisioned resource wired to two services: exactly one resource node, one dependency edge per consumer', () => {
-    const root = hex('shop', (h) => {
+    const root = system('shop', (h) => {
       const db = h.provision('db', dbResource());
       h.provision('auth', makeAuthService(), { db });
       h.provision('billing', makeAuthService(), { db });
@@ -274,7 +274,7 @@ describe('Load of a hex root — provisioned resources', () => {
   test("provision() hands back the resource's contract as its ref, tagged with the id", () => {
     let ref: ({ id: string } & Contract<'fake/db', { url: string }>) | undefined;
     Load(
-      hex('shop', (h) => {
+      system('shop', (h) => {
         ref = h.provision('db', dbResource());
       }),
     );
@@ -290,10 +290,10 @@ describe('Load of a hex root — provisioned resources', () => {
       pack: 'test/pack',
       provides: providerContract('fake/cache', {}),
     });
-    const root = hex('shop', (h) => {
+    const root = system('shop', (h) => {
       const cacheRef = h.provision('cache', cache);
       // TypeScript already rejects this wiring at the call site (see
-      // hex-wiring.test-d.ts) — this exercises the runtime backstop directly,
+      // system-wiring.test-d.ts) — this exercises the runtime backstop directly,
       // as if that check were bypassed by a cast.
       h.provision('auth', makeAuthService(), { db: cacheRef as never });
     });
@@ -303,7 +303,7 @@ describe('Load of a hex root — provisioned resources', () => {
   });
 
   test('wiring a contract-requiring slot to a bare service ref (no matching port) is a LoadError', () => {
-    const root = hex('shop', (h) => {
+    const root = system('shop', (h) => {
       const db = h.provision('db', dbResource());
       const other = h.provision('other', makeAuthService(), { db });
       h.provision('auth', makeAuthService(), { db: other as never });
@@ -314,7 +314,7 @@ describe('Load of a hex root — provisioned resources', () => {
   });
 
   test("an untyped slot accepts a resource ref — uniformity's escape hatch, unchecked by design", () => {
-    const root = hex('shop', (h) => {
+    const root = system('shop', (h) => {
       const db = h.provision('db', dbResource());
       h.provision('storefront', makeStorefrontService(), { auth: db });
     });
@@ -327,7 +327,7 @@ describe('Load of a hex root — provisioned resources', () => {
   });
 
   test('a dangling dependency input on a resource consumer names the service and the input', () => {
-    const root = hex('shop', (h) => {
+    const root = system('shop', (h) => {
       h.provision('db', dbResource());
       h.provision('auth', makeAuthService()); // db input left unwired
     });
@@ -339,7 +339,7 @@ describe('Load of a hex root — provisioned resources', () => {
   });
 
   test('passing wiring to a resource provision is a LoadError — a resource has no inputs', () => {
-    const root = hex('shop', (h) => {
+    const root = system('shop', (h) => {
       // TypeScript's overloads reject wiring on a resource provision — forged
       // here to exercise the runtime backstop.
       h.provision('db', dbResource() as never, {} as never);
@@ -352,9 +352,9 @@ describe('Load of a hex root — provisioned resources', () => {
   });
 });
 
-describe('importing a hex module', () => {
+describe('importing a system module', () => {
   test('runs nothing — only Loading may run the body (invariant 3)', async () => {
-    const fixture = await import('./fixtures/side-effect-hex.ts');
+    const fixture = await import('./fixtures/side-effect-system.ts');
 
     expect(fixture.bodyCallCount).toBe(0);
 
@@ -363,7 +363,7 @@ describe('importing a hex module', () => {
   });
 });
 
-describe('Load of a hex root — typed wiring (the satisfies() backstop)', () => {
+describe('Load of a system root — typed wiring (the satisfies() backstop)', () => {
   // A minimal Contract, nominal like @prisma/app-rpc's own: satisfies() is
   // identity, so a ref-port only satisfies the contract it was actually built
   // from — mirrors what a cast-bypassed wrong wiring would look like at
@@ -410,7 +410,7 @@ describe('Load of a hex root — typed wiring (the satisfies() backstop)', () =>
     });
 
   test('a ref-port whose contract satisfies the required one loads without error', () => {
-    const root = hex('shop', (h) => {
+    const root = system('shop', (h) => {
       const authRef = h.provision('auth', makeContractProvider(authContract));
       h.provision('storefront', makeTypedStorefrontService(), { auth: authRef.rpc });
     });
@@ -419,7 +419,7 @@ describe('Load of a hex root — typed wiring (the satisfies() backstop)', () =>
   });
 
   test('a ref-port whose contract does not satisfy the required one is a LoadError', () => {
-    const root = hex('shop', (h) => {
+    const root = system('shop', (h) => {
       const wrongRef = h.provision('payments', makeContractProvider(wrongContract));
       // TypeScript already rejects this wiring at the call site — this
       // exercises the runtime backstop directly, as if that check were

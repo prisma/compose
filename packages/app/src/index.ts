@@ -25,8 +25,6 @@ export type {
   DependencyEnd,
   Deps,
   Expose,
-  HexBuilder,
-  HexNode,
   Hydrated,
   HydratedDeps,
   Loaded,
@@ -37,5 +35,7 @@ export type {
   ResourceNode,
   RunnableServiceNode,
   ServiceNode,
+  SystemBuilder,
+  SystemNode,
 } from './node.ts';
-export { dependency, hex, isNode, resource, service } from './node.ts';
+export { dependency, isNode, resource, service, system } from './node.ts';

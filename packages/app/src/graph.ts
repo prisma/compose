@@ -1,8 +1,8 @@
 import { blindCast } from './casts.ts';
 import {
   type DependencyEnd,
-  type HexBuilder,
-  type HexNode,
+  type SystemBuilder,
+  type SystemNode,
   isNode,
   type ProvisionedRef,
   type ResourceNode,
@@ -14,7 +14,7 @@ export type NodeId = string;
 
 export interface GraphNode {
   readonly id: NodeId;
-  readonly node: ServiceNode | ResourceNode | DependencyEnd | HexNode;
+  readonly node: ServiceNode | ResourceNode | DependencyEnd | SystemNode;
 }
 
 /**
@@ -22,7 +22,7 @@ export interface GraphNode {
  * slot node to the service. `dependency`: a service consumes a provisioned
  * producer (a service or a resource — the one wiring mechanism) — from the
  * producer to the consumer, labeled with the consumer's input name (from the
- * hex wiring).
+ * system wiring).
  */
 export interface Edge {
   readonly from: NodeId;
@@ -48,9 +48,9 @@ export class LoadError extends Error {
 
 /**
  * Builds the in-memory graph. For a service root it walks `root.inputs`,
- * assigns ids, builds `input` edges. For a hex root it EXECUTES the body (the
+ * assigns ids, builds `input` edges. For a system root it EXECUTES the body (the
  * body is wiring, not user code — running it at Load is the designed
- * exception to imports-run-nothing) with a collector HexBuilder, producing
+ * exception to imports-run-nothing) with a collector SystemBuilder, producing
  * the owned resources and services and one `dependency` edge per wired slot.
  *
  * Validation: every node branded with a non-empty type; every dependency slot
@@ -59,22 +59,22 @@ export class LoadError extends Error {
  * satisfy() it (LoadError on mismatch — TypeScript already rejects it at the
  * wiring site, so reaching here means a cast bypassed it); the dependency
  * edges form a DAG (a cycle is a LoadError with the cycle named). A service
- * Loaded directly as the root (not via a hex) may not carry any dependency
+ * Loaded directly as the root (not via a system) may not carry any dependency
  * slot — nothing at the root wires or provisions for it — so that is a
- * LoadError naming the input and pointing at the composing hex instead
+ * LoadError naming the input and pointing at the composing system instead
  * (ADR-0003). Executes nothing of the user's.
  */
-export function Load(root: ServiceNode | HexNode, opts?: { id?: NodeId }): Graph {
+export function Load(root: ServiceNode | SystemNode, opts?: { id?: NodeId }): Graph {
   // Brand-check the untrusted root once (a user default-export could be junk
   // TypeScript believes is a node), then route by its discriminant.
   if (!isNode(root)) {
     throw new LoadError(
-      'Load expects a branded service or hex node (construct it with the service()/hex() factories).',
+      'Load expects a branded service or system node (construct it with the service()/system() factories).',
     );
   }
-  if (root.kind === 'hex') return loadHex(root, opts);
+  if (root.kind === 'system') return loadSystem(root, opts);
   if (root.kind === 'service') return loadService(root, opts?.id ?? 'root');
-  throw new LoadError('Load expects a service or hex root (received another node kind).');
+  throw new LoadError('Load expects a service or system root (received another node kind).');
 }
 
 function serviceInputs(
@@ -93,8 +93,8 @@ function serviceInputs(
     if (kind === 'resource') {
       throw new LoadError(
         `Input "${input}" of "${serviceId}" is a resource node — a resource is provisioned by ` +
-          'the composing hex, never created for a service that mentions it. Declare the input ' +
-          "as a dependency (the pack's dependency factory) and wire the hex-provisioned " +
+          'the composing system, never created for a service that mentions it. Declare the input ' +
+          "as a dependency (the pack's dependency factory) and wire the system-provisioned " +
           "resource's ref into it.",
       );
     }
@@ -119,7 +119,7 @@ function loadService(root: ServiceNode, rootId: NodeId): Graph {
     if (isNode(value) && value.kind === 'dependency') {
       throw new LoadError(
         `Service "${rootId}" has an unwired dependency input "${input}" — this service is composed ` +
-          `by a hex; deploy the hex instead of loading "${rootId}" directly.`,
+          `by a system; deploy the system instead of loading "${rootId}" directly.`,
       );
     }
   }
@@ -137,7 +137,7 @@ function loadService(root: ServiceNode, rootId: NodeId): Graph {
  * result. Ties (nodes with no ordering constraint between them) keep their
  * relative order from `nodes` — so a graph already authored producer-first
  * comes out byte-identical to its pre-sort layout; only a graph that
- * genuinely needs reordering (e.g. a hex wired via a forged ref pointing at a
+ * genuinely needs reordering (e.g. a system wired via a forged ref pointing at a
  * not-yet-provisioned producer) actually moves. A Kahn's-algorithm variant
  * that always picks the ready node with the smallest original index. Edges
  * whose endpoint falls outside `nodes` (e.g. a service-root's input edges
@@ -240,7 +240,7 @@ function producerIdOf(ref: unknown): string | undefined {
   return undefined;
 }
 
-function loadHex(root: HexNode, opts?: { id?: NodeId }): Graph {
+function loadSystem(root: SystemNode, opts?: { id?: NodeId }): Graph {
   const rootId = opts?.id ?? root.name;
   const provisioned: Provisioned[] = [];
   const byId = new Map<string, ServiceNode | ResourceNode>();
@@ -251,7 +251,7 @@ function loadHex(root: HexNode, opts?: { id?: NodeId }): Graph {
     wiring?: Record<string, unknown>,
   ): ProvisionedRef => {
     if (typeof id !== 'string' || id.length === 0) {
-      throw new LoadError(`provision() requires a non-empty id (hex "${root.name}").`);
+      throw new LoadError(`provision() requires a non-empty id (system "${root.name}").`);
     }
     // The id becomes the node's address segment: configKey joins it with "_"
     // (id "auth_db" + param "url" would collide with id "auth" + input "db" +
@@ -259,13 +259,13 @@ function loadHex(root: HexNode, opts?: { id?: NodeId }): Graph {
     // "." — so neither may appear inside an id.
     if (id.includes('_') || id.includes('.')) {
       throw new LoadError(
-        `provision() id "${id}" (hex "${root.name}") may not contain "_" or "." — ` +
+        `provision() id "${id}" (system "${root.name}") may not contain "_" or "." — ` +
           '"_" is the config-key separator and "." the node-id path separator; either ' +
           'inside an id collides with the joined form of other names.',
       );
     }
     if (byId.has(id)) {
-      throw new LoadError(`Duplicate provision id "${id}" in hex "${root.name}".`);
+      throw new LoadError(`Duplicate provision id "${id}" in system "${root.name}".`);
     }
     // Brand-check on a widened alias: predicate-narrowing the declared union
     // drops the `any`-instantiated ResourceNode member (the same quirk
@@ -295,9 +295,9 @@ function loadHex(root: HexNode, opts?: { id?: NodeId }): Graph {
     return refFor(id, node);
   };
 
-  const builder: HexBuilder = {
+  const builder: SystemBuilder = {
     provision: blindCast<
-      HexBuilder['provision'],
+      SystemBuilder['provision'],
       'single implementation behind the provision() overloads — returns the contract-carrying ref for a resource and a ProvisionedRef for a service, exactly what each overload pins, but an object property cannot carry an overloaded implementation signature'
     >(provision),
   };
@@ -332,7 +332,7 @@ function loadHex(root: HexNode, opts?: { id?: NodeId }): Graph {
       const producer = producerId !== undefined ? byId.get(producerId) : undefined;
       if (producerId === undefined || producer === undefined) {
         throw new LoadError(
-          `Wiring for "${id}.${input}" references "${String(producerId)}", which is not provisioned in hex "${root.name}".`,
+          `Wiring for "${id}.${input}" references "${String(producerId)}", which is not provisioned in system "${root.name}".`,
         );
       }
 
@@ -362,7 +362,7 @@ function loadHex(root: HexNode, opts?: { id?: NodeId }): Graph {
       if (kind === 'dependency') {
         throw new LoadError(
           `Dependency input "${input}" of provisioned service "${id}" is not wired to a producer ` +
-            `(hex "${root.name}").`,
+            `(system "${root.name}").`,
         );
       }
     }

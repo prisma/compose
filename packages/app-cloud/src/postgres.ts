@@ -25,7 +25,7 @@ export const postgresContract: Contract<'postgres', PostgresConfig> = Object.fre
  * are mutually exclusive at compile time (`?: never`) and re-checked at
  * runtime for plain JS.
  *
- * `{ name }` — the resource identity a hex provisions: the ONE place the
+ * `{ name }` — the resource identity a system provisions: the ONE place the
  * database exists, providing `postgresContract`. Return type declared
  * explicitly so nothing widens.
  */
@@ -34,7 +34,7 @@ export function postgres(opts: {
   client?: never;
 }): ResourceNode<typeof postgresContract>;
 /**
- * `{ client }` — a service's dependency declaration: the slot a hex wires a
+ * `{ client }` — a service's dependency declaration: the slot a system wires a
  * provisioned postgres's ref into, requiring `postgresContract`. The app
  * supplies the client factory; C is inferred from its return type.
  */
@@ -47,7 +47,7 @@ export function postgres<C>(opts: { name?: string; client?: ClientFactory<C> }):
   if (name !== undefined && client !== undefined) {
     throw new Error(
       'postgres() takes `name` (a provisionable identity) OR `client` (a dependency), not both — ' +
-        'provision the identity in a hex and wire its ref into the client-side dependency.',
+        'provision the identity in a system and wire its ref into the client-side dependency.',
     );
   }
   if (name !== undefined) {

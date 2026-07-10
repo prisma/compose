@@ -15,7 +15,7 @@ import {
   type Target,
 } from '../deploy.ts';
 import { Load } from '../graph.ts';
-import { type BuildAdapter, type Deps, dependency, hex, resource, service } from '../node.ts';
+import { type BuildAdapter, type Deps, dependency, resource, service, system } from '../node.ts';
 import { conn, providerContract } from './helpers.ts';
 
 const dbResource = () =>
@@ -166,7 +166,7 @@ const runError = (eff: ReturnType<typeof lowering>): LowerError =>
 describe('buildConfig', () => {
   test("matches a dependency input's params by name to the wired producer's lowered outputs, via its dependency edge", () => {
     const auth = app('fake/compute', { db: dbEnd() }, { port: { type: 'number', default: 3000 } });
-    const root = hex('shop', (h) => {
+    const root = system('shop', (h) => {
       const db = h.provision('db', dbResource());
       h.provision('auth', auth, { db });
     });
@@ -181,7 +181,7 @@ describe('buildConfig', () => {
 
   test('a param the graph declares but the lowered outputs never produced resolves to undefined', () => {
     const auth = app('fake/compute', { db: dbEnd() });
-    const root = hex('shop', (h) => {
+    const root = system('shop', (h) => {
       const db = h.provision('db', dbResource());
       h.provision('auth', auth, { db });
     });
@@ -194,32 +194,32 @@ describe('buildConfig', () => {
   });
 });
 
-const singleServiceHex = (
+const singleServiceSystem = (
   type: string,
   params: Record<string, { type: 'number' | 'string'; default?: unknown }> = {},
   build: BuildAdapter = defaultBuild,
 ) =>
-  hex('hello', (h) => {
+  system('hello', (h) => {
     h.provision('svc', app(type, {}, params, build));
   });
 
-// A single service whose one dependency is a hex-provisioned db resource â
+// A single service whose one dependency is a system-provisioned db resource â
 // the resource model's minimal shape: a service never embeds a resource; the
-// hex provisions it and wires the slot.
-const singleServiceWithDbHex = (
+// system provisions it and wires the slot.
+const singleServiceWithDbSystem = (
   params: Record<string, { type: 'number' | 'string'; default?: unknown }> = {},
 ) =>
-  hex('hello', (h) => {
+  system('hello', (h) => {
     const db = h.provision('db', dbResource());
     h.provision('svc', app('fake/compute', { db: dbEnd() }, params), { db });
   });
 
 const svcBundles = { bundles: { svc: { dir: 'dist/bundle', entry: 'server.js' } } };
 
-describe('lowering a hex root â a single service', () => {
+describe('lowering a system root â a single service', () => {
   test('a dependency-less service sequences application → provision → serialize → package → deploy; nothing is auto-provisioned', () => {
     const { target, calls } = fakeTarget();
-    const root = singleServiceHex('fake/compute');
+    const root = singleServiceSystem('fake/compute');
 
     const result = run(lowering(root, target, opts(svcBundles)));
 
@@ -230,14 +230,14 @@ describe('lowering a hex root â a single service', () => {
       'package',
       'deploy',
     ]);
-    // The root is always a hex — its own lowering has no outputs yet
+    // The root is always a system — its own lowering has no outputs yet
     // (boundary ports are future work); see the two-service suite below.
     expect(result).toEqual({ outputs: {} });
   });
 
-  test('a hex-provisioned resource lowers before the service that consumes it', () => {
+  test('a system-provisioned resource lowers before the service that consumes it', () => {
     const { target, calls } = fakeTarget();
-    const root = singleServiceWithDbHex();
+    const root = singleServiceWithDbSystem();
 
     run(lowering(root, target, opts(svcBundles)));
 
@@ -253,7 +253,7 @@ describe('lowering a hex root â a single service', () => {
 
   test("buildConfig is fed to serialize with the resource's real lowered output", () => {
     const { target, calls } = fakeTarget();
-    const root = singleServiceWithDbHex({ port: { type: 'number', default: 3000 } });
+    const root = singleServiceWithDbSystem({ port: { type: 'number', default: 3000 } });
 
     run(lowering(root, target, opts(svcBundles)));
 
@@ -265,7 +265,7 @@ describe('lowering a hex root â a single service', () => {
 
   test('package receives the build adapter output dir/entry and the same address serialize used', () => {
     const { target, calls } = fakeTarget();
-    const root = singleServiceHex('fake/compute');
+    const root = singleServiceSystem('fake/compute');
     const bundle: Bundle = { dir: 'dist/bundle', entry: 'main.mjs' };
 
     run(lowering(root, target, opts({ bundles: { svc: bundle } })));
@@ -276,7 +276,7 @@ describe('lowering a hex root â a single service', () => {
 
   test("the environment edge: deploy's `environment` IS serialize's returned records (by recording, not order)", () => {
     const { target, calls } = fakeTarget();
-    const root = singleServiceWithDbHex();
+    const root = singleServiceWithDbSystem();
 
     run(lowering(root, target, opts(svcBundles)));
 
@@ -294,7 +294,7 @@ describe('lowering a hex root â a single service', () => {
 
   test('the build descriptor is inert to lowering — any kind/entry lowers identically', () => {
     const { target } = fakeTarget();
-    const root = singleServiceHex(
+    const root = singleServiceSystem(
       'fake/compute',
       {},
       {
@@ -310,9 +310,9 @@ describe('lowering a hex root â a single service', () => {
     expect(result).toEqual({ outputs: {} });
   });
 
-  test('missing a bundle for a single-service hex is a LowerError naming it', () => {
+  test('missing a bundle for a single-service system is a LowerError naming it', () => {
     const { target } = fakeTarget();
-    const root = singleServiceHex('fake/compute');
+    const root = singleServiceSystem('fake/compute');
 
     const error = runError(lowering(root, target, opts()));
 
@@ -322,7 +322,7 @@ describe('lowering a hex root â a single service', () => {
 
   test('fails with LowerError naming the type and the known types on an unknown service type', () => {
     const { target } = fakeTarget();
-    const root = singleServiceHex('fake/other-compute');
+    const root = singleServiceSystem('fake/other-compute');
 
     const error = runError(lowering(root, target, opts(svcBundles)));
 
@@ -332,12 +332,12 @@ describe('lowering a hex root â a single service', () => {
   });
 });
 
-describe('lowering a hex root — a provisioned resource and two connected services', () => {
+describe('lowering a system root — a provisioned resource and two connected services', () => {
   const authService = () => app('fake/compute', { db: dbEnd() });
   const storefrontService = () => app('fake/compute', { auth: httpEnd() });
 
-  const twoServiceHex = () =>
-    hex('shop', (h) => {
+  const twoServiceSystem = () =>
+    system('shop', (h) => {
       const db = h.provision('db', dbResource());
       const authRef = h.provision('auth', authService(), { db });
       h.provision('storefront', storefrontService(), { auth: authRef });
@@ -347,7 +347,7 @@ describe('lowering a hex root — a provisioned resource and two connected servi
     const { target, calls } = fakeTarget();
 
     run(
-      lowering(twoServiceHex(), target, {
+      lowering(twoServiceSystem(), target, {
         name: 'shop',
         bundles: {
           auth: { dir: 'hexes/auth/dist/bundle', entry: 'server.js' },
@@ -373,11 +373,11 @@ describe('lowering a hex root — a provisioned resource and two connected servi
     ]);
   });
 
-  test("each hex-provisioned service's address is its own provision id", () => {
+  test("each system-provisioned service's address is its own provision id", () => {
     const { target, calls } = fakeTarget();
 
     run(
-      lowering(twoServiceHex(), target, {
+      lowering(twoServiceSystem(), target, {
         name: 'shop',
         bundles: {
           auth: { dir: 'hexes/auth/dist/bundle', entry: 'server.js' },
@@ -392,11 +392,11 @@ describe('lowering a hex root — a provisioned resource and two connected servi
     expect(storefrontProvision).toMatchObject({ address: 'storefront' });
   });
 
-  test("auth's Config.inputs.db carries the hex-provisioned resource's lowered url", () => {
+  test("auth's Config.inputs.db carries the system-provisioned resource's lowered url", () => {
     const { target, calls } = fakeTarget();
 
     run(
-      lowering(twoServiceHex(), target, {
+      lowering(twoServiceSystem(), target, {
         name: 'shop',
         bundles: {
           auth: { dir: 'hexes/auth/dist/bundle', entry: 'server.js' },
@@ -415,7 +415,7 @@ describe('lowering a hex root — a provisioned resource and two connected servi
     const { target, calls } = fakeTarget();
 
     run(
-      lowering(twoServiceHex(), target, {
+      lowering(twoServiceSystem(), target, {
         name: 'shop',
         bundles: {
           auth: { dir: 'hexes/auth/dist/bundle', entry: 'server.js' },
@@ -434,7 +434,7 @@ describe('lowering a hex root — a provisioned resource and two connected servi
     const { target, calls } = fakeTarget();
 
     run(
-      lowering(twoServiceHex(), target, {
+      lowering(twoServiceSystem(), target, {
         name: 'shop',
         bundles: {
           auth: { dir: 'hexes/auth/dist/bundle', entry: 'server.js' },
@@ -452,13 +452,13 @@ describe('lowering a hex root — a provisioned resource and two connected servi
     // once, from serialize, and threads them through to deploy's argument.
   });
 
-  test('topo sort: a hex authored consumer-before-producer (forged ref) still resolves real producer outputs at deploy', () => {
-    // Mirrors the hex.test.ts graph-layer topo-sort test, but exercises the
+  test('topo sort: a system authored consumer-before-producer (forged ref) still resolves real producer outputs at deploy', () => {
+    // Mirrors the system.test.ts graph-layer topo-sort test, but exercises the
     // consequence: before the sort, buildConfig read `lowered.get(edge.from)`
     // positionally, so a consumer walked before its producer saw undefined
     // outputs. With the sort, the producer is fully deployed first.
     const { target, calls } = fakeTarget();
-    const root = hex('shop', (h) => {
+    const root = system('shop', (h) => {
       const db = h.provision('db', dbResource());
       h.provision('storefront', storefrontService(), {
         auth: { id: 'auth' } as never,
@@ -489,11 +489,11 @@ describe('lowering a hex root — a provisioned resource and two connected servi
     });
   });
 
-  test('missing a bundle entry for one hex-provisioned service is a LowerError naming it', () => {
+  test('missing a bundle entry for one system-provisioned service is a LowerError naming it', () => {
     const { target } = fakeTarget();
 
     const error = runError(
-      lowering(twoServiceHex(), target, {
+      lowering(twoServiceSystem(), target, {
         name: 'shop',
         bundles: { auth: { dir: 'hexes/auth/dist/bundle', entry: 'server.js' } },
       }),
@@ -503,11 +503,11 @@ describe('lowering a hex root — a provisioned resource and two connected servi
     expect(error.message).toContain('opts.bundles["storefront"]');
   });
 
-  test("a hex root's own lowering has no outputs yet (boundary ports are future work)", () => {
+  test("a system root's own lowering has no outputs yet (boundary ports are future work)", () => {
     const { target } = fakeTarget();
 
     const result = run(
-      lowering(twoServiceHex(), target, {
+      lowering(twoServiceSystem(), target, {
         name: 'shop',
         bundles: {
           auth: { dir: 'hexes/auth/dist/bundle', entry: 'server.js' },
@@ -521,7 +521,7 @@ describe('lowering a hex root — a provisioned resource and two connected servi
 
   test('fails with LowerError naming the type and the known types on an unknown resource type', () => {
     const { target } = fakeTarget();
-    const root = hex('shop', (h) => {
+    const root = system('shop', (h) => {
       h.provision(
         'cache',
         resource({
@@ -540,9 +540,9 @@ describe('lowering a hex root — a provisioned resource and two connected servi
   });
 });
 
-describe('lowering a hex root — one resource shared by two consumers', () => {
-  const sharedHex = () =>
-    hex('shop', (h) => {
+describe('lowering a system root — one resource shared by two consumers', () => {
+  const sharedSystem = () =>
+    system('shop', (h) => {
       const db = h.provision('db', dbResource());
       h.provision('auth', app('fake/compute', { authDb: dbEnd() }), { authDb: db });
       h.provision('billing', app('fake/compute', { billingDb: dbEnd() }), { billingDb: db });
@@ -559,7 +559,7 @@ describe('lowering a hex root — one resource shared by two consumers', () => {
   test('the resource is lowered exactly once, regardless of consumer count', () => {
     const { target, calls } = fakeTarget();
 
-    run(lowering(sharedHex(), target, sharedOpts));
+    run(lowering(sharedSystem(), target, sharedOpts));
 
     expect(calls.filter((c) => c.phase === 'resource')).toEqual([
       { phase: 'resource', id: 'db', type: 'fake/db' },
@@ -569,7 +569,7 @@ describe('lowering a hex root — one resource shared by two consumers', () => {
   test("both consumers' Configs receive the ONE resource's outputs, each under its own dep key", () => {
     const { target, calls } = fakeTarget();
 
-    run(lowering(sharedHex(), target, sharedOpts));
+    run(lowering(sharedSystem(), target, sharedOpts));
 
     const authSerialize = calls.find((c) => c.phase === 'serialize' && c.id === 'auth');
     const billingSerialize = calls.find((c) => c.phase === 'serialize' && c.id === 'billing');
@@ -588,7 +588,7 @@ describe('lower()', () => {
     // hand it to Alchemy.Stack) — a different fake target than the
     // lowering()-only suite above, which asserts the opposite.
     const target: Target = { ...fakeTarget().target, providers: () => ({}) as never };
-    const root = singleServiceHex('fake/compute', {});
+    const root = singleServiceSystem('fake/compute', {});
 
     const stack = lower(
       root,

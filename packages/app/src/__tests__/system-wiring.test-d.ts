@@ -1,18 +1,18 @@
 /**
- * The accept/reject matrix for dependency wiring, checked on the real hex:
- * `HexBuilder.provision` wiring a provisioned ref into a consumer's slot —
+ * The accept/reject matrix for dependency wiring, checked on the real system:
+ * `SystemBuilder.provision` wiring a provisioned ref into a consumer's slot —
  * ONE mechanism, the contract determines validity — and the Deps constraint
  * that keeps bare ResourceNodes out of a service's inputs.
  *
  * Type-only (vitest `--typecheck`, never executed at runtime): the reject
- * cases are exactly what Load's runtime backstop throws on (see hex.test.ts),
+ * cases are exactly what Load's runtime backstop throws on (see system.test.ts),
  * so running the calls would throw. Positive cases use `expectTypeOf`
  * matchers; the negative call/argument shapes keep a `// @ts-expect-error` on
  * the offending line — the idiomatic form for "this must not compile".
  */
 import { expectTypeOf, test } from 'vitest';
 import type { Contract } from '../contract.ts';
-import type { BuildAdapter, HexBuilder, RefPort } from '../node.ts';
+import type { BuildAdapter, SystemBuilder, RefPort } from '../node.ts';
 import { dependency, resource, service } from '../node.ts';
 import { conn, providerContract } from './helpers.ts';
 
@@ -68,7 +68,7 @@ const producer = service({
   build,
 });
 
-declare const h: HexBuilder;
+declare const h: SystemBuilder;
 
 const pgRef = h.provision('pg', pgNode);
 const cacheRef = h.provision('cache', cacheNode);

@@ -1,7 +1,7 @@
-import { hex, service } from '../../index.ts';
+import { service, system } from '../../index.ts';
 
 // Importing this module must not increment this counter — only Loading the
-// hex may run the body (the service node itself carries no handler to run).
+// system may run the body (the service node itself carries no handler to run).
 export let bodyCallCount = 0;
 
 const svc = service({
@@ -18,7 +18,7 @@ const svc = service({
   },
 });
 
-export default hex('fixture-hex', (h) => {
+export default system('fixture-system', (h) => {
   bodyCallCount += 1;
   h.provision('app', svc);
 });

@@ -183,10 +183,10 @@ export async function run(argv: readonly string[], deps: RunDeps = {}): Promise<
 
   // 2. Load — core's LoadError (unwired connection input, etc.) surfaces as-is.
   const graph = Load(entryModule.root);
-  if (graph.root.node.kind !== 'hex') {
+  if (graph.root.node.kind !== 'system') {
     throw new CliError(
-      'The deploy root must be a hex — wrap your service, e.g. ' +
-        "export default hex('name', (h) => h.provision('name', service)).",
+      'The deploy root must be a system — wrap your service, e.g. ' +
+        "export default system('name', (h) => h.provision('name', service)).",
     );
   }
 
