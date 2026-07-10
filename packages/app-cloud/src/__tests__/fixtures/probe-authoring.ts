@@ -11,16 +11,17 @@ const app = compute({
   },
   build: {
     kind: 'node',
-    pack: '@prisma/app-node',
+    assembler: '@prisma/app-node/assemble',
     module: 'file:///test/service.ts',
     entry: 'server.js',
   },
 });
 
 export const graph = Load(
-  system('probe-system', (h) => {
-    const db = h.provision('db', postgres({ name: 'db' }));
-    h.provision('app', app, { db });
+  system('probe-system', {}, ({ provision }) => {
+    const db = provision('db', postgres({ name: 'db' }));
+    provision('app', app, { db });
+    return {};
   }),
   { id: 'probe' },
 );

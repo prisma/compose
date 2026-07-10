@@ -39,7 +39,12 @@ export function postgres(opts?: {
   name: string;
 }): ResourceNode<typeof postgresContract> | DependencyEnd<PostgresConfig, typeof postgresContract> {
   if (opts?.name !== undefined) {
-    return resource({ name: opts.name, pack: '@prisma/app-cloud', provides: postgresContract });
+    return resource({
+      name: opts.name,
+      pack: '@prisma/app-cloud',
+      provides: postgresContract,
+      targetModule: '@prisma/app-cloud/target',
+    });
   }
   return dependency<
     { url: { type: 'string'; secret: true } },
