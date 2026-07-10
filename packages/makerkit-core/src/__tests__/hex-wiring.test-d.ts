@@ -2,12 +2,16 @@
  * The accept/reject matrix for resource wiring, checked on the real hex:
  * `HexBuilder.provision` wiring a ResourceRef into a consumer's ResourceEnd
  * slot, and the Deps constraint that admits declarations (ends, Dependables)
- * while keeping bare ResourceNodes out of a service's inputs. Typechecked only (the package's `typecheck` script) —
- * never executed: the reject cases are exactly what Load's runtime backstop
- * throws on (see hex.test.ts), so running this file would throw. `.test-d`
- * (not `.test`) keeps it out of `bun test`.
+ * while keeping bare ResourceNodes out of a service's inputs.
+ *
+ * Type-only (vitest `--typecheck`, never executed at runtime): the reject
+ * cases are exactly what Load's runtime backstop throws on (see hex.test.ts),
+ * so running the calls would throw. Positive cases use `expectTypeOf`
+ * matchers; the negative call/argument shapes keep a `// @ts-expect-error` on
+ * the offending line — the idiomatic form for "this must not compile".
  */
-import type { BuildAdapter, HexBuilder } from '../node.ts';
+import { expectTypeOf, test } from 'vitest';
+import type { BuildAdapter, HexBuilder, ResourceEnd, ResourceRef } from '../node.ts';
 import { resource, resourceEnd, service } from '../node.ts';
 import { conn } from './helpers.ts';
 
@@ -73,29 +77,40 @@ const producerRef = h.provision('producer', producer);
 // A dual value is provisionable — its identity half; the ref is typed.
 const dualRef = h.provision('dual-pg', dualPg);
 
-// ---- MUST compile ----
-h.provision('c1', consumer, { db: pgRef });
-// The dual's slot wires like the ResourceEnd it converts to — literal type kept.
-h.provision('c1b', dualConsumer, { db: dualRef });
-h.provision('c1c', dualConsumer, { db: pgRef });
+test('provision returns a ResourceRef carrying the resource type as a literal', () => {
+  expectTypeOf(pgRef).toEqualTypeOf<ResourceRef<'fake/postgres'>>();
+  expectTypeOf(dualRef).toEqualTypeOf<ResourceRef<'fake/postgres'>>();
+});
 
-// ---- MUST be rejected ----
-// @ts-expect-error a ResourceRef of another resource type cannot fill the slot
-h.provision('c2', consumer, { db: cacheRef });
-// @ts-expect-error a provisioned service's ref is not a ResourceRef
-h.provision('c3', consumer, { db: producerRef });
-// @ts-expect-error a wrong-type ResourceRef cannot fill the dual's slot either
-h.provision('c3b', dualConsumer, { db: cacheRef });
-// @ts-expect-error a dependency-only end (no identity) is not provisionable
-h.provision('c3c', pgEnd);
+test('a dual value stored in deps normalizes to its converted ResourceEnd', () => {
+  expectTypeOf(dualConsumer.inputs.db).toEqualTypeOf<ResourceEnd<{ url: string }, 'fake/postgres'>>();
+});
 
-// A concrete ResourceNode can never sit in deps — only declarations (ends).
-service({
-  name: 'test-service',
-  pack: 'test/pack',
-  type: 'fake/compute',
-  // @ts-expect-error a ResourceNode is not a dependency declaration
-  inputs: { db: pgNode },
-  params: {},
-  build,
+test('a matching ResourceRef fills the consumer slot', () => {
+  expectTypeOf(h.provision).toBeCallableWith('c1', consumer, { db: pgRef });
+  // The dual's slot wires like the ResourceEnd it converts to — literal type kept.
+  expectTypeOf(h.provision).toBeCallableWith('c1b', dualConsumer, { db: dualRef });
+  expectTypeOf(h.provision).toBeCallableWith('c1c', dualConsumer, { db: pgRef });
+});
+
+test('wrong-type / wrong-kind refs and a bare resource in deps are rejected', () => {
+  // @ts-expect-error a ResourceRef of another resource type cannot fill the slot
+  h.provision('c2', consumer, { db: cacheRef });
+  // @ts-expect-error a provisioned service's ref is not a ResourceRef
+  h.provision('c3', consumer, { db: producerRef });
+  // @ts-expect-error a wrong-type ResourceRef cannot fill the dual's slot either
+  h.provision('c3b', dualConsumer, { db: cacheRef });
+  // @ts-expect-error a dependency-only end (no identity) is not provisionable
+  h.provision('c3c', pgEnd);
+
+  // A concrete ResourceNode can never sit in deps — only declarations (ends).
+  service({
+    name: 'test-service',
+    pack: 'test/pack',
+    type: 'fake/compute',
+    // @ts-expect-error a ResourceNode is not a dependency declaration
+    inputs: { db: pgNode },
+    params: {},
+    build,
+  });
 });
