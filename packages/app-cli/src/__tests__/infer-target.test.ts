@@ -2,9 +2,9 @@ import { describe, expect, test } from 'bun:test';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { AssembleError } from '@prisma/app-assemble';
 import type { Graph } from '@prisma/app';
 import { resource, service } from '@prisma/app';
+import { AssembleError } from '@prisma/app-assemble';
 import { collectPacks, extractFromEnv, inferTarget, resolveSinglePack } from '../infer-target.ts';
 
 const build = {
@@ -64,13 +64,13 @@ describe('collectPacks() + resolveSinglePack() (ADR-0003)', () => {
       ],
       edges: [],
     };
-    expect(collectPacks(graph)).toEqual(['@prisma/app-cloud', '@other/pack']);
+    expect(collectPacks(graph)).toEqual(['@other/pack', '@prisma/app-cloud']);
   });
 
   test('throws listing every pack found when a graph mixes more than one', () => {
-    const graph = graphWithPacks(['@prisma/app-cloud', '@other/pack']);
+    const graph = graphWithPacks(['@other/pack', '@prisma/app-cloud']);
     expect(() => resolveSinglePack(collectPacks(graph))).toThrow(
-      /mixes more than one pack \(@prisma\/app-cloud, @other\/pack\)/,
+      /mixes more than one pack \(@other\/pack, @prisma\/app-cloud\)/,
     );
   });
 
