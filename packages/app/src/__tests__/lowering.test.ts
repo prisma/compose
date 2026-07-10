@@ -32,7 +32,7 @@ const httpEnd = () =>
 
 const defaultBuild: BuildAdapter = {
   kind: 'node',
-  pack: '@prisma/app-node',
+  assembler: '@prisma/app-node/assemble',
   module: 'file:///test/service.ts',
   entry: 'server.js',
 };
@@ -303,7 +303,7 @@ describe('lowering a hex root â a single service', () => {
       {},
       {
         kind: 'nonsense',
-        pack: '@fake/adapter',
+        assembler: '@fake/adapter/assemble',
         module: 'file:///test/service.ts',
         entry: 'whatever.js',
       },
@@ -605,6 +605,33 @@ describe('lower()', () => {
     );
 
     expect(stack).toBeDefined();
+  });
+});
+
+describe('lowering a nested hex — dotted addresses (H1: hex-composition)', () => {
+  test('a service provisioned by a hex nested inside another hex gets a dotted address, and lowering() finds its bundle by that full id', () => {
+    const { target } = fakeTarget();
+    const inner = hex('auth', {}, (h) => {
+      h.provision('api', app('fake/compute', {}));
+      return {};
+    });
+    const root = hex('shop', {}, (h) => {
+      h.provision('auth', inner);
+      return {};
+    });
+    const graph = Load(root);
+
+    expect(graph.nodes.some((n) => n.id === 'auth.api')).toBe(true);
+
+    const result = run(
+      lowering(
+        root,
+        target,
+        opts({ bundles: { 'auth.api': { dir: 'dist/bundle', entry: 'server.js' } } }),
+      ),
+    );
+
+    expect(result).toEqual({ outputs: {} });
   });
 });
 

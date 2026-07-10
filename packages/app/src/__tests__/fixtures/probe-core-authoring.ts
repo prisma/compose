@@ -28,7 +28,7 @@ const app = service({
   params: { port: { type: 'number', default: 3000 } },
   build: {
     kind: 'node',
-    pack: '@prisma/app-node',
+    assembler: '@prisma/app-node/assemble',
     module: 'file:///test/service.ts',
     entry: 'server.js',
   },
@@ -47,7 +47,7 @@ const caller = service({
   params: {},
   build: {
     kind: 'node',
-    pack: '@prisma/app-node',
+    assembler: '@prisma/app-node/assemble',
     module: 'file:///test/service.ts',
     entry: 'server.js',
   },

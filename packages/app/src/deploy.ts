@@ -109,8 +109,10 @@ export type Lowering = (ctx: LowerContext) => Effect.Effect<LoweredNode, unknown
 export interface LowerContext {
   readonly id: NodeId;
   /**
-   * The node's deployment address (graph position): its provision id in the
-   * hex root. The config-key namespace and the bootstrap parameter.
+   * The node's deployment address: its full, dot-joined hierarchical
+   * position in the graph (GraphNode.id — e.g. "auth.api" for a service
+   * provisioned by a hex nested inside another hex). The config-key
+   * namespace and the bootstrap parameter.
    */
   readonly address: string;
   readonly node: ServiceNode | ResourceNode;
@@ -135,7 +137,8 @@ export interface LowerOptions {
   readonly name: string;
   // The interim carrier of assembled bundle dirs (deploy tooling runs each
   // service's build-adapter assembler and drops this map): one bundle per
-  // provisioned service, keyed by provision id.
+  // provisioned service, keyed by the service's full hierarchical address
+  // (its graph id).
   readonly bundles: Record<string, Bundle>;
   readonly stage?: string;
   /** Alchemy state store for the stack. Defaults to the target's own state layer. */
@@ -147,7 +150,7 @@ export interface LowerOptions {
  * carrier `LowerOptions.bundles` hands to `package()`: the dir the
  * adapter's assembler produced (wrapper + app entry + fixups) plus the app's
  * runnable entry relative to it (for the bootstrap's boot import). One name,
- * one shape, defined once — every deploy-side package (the CLI, `@prisma/
+ * one shape, defined once — every deploy-side package (the CLI, `@prisma/app-
  * assemble`, each build adapter's `/assemble`) imports this instead of
  * redeclaring it.
  */
@@ -164,7 +167,7 @@ export interface Bundle {
 export interface AssembleInput {
   readonly build: BuildAdapter;
   /**
-   * Extra patterns to inline into the wrapper besides `@prisma/*` — the
+   * Extra patterns to inline into the wrapper besides `@prisma/app*` — the
    * service module's own imports that are neither shipped in the bundle dir
    * nor runtime built-ins (e.g. the app's workspace packages).
    */
@@ -259,13 +262,6 @@ export function lowering(
     const graph = Load(root, { id: opts.name });
     const lowered = new Map<NodeId, LoweredNode>();
 
-    // Every hex-provisioned service's own graph id IS its address (single-
-    // level hex only — nesting is out of scope).
-    const serviceAddress = new Map<NodeId, string>();
-    for (const { id, node } of graph.nodes) {
-      if (node.kind === 'service') serviceAddress.set(id, id);
-    }
-
     const appCtx: LowerContext = {
       id: graph.root.id,
       address: '',
@@ -284,10 +280,13 @@ export function lowering(
       // resources and services are.
       if (node.kind === 'dependency') continue;
 
-      const address = serviceAddress.get(id) ?? '';
+      // A node's graph id IS its deployment address — the full, dot-joined
+      // hierarchical position (hex-composition.md § Load: flattening,
+      // addresses, validation) — already the same id the bundle correlation
+      // key and the config-key namespace both ride.
       const ctx: LowerContext = {
         id,
-        address,
+        address: id,
         node: node as ServiceNode | ResourceNode,
         graph,
         opts,
@@ -328,7 +327,7 @@ export function lowering(
       }
       const artifact = yield* serviceLowering.package(ctx, {
         assembled: { dir: bundle.dir, entry: bundle.entry },
-        address,
+        address: id,
       });
       lowered.set(id, yield* serviceLowering.deploy(ctx, provisioned, artifact, serialized));
     }

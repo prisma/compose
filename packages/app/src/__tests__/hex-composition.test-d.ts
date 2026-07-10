@@ -15,7 +15,7 @@ import { conn } from './helpers.ts';
 
 const build: BuildAdapter = {
   kind: 'node',
-  pack: '@prisma/app-node',
+  assembler: '@prisma/app-node/assemble',
   module: 'file:///test/service.ts',
   entry: 'server.js',
 };
