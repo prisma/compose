@@ -186,14 +186,14 @@ export async function run(argv: readonly string[], deps: RunDeps = {}): Promise<
   if (graph.root.node.kind !== 'system') {
     throw new CliError(
       'The deploy root must be a system — wrap your service, e.g. ' +
-        "export default system('name', (h) => h.provision('name', service)).",
+        "export default system('name', {}, ({ provision }) => { provision('name', service); return {}; }).",
     );
   }
 
-  // 3. Infer the target — anchored at the entry module itself (node's resolver
-  // walks node_modules upward from there natively); validates the pack's env
-  // NOW, before any assembly work.
-  const { pack } = await inferTarget(graph, entryModule.path);
+  // 3. Infer the target — the carrying node loads its own targetModule
+  // (node-owned loading); validates the target's env NOW, before any
+  // assembly work.
+  const { targetModule } = await inferTarget(graph);
 
   // 4. Resolve the name.
   const name = args.name ?? entryModule.root.name;
@@ -206,7 +206,7 @@ export async function run(argv: readonly string[], deps: RunDeps = {}): Promise<
   // built output blocks destroy too — say so instead of just "run your build".
   let assembled: Awaited<ReturnType<typeof assembleServices>>;
   try {
-    assembled = await assembleServices(graph, entryModule.path, deps.runAssembler);
+    assembled = await assembleServices(graph, deps.runAssembler);
   } catch (error) {
     if (args.command === 'destroy' && error instanceof Error) {
       throw new CliError(
@@ -222,7 +222,7 @@ export async function run(argv: readonly string[], deps: RunDeps = {}): Promise<
   const stackPath = writeStackFile({
     entryPath: entryModule.path,
     cwd,
-    pack,
+    targetModule,
     name,
     assembled,
   });
