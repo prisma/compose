@@ -10,6 +10,9 @@ architecture/design phase that comes *after* the high-level model is settled.
   entrypoint (`prisma-app deploy` / `prisma-app destroy`): the pipeline, the
   pack CLI seam and per-kind assembly contracts, and the error surface. Rests
   on ADR-0003 … ADR-0006.
+- [`system-composition.md`](system-composition.md) — system boundaries
+  (deps/expose), forwarding, nesting, and the packaged reusable system. Rests
+  on ADR-0015.
 
 The settled high-level model is recorded in:
 
