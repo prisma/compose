@@ -1,16 +1,4 @@
-import { defineConfig as defineConfigOriginal, type UserConfig } from 'tsdown';
-
-/**
- * Extend/use the base `tsdown` config with custom settings.
- *
- * See {@link baseConfig} for the default configuration object.
- */
-export function defineConfig(config?: UserConfig): UserConfig {
-  return {
-    ...baseConfig,
-    ...config,
-  };
-}
+import type { UserConfig } from 'tsdown';
 
 /**
  * Base `tsdown` configuration for the workspace. Mirrors prisma-next's
@@ -24,10 +12,22 @@ export function defineConfig(config?: UserConfig): UserConfig {
  * generated map. Packages with a CLI/bin entry opt out with `exports: false`
  * and declare their subpaths by hand.)
  */
-export const baseConfig = defineConfigOriginal({
+export const baseConfig: UserConfig = {
   dts: true,
   exports: true,
   outExtensions: () => ({ js: '.mjs', dts: '.d.mts' }),
   skipNodeModulesBundle: true,
   sourcemap: true,
-});
+};
+
+/**
+ * Extend/use the base `tsdown` config with custom settings.
+ *
+ * See {@link baseConfig} for the default configuration object.
+ */
+export function defineConfig(config?: UserConfig): UserConfig {
+  return {
+    ...baseConfig,
+    ...config,
+  };
+}
