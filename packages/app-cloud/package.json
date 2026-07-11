@@ -26,6 +26,7 @@
   },
   "devDependencies": {
     "@prisma-next/cli": "0.14.0",
+    "@prisma-next/target-postgres": "0.14.0",
     "@prisma/app-tsdown": "workspace:0.2.0",
     "@types/bun": "^1.3.13",
     "tsdown": "^0.15.9",

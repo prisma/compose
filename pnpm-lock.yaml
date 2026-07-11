@@ -292,6 +292,9 @@ importers:
       '@prisma-next/cli':
         specifier: 0.14.0
         version: 0.14.0(typanion@3.14.0)(typescript@6.0.3)
+      '@prisma-next/target-postgres':
+        specifier: 0.14.0
+        version: 0.14.0(typanion@3.14.0)(typescript@6.0.3)
       '@prisma/app-tsdown':
         specifier: workspace:0.2.0
         version: link:../tsdown-config
