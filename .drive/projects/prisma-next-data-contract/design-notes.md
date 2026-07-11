@@ -65,6 +65,31 @@ deps: { db: pnPostgres(contract) }                   // binding: PostgresClient<
   through the config import; PSL-first passes the emitted `contract.d.ts` type
   explicitly as the type parameter. Support and document both.
 
+## Config-path mechanism (slice 2, locked)
+
+The deploy lowering needs the `prisma-next.config.ts` **path** to find the
+migrations directory, but the frozen core `ResourceNode`
+(`{ kind, name, extension, type, provides }`) has no metadata slot. Decision:
+
+- **app-cloud owns a `prisma-next` resource node that carries `config` (the
+  path) as a first-class field, sibling to `provides`.** `pnPostgres({ name,
+  contract, config })` builds it by augmenting `resource()`'s output
+  (`Object.freeze({ ...resource({...}), config })` — the `[NODE]`
+  `Symbol.for` brand is an enumerable own prop and survives the spread; the
+  spread-and-refreeze node pattern already exists in `node.ts`).
+- **The lowering reads it via a type predicate** (`isPnPostgresResourceNode`),
+  not a bare cast — `ctx.node` is typed `ServiceNode | ResourceNode`.
+- **No core change.** Rejected: (a) a core `ResourceNode` metadata field —
+  grows the deliberately-minimal core type for an extension's concern (against
+  thin-core); (b) folding the path into the contract's `__cmp` — re-merges the
+  two doors the authoring model deliberately separates (operator instinct) and
+  puts resource-only deploy data on a contract-kind value.
+- **What `config` carries:** the `prisma-next.config.ts` path (string). At
+  deploy the lowering loads that config (deploy-time only — PN machinery never
+  enters the app bundle) to resolve the migrations dir PN's control client
+  needs (`dbInit`/`migrate`'s `migrationsDir`). The provided contract (already
+  on `provides`) gives the target `storageHash`.
+
 ## Deploy lowering
 
 Per PN-postgres resource, after DB provisioning, an Alchemy resource:
