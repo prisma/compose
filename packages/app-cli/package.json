@@ -24,6 +24,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@prisma/alchemy": "workspace:0.2.0",
     "@prisma/app-assemble": "workspace:0.2.0",
     "@prisma/app": "workspace:0.2.0",
     "clipanion": "^3.2.1",

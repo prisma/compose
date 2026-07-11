@@ -9,7 +9,11 @@ import { Connection, ConnectionProvider } from './postgres/Connection.ts';
 import { Database, DatabaseProvider } from './postgres/Database.ts';
 import { Project, ProjectProvider } from './postgres/Project.ts';
 
-export { ManagementClient } from './client.ts';
+export {
+  layer as managementClientLayer,
+  type ManagementApiClient,
+  ManagementClient,
+} from './client.ts';
 export * from './compute/index.ts';
 export * from './container.ts';
 export * from './credentials.ts';

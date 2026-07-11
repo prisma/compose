@@ -1,3 +1,4 @@
+import * as Data from 'effect/Data';
 import * as Effect from 'effect/Effect';
 import { type ManagementApiClient, ManagementClient } from './client.ts';
 import { call, type PrismaApiError } from './http.ts';
@@ -9,7 +10,15 @@ export interface ResolveContainerOptions {
   readonly appName: string;
   /** A named stage (e.g. `staging`); omit for the default (production) stage. */
   readonly stage?: string;
+  /** Create the Project/Branch if absent (default `true`). `false` finds only — used by `destroy`. */
+  readonly ensure?: boolean;
 }
+
+/** Raised with `ensure: false` when the app's Project (or a named stage's Branch) doesn't exist. */
+export class ContainerNotFoundError extends Data.TaggedError('ContainerNotFoundError')<{
+  readonly appName: string;
+  readonly stage?: string;
+}> {}
 
 export interface ResolvedContainer {
   readonly projectId: string;
@@ -52,14 +61,17 @@ const bareWorkspaceId = (id: string): string =>
 /**
  * Finds the app's Project by name in the workspace — PDP allows duplicate
  * project names, so more than one can match; the oldest wins. Creates one
- * if none match. No ownership marker and no `--project` override (both
- * deferred — see ADR-0019).
+ * if none match, unless `ensure` is `false` (find-only — `destroy`), in
+ * which case an absent Project fails with `ContainerNotFoundError`. No
+ * ownership marker and no `--project` override (both deferred — see
+ * ADR-0019).
  */
 const resolveProject = (
   client: ManagementApiClient,
   workspaceId: string,
   appName: string,
-): Effect.Effect<string, PrismaApiError> =>
+  ensure: boolean,
+): Effect.Effect<string, PrismaApiError | ContainerNotFoundError> =>
   Effect.gen(function* () {
     const projects = yield* listAllProjects(client);
     const oldest = projects
@@ -69,6 +81,8 @@ const resolveProject = (
       )
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0];
     if (oldest !== undefined) return oldest.id;
+
+    if (!ensure) return yield* Effect.fail(new ContainerNotFoundError({ appName }));
 
     const created = yield* call(() =>
       client.POST('/v1/projects', { body: { name: appName, workspaceId } }),
@@ -88,21 +102,28 @@ const findBranchId = (
   ).pipe(Effect.map((page) => page.data[0]?.id));
 
 /**
- * Finds the stage's Branch by its exact `gitName`, creating it if absent.
- * The Management API has no server-side "create-or-return" idempotency
- * (`POST /v1/projects/:id/branches` 409s on a duplicate `gitName`, with no
- * request field to make that a no-op), so idempotency is client-side:
- * observe first, and on a racing 409 from create, re-observe rather than
- * fail.
+ * Finds the stage's Branch by its exact `gitName`, creating it if absent
+ * unless `ensure` is `false` (find-only — `destroy`), in which case an
+ * absent Branch fails with `ContainerNotFoundError`. The Management API has
+ * no server-side "create-or-return" idempotency (`POST
+ * /v1/projects/:id/branches` 409s on a duplicate `gitName`, with no request
+ * field to make that a no-op), so idempotency is client-side: observe
+ * first, and on a racing 409 from create, re-observe rather than fail.
  */
 const resolveBranch = (
   client: ManagementApiClient,
   projectId: string,
   gitName: string,
-): Effect.Effect<string, PrismaApiError> =>
+  appName: string,
+  ensure: boolean,
+): Effect.Effect<string, PrismaApiError | ContainerNotFoundError> =>
   Effect.gen(function* () {
     const existing = yield* findBranchId(client, projectId, gitName);
     if (existing !== undefined) return existing;
+
+    if (!ensure) {
+      return yield* Effect.fail(new ContainerNotFoundError({ appName, stage: gitName }));
+    }
 
     return yield* call(() =>
       client.POST('/v1/projects/{projectId}/branches', {
@@ -125,16 +146,19 @@ const resolveBranch = (
  * Resolves the two containers a stage's deploy runs into (ADR-0019): the
  * app's **Project**, found-or-created by name, and — for a named stage
  * only — its **Branch**, found-or-created by `gitName`. The default stage
- * (no `stage`) creates no Branch; `branchId` is omitted.
+ * (no `stage`) creates no Branch; `branchId` is omitted. With `ensure:
+ * false` (`destroy`), nothing is created — an absent Project or Branch
+ * fails with `ContainerNotFoundError` instead.
  */
 export const resolveContainer = (
   opts: ResolveContainerOptions,
-): Effect.Effect<ResolvedContainer, PrismaApiError, ManagementClient> =>
+): Effect.Effect<ResolvedContainer, PrismaApiError | ContainerNotFoundError, ManagementClient> =>
   Effect.gen(function* () {
     const client = yield* ManagementClient;
-    const projectId = yield* resolveProject(client, opts.workspaceId, opts.appName);
+    const ensure = opts.ensure ?? true;
+    const projectId = yield* resolveProject(client, opts.workspaceId, opts.appName, ensure);
     if (opts.stage === undefined) return { projectId };
 
-    const branchId = yield* resolveBranch(client, projectId, opts.stage);
+    const branchId = yield* resolveBranch(client, projectId, opts.stage, opts.appName, ensure);
     return { projectId, branchId };
   });

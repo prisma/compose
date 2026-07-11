@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, test } from 'bun:test';
 import * as Effect from 'effect/Effect';
 import type { ManagementApiClient } from '../client.ts';
 import { ManagementClient } from '../client.ts';
-import { resolveContainer } from '../container.ts';
+import { ContainerNotFoundError, resolveContainer } from '../container.ts';
 
 interface FakeProject {
   id: string;
@@ -124,7 +124,10 @@ const fakeClient = (state: FakeState): ManagementApiClient => {
   return { GET, POST } as any as ManagementApiClient;
 };
 
-const run = (state: FakeState, opts: { workspaceId: string; appName: string; stage?: string }) =>
+const run = (
+  state: FakeState,
+  opts: { workspaceId: string; appName: string; stage?: string; ensure?: boolean },
+) =>
   Effect.runPromise(
     resolveContainer(opts).pipe(Effect.provideService(ManagementClient, fakeClient(state))),
   );
@@ -291,5 +294,86 @@ describe('resolveContainer — Branch resolution', () => {
 
     expect(staging.branchId).not.toBe(preview.branchId);
     expect(state.branches['proj-1']).toHaveLength(2);
+  });
+});
+
+describe('resolveContainer — ensure: false (find-only, used by destroy)', () => {
+  let state: FakeState;
+
+  beforeEach(() => {
+    state = newFakeState();
+  });
+
+  test('a missing Project fails with ContainerNotFoundError and creates nothing', async () => {
+    const error: unknown = await run(state, {
+      workspaceId: 'ws-1',
+      appName: 'storefront',
+      ensure: false,
+    }).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ContainerNotFoundError);
+    expect((error as ContainerNotFoundError).appName).toBe('storefront');
+    expect((error as ContainerNotFoundError).stage).toBeUndefined();
+    expect(state.projectCreateCalls).toBe(0);
+  });
+
+  test('a named stage with a missing Branch fails with ContainerNotFoundError and creates nothing', async () => {
+    state.projects.push({
+      id: 'proj-1',
+      name: 'storefront',
+      createdAt: new Date(1).toISOString(),
+      workspace: { id: 'ws-1' },
+    });
+
+    const error: unknown = await run(state, {
+      workspaceId: 'ws-1',
+      appName: 'storefront',
+      stage: 'staging',
+      ensure: false,
+    }).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ContainerNotFoundError);
+    expect((error as ContainerNotFoundError).appName).toBe('storefront');
+    expect((error as ContainerNotFoundError).stage).toBe('staging');
+    expect(state.branchCreateCalls).toBe(0);
+  });
+
+  test('a found Project and Branch resolve normally under ensure: false, with zero create calls', async () => {
+    state.projects.push({
+      id: 'proj-1',
+      name: 'storefront',
+      createdAt: new Date(1).toISOString(),
+      workspace: { id: 'ws-1' },
+    });
+    state.branches['proj-1'] = [
+      { id: 'br-existing', gitName: 'staging', createdAt: new Date(1).toISOString() },
+    ];
+
+    const result = await run(state, {
+      workspaceId: 'ws-1',
+      appName: 'storefront',
+      stage: 'staging',
+      ensure: false,
+    });
+
+    expect(result.projectId).toBe('proj-1');
+    expect(result.branchId).toBe('br-existing');
+    expect(state.projectCreateCalls).toBe(0);
+    expect(state.branchCreateCalls).toBe(0);
+  });
+
+  test('a found Project alone (default stage) resolves normally under ensure: false, with zero create calls', async () => {
+    state.projects.push({
+      id: 'proj-1',
+      name: 'storefront',
+      createdAt: new Date(1).toISOString(),
+      workspace: { id: 'ws-1' },
+    });
+
+    const result = await run(state, { workspaceId: 'ws-1', appName: 'storefront', ensure: false });
+
+    expect(result.projectId).toBe('proj-1');
+    expect(result.branchId).toBeUndefined();
+    expect(state.projectCreateCalls).toBe(0);
   });
 });
