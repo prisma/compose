@@ -79,10 +79,15 @@ export interface BootstrappedService {
 /**
  * The in-process counterpart of the deploy bootstrap (testing.md § Integration):
  * writes `config` into the environment via the target's `runForTest`, then
- * imports the app's real entry — `service.build.entry`, resolved relative to
- * `service.build.module`, exactly how the printed deploy bootstrap imports it
- * (see `@prisma/alchemy`'s artifact.ts). The entry's own top-level code is
- * what starts listening (the compute service's `server.ts`, unmodified);
+ * imports the app's real entry and hands back `{ url, fetch }`. By default
+ * the entry is `service.build.entry` resolved against `service.build.module`
+ * — exactly how the printed deploy bootstrap imports it (see
+ * `@prisma/alchemy`'s artifact.ts) — which fits a build adapter whose
+ * `entry` is a plain module-relative path (e.g. `@prisma/app-node`'s). A
+ * build adapter whose bootable path isn't module-relative (e.g.
+ * `@prisma/app-nextjs`'s standalone output) supplies its own `boot` thunk;
+ * the target owns that resolution, not this generic wrapper.
+ *
  * `config.service.port` is required and concrete because the entry never
  * reports an OS-assigned port back to the caller. No `close()` — teardown
  * rides bun-test's per-file process isolation (H3's resolved decision).
@@ -90,6 +95,7 @@ export interface BootstrappedService {
 export async function bootstrapService<D extends Deps, P extends Params, E extends Expose>(
   service: RunnableServiceNode<D, P, E> & Testable,
   config: Config,
+  boot?: () => Promise<void>,
 ): Promise<BootstrappedService> {
   const port = config.service['port'];
   if (typeof port !== 'number') {
@@ -99,10 +105,14 @@ export async function bootstrapService<D extends Deps, P extends Params, E exten
     );
   }
   const url = `http://localhost:${port}/`;
-  const entryUrl = new URL(service.build.entry, service.build.module).href;
+  const bootEntry =
+    boot ??
+    (async () => {
+      await import(new URL(service.build.entry, service.build.module).href);
+    });
 
   return service.runForTest(config, async () => {
-    await import(entryUrl);
+    await bootEntry();
     return { url, fetch };
   });
 }
