@@ -364,7 +364,7 @@ describe('compute().load()', () => {
   });
 });
 
-describe('the config pipeline over pack nodes', () => {
+describe('the config pipeline over extension nodes', () => {
   test('configOf is semantic — owner/name/type/secret, no platform keys', () => {
     const app = compute({
       name: 'test-service',

@@ -1,13 +1,4 @@
-/**
- * The router. Core's only job at deploy: Load (a system root), then for each
- * node look up its control in the config's extension registries — keyed by
- * (node.extension, node.type) — and run what the lookup finds: each
- * extension's application hook once, then per service: resources → provision
- * → build the typed Config → serialize → package → deploy. Deps before
- * dependents, sequenced as Alchemy dependency edges (never statement order —
- * see core-model.md § Lowering). Imports the provisioning substrate
- * (alchemy/effect) — never an extension package.
- */
+/** Routes each graph node to its extension control (by node.extension/type) and runs provision → serialize → package → deploy in dependency order. */
 
 import type { StackServices } from 'alchemy';
 import * as Alchemy from 'alchemy';
@@ -73,12 +64,7 @@ export interface ServiceLowering {
   ): Effect.Effect<LoweredNode, unknown, unknown>;
 }
 
-/**
- * The bootstrap the extension prints is the ONLY runnable Prisma App adds. It
- * imports the wrapper and calls run with the address AND a boot thunk that
- * imports the app's built entry (`assembled.entry`) — a printed, literal
- * dynamic import, so no bundler ever follows it.
- */
+/** Input to an extension's package() step: the built bundle and the node's graph address. */
 export interface PackageInput {
   /** The build control's normalized output: the bundle dir + the app's runnable. */
   readonly assembled: Bundle;
@@ -127,25 +113,13 @@ export interface LowerOptions {
   readonly state?: AlchemyStateLayer;
 }
 
-/**
- * A build control's normalized product — and the interim assembled-bundle
- * carrier `LowerOptions.bundles` hands to `package()`: the dir the build
- * control produced (wrapper + app entry + fixups) plus the app's runnable
- * entry relative to it (for the bootstrap's boot import). One name, one
- * shape, defined once — every deploy-side package (the CLI, `@prisma/app-
- * assemble`, each extension's build control) imports this instead of
- * redeclaring it.
- */
+/** A build control's normalized output: the produced bundle dir plus the app's runnable entry within it. */
 export interface Bundle {
   readonly dir: string;
   readonly entry: string;
 }
 
-/**
- * The build-control seam's input — `@prisma/app-assemble` and every
- * extension's build control (`@prisma/app-node`, `@prisma/app-nextjs`, …)
- * import this one definition rather than each declaring their own.
- */
+/** Shared input shape for every extension's build control. */
 export interface AssembleInput {
   readonly build: BuildAdapter;
   /**
@@ -169,15 +143,7 @@ export class LowerError extends Error {
   }
 }
 
-/**
- * Deploy-side: assembles the typed Config for one service — each declared
- * input's params matched by name to its producer's lowered outputs, plus
- * service-param defaults. Leaf values are provisioning refs, not strings.
- * Every slot resolves the same way, via its "dependency" edge to whatever
- * the system wired in: a resource's lowered outputs (shared by every consumer
- * wired to it), or a producer service's deploy outputs (already fully
- * deployed in topo order, so its URL is real — PRO-200).
- */
+/** Assembles a service's typed Config from its dependency edges' lowered outputs plus its own param defaults. */
 export function buildConfig(
   node: ServiceNode,
   id: NodeId,
@@ -212,9 +178,22 @@ function missingBundleError(id: NodeId): LowerError {
   );
 }
 
-/** The registries as a two-level map: extension id → descriptor (each descriptor's `nodes` is the second level). A duplicated id is rejected by the CLI's config validation, so last-in-order wins here. */
-function extensionsById(config: PrismaAppConfig): ReadonlyMap<string, ExtensionDescriptor> {
-  return new Map(config.extensions.map((extension) => [extension.id, extension]));
+function duplicateExtensionError(id: string): LowerError {
+  return new LowerError(
+    `Extension "${id}" is listed more than once in \`extensions\` — each extension id must be unique.`,
+  );
+}
+
+/** Registries as extension id → descriptor. Fails on a duplicate id — the CLI validates config, but lowering() is the programmatic escape hatch that doesn't. */
+function extensionsById(
+  config: PrismaAppConfig,
+): Effect.Effect<ReadonlyMap<string, ExtensionDescriptor>, LowerError> {
+  const map = new Map<string, ExtensionDescriptor>();
+  for (const extension of config.extensions) {
+    if (map.has(extension.id)) return Effect.fail(duplicateExtensionError(extension.id));
+    map.set(extension.id, extension);
+  }
+  return Effect.succeed(map);
 }
 
 function unknownExtensionError(extension: string, id: NodeId): LowerError {
@@ -285,17 +264,8 @@ export function mergedProviders(config: PrismaAppConfig): Layer.Layer<never> {
 }
 
 /**
- * Composable form — for MIXED topologies: Prisma App-authored nodes beside
- * hand-wired Alchemy resources in one stack. Runs the same Load → registry
- * walk inside the caller's stack effect and returns the root's LoweredNode,
- * whose outputs (e.g. the deployed URL) hand-wired resources may consume. A
- * system root has no outputs of its own yet (boundary ports are future work)
- * — its lowering returns `{ outputs: {} }`.
- *
- * Error channel: LowerError from routing, PLUS whatever an extension's
- * lowering fails with (their error type is open) — a mixed-stack caller
- * treats failures as deploy-fatal or inspects; it must not assume LowerError
- * is the only inhabitant.
+ * Composable form for mixed stacks: hand-wired Alchemy resources alongside Prisma App nodes in one stack effect.
+ * Fails with LowerError or whatever an extension's lowering raises — the error type is open.
  */
 export function lowering(
   root: SystemNode,
@@ -304,7 +274,7 @@ export function lowering(
 ): Effect.Effect<LoweredNode, LowerError, unknown> {
   return Effect.gen(function* () {
     const graph = Load(root, { id: opts.name });
-    const extensions = extensionsById(config);
+    const extensions = yield* extensionsById(config);
     const lowered = new Map<NodeId, LoweredNode>();
 
     // Each extension's application hook runs ONCE, before any node, in config

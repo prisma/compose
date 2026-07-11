@@ -36,17 +36,8 @@ function isComputeRegion(value: string): value is Prisma.ComputeRegion {
   return KNOWN_REGION_SET.has(value);
 }
 
-// Prisma resource names have a length floor the framework's id space doesn't:
-// the Management API's Connection create (`POST /v1/connections`,
-// `POST /v1/databases/{databaseId}/connections`) constrains `name` to
-// `minLength: 3, maxLength: 65` (sourced from GET https://api.prisma.io/v1/doc;
-// Database/Project `name` and Compute `displayName` are looser — 1 / 1–256 —
-// with no `pattern`). A postgres resource id feeds both the Database and the
-// Connection, so it must clear 3–65; applying that one Connection rule to every
-// name the extension derives from a provision id (project, resource, service)
-// is the tightest of them and keeps a single rule. `_`/`.` are already rejected
-// by core at id construction, so charset is pre-constrained — this validates
-// only the length floor/ceiling Prisma adds on top.
+// Prisma's Connection create constrains `name` to 3–65 chars (Management API:
+// POST /v1/connections); applied here to every id-derived resource name as the tightest of the API's name-length rules.
 const PRISMA_NAME_MIN = 3;
 const PRISMA_NAME_MAX = 65;
 
@@ -60,13 +51,7 @@ function validateName(value: string, source: string): void {
   }
 }
 
-/**
- * Resolves the factory's env-or-option inputs, failing fast with the exact
- * variable name — construction happens during config evaluation, so this is
- * the pre-assembly env check the deploy UX relies on. `PRISMA_SERVICE_TOKEN`
- * is never read here; that is consumed by @prisma/alchemy's providers at run
- * time, not by descriptor construction.
- */
+/** Resolves the factory's env-or-option inputs, failing fast with the exact variable name (construction runs during config evaluation). */
 function resolveOptions(opts: PrismaCloudOptions): {
   workspaceId: string;
   region?: Prisma.ComputeRegion;
@@ -169,12 +154,7 @@ export const prismaCloud = (opts: PrismaCloudOptions = {}): ExtensionDescriptor 
             };
           }),
 
-        // Encode the typed Config into the runtime environment — one env var
-        // per leaf, keyed by the SAME serializer run() reads at boot
-        // (serializer.ts, shared both directions). Values are the provisioning
-        // refs core built the Config from, so each env var depends on its
-        // resource/producer — the ordering edges. class production; the
-        // platform default is never written.
+        // Encodes the typed Config into env vars, keyed by the same serializer run() reads at boot.
         serialize: ({ address, node }, provisioned, config) =>
           Effect.gen(function* () {
             const records = [];
@@ -196,13 +176,7 @@ export const prismaCloud = (opts: PrismaCloudOptions = {}): ExtensionDescriptor 
                 }),
               );
             }
-            // The listen port the app binds is the service's own `port` param
-            // (encoded above as the PORT env var run() stashes). The Deployment
-            // must route to that same port, so carry the resolved value to
-            // deploy() through serialize's outputs — the phase that already
-            // holds the typed Config. deploy() receives no Config of its own;
-            // its SPI seam is serialize's LoweredNode, exactly like the
-            // environment edge. Falls back to the extension default if unset.
+            // Carries the resolved port to deploy() via serialize's outputs; falls back to 3000 if unset.
             const port = typeof config.service['port'] === 'number' ? config.service['port'] : 3000;
             return { outputs: { environment: records, port } };
           }),
@@ -224,11 +198,7 @@ export const prismaCloud = (opts: PrismaCloudOptions = {}): ExtensionDescriptor 
             }),
           ),
 
-        // A specific BUILD into the place: version → upload → start → promote.
-        // The environment prop references serialize's env-var records, so the
-        // version depends on them (the edge that kills PRO-211 + propagates
-        // change). deployedUrl is read post-promote — the create-time domain is
-        // a placeholder (PRO-200).
+        // The environment prop references serialize's env-var records, so the deploy depends on them.
         deploy: ({ id }, provisioned, artifact, serialized) =>
           Effect.gen(function* () {
             const deployment = yield* Prisma.Deployment(`${id}-deploy`, {

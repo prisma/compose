@@ -18,14 +18,7 @@ import { validateRegistryCoverage } from './validate-coverage.ts';
 
 const BINARY_NAME = 'prisma-app';
 
-/**
- * The `<entry>`/`--name`/`--stage` surface shared by deploy and destroy
- * (deploy-cli.md § Scope). `execute()` is unused: `run()` below drives the
- * pipeline directly against the parsed options so error routing and exit
- * codes stay under this module's own control — the `RunDeps` test seams (and
- * bin.ts's own error handling) need to observe thrown errors, not have them
- * swallowed and printed by clipanion's own `cli.run()`.
- */
+/** The <entry>/--name/--stage surface shared by deploy and destroy; execute() is unused — run() drives the pipeline directly so error handling stays under this module's control. */
 abstract class DeployCliCommand extends Command {
   entry = Option.String({ name: 'entry' });
 
@@ -73,13 +66,7 @@ function buildCli(): Cli {
 /** Thrown internally when the user explicitly asked for `--help`/`-h` — run() prints it to stdout and exits 0; not a usage error. */
 class HelpRequested extends Error {}
 
-/**
- * clipanion's `UnknownSyntaxError` — thrown for an unmatched command, a
- * missing required positional, an option missing its value, or an unknown
- * flag — isn't re-exported from its main entry (only `UsageError` is), so
- * it's duck-typed via its `name` and the `clipanion.type` discriminator every
- * clipanion error carries (mirrors prisma-next's migration-cli.ts).
- */
+/** Duck-typed: clipanion's UnknownSyntaxError isn't re-exported, so match its name + clipanion.type discriminator (mirrors prisma-next's migration-cli.ts). */
 function isUnknownSyntaxError(error: unknown): error is Error {
   if (!(error instanceof Error) || error.name !== 'UnknownSyntaxError') return false;
   const meta = (error as { clipanion?: { type?: string } }).clipanion;
@@ -140,15 +127,7 @@ export interface RunDeps {
 
 const ALCHEMY_STATE_DIR = '.alchemy';
 
-/**
- * R2a-review guardrail: `destroy` evaluates the alchemy stack against local
- * state under cwd. If that state is missing or empty, warn — don't fail —
- * before the alchemy invocation: the most likely explanations are "deployed
- * from a different directory" (nothing to destroy from here) or "nothing was
- * ever deployed" (destroy is a no-op either way). The CI destroy-guard script
- * already skips the CLI entirely when `.alchemy` is absent; this covers the
- * direct-invocation path that script doesn't cover.
- */
+/** Warns (doesn't fail) when destroy finds no local deploy state under cwd — likely wrong directory or nothing deployed yet. */
 function warnIfNoLocalDeployState(cwd: string): void {
   const stateDir = path.join(cwd, ALCHEMY_STATE_DIR);
   const hasState = fs.existsSync(stateDir) && fs.readdirSync(stateDir).length > 0;
@@ -182,11 +161,7 @@ export async function run(argv: readonly string[], deps: RunDeps = {}): Promise<
     warnIfNoLocalDeployState(cwd);
   }
 
-  // 1. Find + load prisma-app.config.ts (ADR-0017): walk up from the resolved
-  // entry path, then c12 with the explicit file. Config evaluation runs the
-  // extension factories, so their env validation (e.g. a missing
-  // PRISMA_WORKSPACE_ID) fails HERE — before the entry import and before any
-  // slow assembly work.
+  // 1. Find + load prisma-app.config.ts — runs extension env validation before the entry import.
   const resolvedEntryPath = path.resolve(cwd, args.entry);
   const configPath = findConfigPathForEntry(resolvedEntryPath);
   if (configPath === undefined) {
@@ -206,9 +181,7 @@ export async function run(argv: readonly string[], deps: RunDeps = {}): Promise<
     );
   }
 
-  // 4. Registry coverage: every node's and build descriptor's (extension,
-  // type) must have a control of the right kind in the config — named errors
-  // with the config fix, before assembly.
+  // 4. Registry coverage: every node/build descriptor has a matching control in the config.
   validateRegistryCoverage(graph, config);
 
   // 5. Resolve the name.
@@ -217,10 +190,7 @@ export async function run(argv: readonly string[], deps: RunDeps = {}): Promise<
     throw new CliError('The root node has no name — name it at authoring, or pass --name.');
   }
 
-  // 6. Assemble each service through the config's registries. A destroy
-  // evaluates the same stack program as a deploy (the generated file's
-  // lower() packages the artifacts), so missing built output blocks destroy
-  // too — say so instead of just "run your build".
+  // 6. Assemble each service through the config's registries.
   let assembled: Awaited<ReturnType<typeof assembleServices>>;
   try {
     assembled = await assembleServices(graph, config, deps.runAssembler);
@@ -234,9 +204,7 @@ export async function run(argv: readonly string[], deps: RunDeps = {}): Promise<
     throw error;
   }
 
-  // 7. Generate .prisma-app/alchemy.run.ts inside the process's own cwd — tool
-  // state lives where you run the tool (ADR-0004's rewrite). It imports the
-  // user's config by relative path and drives lower() with its registries.
+  // 7. Generate .prisma-app/alchemy.run.ts (tool state lives where you run the tool).
   const stackPath = writeStackFile({
     entryPath: entryModule.path,
     cwd,

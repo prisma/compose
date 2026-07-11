@@ -110,6 +110,12 @@ kept failing — for an explicit, deterministic list.
   control-plane entry for both the CLI and the generated artifact.
 - Mixed platforms in one application are legal and intended. There is no
   mixed-target error; coverage validation replaces it.
+- A listed extension runs its `application` hook and providers whether or not
+  any node uses it — the list is the whole registration, with no
+  used-extensions-only filtering. Listing an unused platform extension
+  therefore provisions its app-level infrastructure (e.g. an empty Project), so
+  list only the extensions the app actually deploys with. (A future check could
+  require the extension owning `state` to appear in the list.)
 - Extensions ship two entries: the authoring entry (pure data factories) and
   `/control` (registries; the only place heavy deploy code lives).
 - The framework's own packages remain extension-agnostic: nothing in core or

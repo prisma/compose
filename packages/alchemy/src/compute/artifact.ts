@@ -1,10 +1,10 @@
 /**
  * Assembles a Prisma Compute artifact: the app-built bundle plus the
- * pack-printed bootstrap and manifest, tarred and gzipped deterministically
+ * extension-printed bootstrap and manifest, tarred and gzipped deterministically
  * (fixed mtimes, sorted entry order) so an unchanged service noops on
  * redeploy — a rebuild is the only thing that changes the hash. Lives here
  * (not in @prisma/app-cloud/control) because it needs node:fs/node:zlib,
- * which the pack's shipped src may never import (invariant 5).
+ * which the extension's shipped src may never import (invariant 5).
  */
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';

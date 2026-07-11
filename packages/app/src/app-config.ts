@@ -1,11 +1,4 @@
-/**
- * The `prisma-app.config.ts` surface (ADR-0017): the config file statically
- * imports each extension's `/control` entry and hands `defineConfig` the
- * resulting descriptors, plus the ONE state store backing the deploy. Core
- * defines only the types and the identity function — no control-plane code
- * lives here; module resolution stays ambient (the config file's own static
- * imports, resolved from the app root by the package manager).
- */
+/** The `prisma-app.config.ts` surface (ADR-0017): statically imports each extension's control plus the state store; core defines only the types. */
 import type * as Layer from 'effect/Layer';
 import type {
   AlchemyStateLayer,

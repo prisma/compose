@@ -124,9 +124,13 @@ export async function loadAppConfig(configPath: string): Promise<LoadedAppConfig
     packageJson: false,
   });
 
-  if (result.configFile !== configPath) {
+  const loadedFile = result.configFile;
+  if (
+    typeof loadedFile !== 'string' ||
+    fs.realpathSync(loadedFile) !== fs.realpathSync(configPath)
+  ) {
     throw new CliError(
-      `Config loading resolved "${String(result.configFile)}" instead of the discovered ` +
+      `Config loading resolved "${String(loadedFile)}" instead of the discovered ` +
         `"${configPath}" — refusing to deploy against a different file.`,
     );
   }

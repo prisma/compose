@@ -1,15 +1,4 @@
-/**
- * Pipeline step 5 (deploy-cli.md § The pipeline, ADR-0004/0017): for every
- * service node in the loaded graph, assembles its deploy artifact through the
- * config's extension registries — the build control at
- * `config.extensions[build.extension].nodes[build.type]` (the same
- * (extension, node-ID) routing every node gets). This package does no module
- * loading and no path resolution of its own; the control functions arrived
- * through `prisma-app.config.ts`'s static imports. The root is always a
- * system, so this produces one bundle per provisioned service, keyed by the
- * service's full hierarchical address (its graph id — the same id the
- * generated stack file and `lower()`'s bundle lookup both use).
- */
+/** Pipeline step 5: assembles each service's deploy artifact via its build control at config.extensions[build.extension].nodes[build.type]. */
 import type { Graph, GraphNode, ServiceNode } from '@prisma/app';
 import type { PrismaAppConfig } from '@prisma/app/config';
 import type { Bundle } from '@prisma/app/deploy';

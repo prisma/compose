@@ -18,20 +18,7 @@ import type { Contract } from './contract.ts';
 // Symbol.for so the check survives duplicated module instances in a workspace.
 const NODE: unique symbol = Symbol.for('prisma:node') as never;
 
-/**
- * How a service's app becomes a runnable artifact. Pure data the service node
- * carries (rides in service.ts, into every bundle); `extension` + `type` are
- * its control-plane routing key — assembly is
- * `config.extensions[extension].nodes[type].assemble(...)`, exactly the
- * lookup a service or resource node gets. `entry` (and any other
- * kind-specific path field, e.g. nextjs's `appDir`) resolves RELATIVE TO
- * `dirname(module)` — exactly like an import specifier — never an absolute
- * or machine path. `module` (the authoring module's `import.meta.url`) is
- * the one sanctioned exception to that rule (ADR-0004): deploy-time metadata
- * only, and bundlers preserve it as an expression rather than a literal, so
- * it re-evaluates inside the deploy artifact instead of baking in a
- * dev-machine path.
- */
+/** How a service's app becomes a runnable artifact — the build control's routing key (`extension`/`type`) plus paths resolved relative to the authoring module. */
 export interface BuildAdapter {
   /** The extension package that provides the build control, e.g. "@prisma/app-node". */
   readonly extension: string;
@@ -155,24 +142,7 @@ export interface DependencyEnd<C = unknown, Req = unknown> {
   readonly required: Req | undefined;
 }
 
-/**
- * A System: the same boundary a service has — a `Deps` map of typed inputs and
- * an `Expose` map of contract outputs (ADR-0016) — around transparent wiring
- * instead of a black-box body. The body runs at Load (it is wiring, not user
- * code), receives its declared inputs as forwardable wiring values plus
- * `provision`, and returns one ref-port per declared output. `provision()`
- * accepts a system wherever it accepts a service, so systems nest to any depth;
- * a system with an empty boundary is the closed, deploy-root form. Carries no
- * `extension` — a system is never itself provisioned onto a platform; its
- * provisioned children are.
- *
- * `body` is declared with METHOD syntax (`body(ctx): ...`), not as a property
- * of function type (`body: (ctx) => ...`) — TypeScript checks a method's
- * parameters bivariantly but a function-typed property's contravariantly, so
- * a property here would make e.g. `SystemNode<{ db: DependencyEnd<...> }, E>`
- * stop being assignable to the `SystemNode<Deps, E>` shape `Load`/`provision()`
- * accept (a real regression the test suite catches).
- */
+/** A System: the same Deps/Expose boundary a service has, around transparent wiring instead of a black-box body — its `body` runs at Load, not at authoring. */
 export interface SystemNode<D extends Deps = Deps, E extends Expose = Expose> {
   readonly [NODE]: true;
   readonly kind: 'system';
@@ -240,68 +210,35 @@ export type ProvisionedRef<E extends Expose = Record<never, never>> = { readonly
 // biome-ignore lint/suspicious/noExplicitAny: generic DependencyEnd bound — Req is opaque here.
 type ReqOf<DE> = DE extends DependencyEnd<any, infer Req> ? Req : never;
 
-/**
- * `SystemBuilder.provision`'s wiring argument: one producer ref per dependency
- * slot, each checked against the slot's required contract — an untyped
- * input's Req is `unknown`, so it accepts anything (http()'s escape hatch).
- * `NoInfer` keeps the check honest — without it, an incompatible ref would
- * just widen the inferred required type instead of failing.
- */
+/** `provision`'s wiring argument: one producer ref per dependency slot, checked against its required contract. */
 type Wiring<D extends Deps> = { [K in keyof D]: NoInfer<ReqOf<D[K]>> };
 
 export interface SystemBuilder {
-  /**
-   * Provisions an owned resource under a stable id — the ONE place that
-   * resource exists. Returns the ref (the provided contract, tagged with the
-   * id) a later provision() wires into a consumer's dependency slot. A
-   * resource is never created because a service mentioned it; this call is
-   * the only way one enters the graph.
-   */
+  /** Provisions an owned resource under a stable id, returning its ref for wiring into a consumer. */
   // biome-ignore lint/suspicious/noExplicitAny: opaque per-contract Cmp — matches RefPort's own `any` bound.
   provision<C extends Contract<any, any>>(
     id: string,
     resource: ResourceNode<C>,
   ): { readonly id: string } & RefPort<C>;
-  /**
-   * Registers an owned service under a stable id, returning a ref carrying
-   * its exposed ports (if any) for a later provision() to wire in. Also the
-   * form for a service with dependency inputs left for the runtime dangling
-   * check to catch — TypeScript cannot see whether a service's own inputs got
-   * wired anywhere else in the body, only Load can.
-   */
+  /** Registers an owned service under a stable id, returning a ref carrying its exposed ports. */
   provision<E extends Expose>(
     id: string,
     // biome-ignore lint/suspicious/noExplicitAny: accepts any concrete service node; ServiceNode generics are invariant so `any` is required.
     service: ServiceNode<any, any, E>,
   ): ProvisionedRef<E>;
-  /**
-   * Registers an owned service under a stable id; `wiring` supplies a
-   * producer for each of the service's dependency slots, checked against the
-   * slot's required contract — an untyped input's Req is `unknown`, so it
-   * accepts anything (http()'s escape hatch); Load re-checks the same
-   * relation via the ref's `satisfies()`.
-   */
+  /** Registers an owned service under a stable id, wiring a producer ref into each of its dependency slots. */
   provision<D extends Deps, E extends Expose>(
     id: string,
     // biome-ignore lint/suspicious/noExplicitAny: accepts any concrete service node; ServiceNode generics are invariant so `any` is required.
     service: ServiceNode<D, any, E>,
     wiring: Wiring<D>,
   ): ProvisionedRef<E>;
-  /**
-   * Registers an owned child system under a stable id — the same call shape a
-   * service gets, since a `SystemNode<D, E>` is wireable anywhere a
-   * `ServiceNode<D, _, E>` is (ADR-0016). Left for the runtime dangling check
-   * to catch, same as the no-wiring service overload.
-   */
+  /** Registers an owned child system under a stable id — same call shape as the no-wiring service overload. */
   provision<D extends Deps, E extends Expose>(
     id: string,
     child: SystemNode<D, E>,
   ): ProvisionedRef<E>;
-  /**
-   * Registers an owned child system under a stable id; `wiring` supplies a
-   * producer's ref-port for each of the system's declared `deps` — the same
-   * `Wiring<D>` check a service's dependency inputs get.
-   */
+  /** Registers an owned child system under a stable id, wiring a producer ref into each of its declared deps. */
   provision<D extends Deps, E extends Expose>(
     id: string,
     child: SystemNode<D, E>,

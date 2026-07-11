@@ -1,16 +1,4 @@
-/**
- * Pipeline step 6 (deploy-cli.md § The pipeline; design-notes.md's "Driving
- * Alchemy" call): writes a small, human-readable, regenerated-every-run stack
- * module at `.prisma-app/alchemy.run.ts` inside the process's own working
- * directory — tool state lives where you run the tool, like every other CLI
- * (ADR-0004's rewrite; no package-anchor walk). It calls `lower()` with the
- * values the CLI already computed — the app's root and the user's own
- * `prisma-app.config.ts`, both imported by RELATIVE path (this is a generated
- * artifact in the user's own tree, not framework resolution) — no logic of
- * its own, so it stays independently runnable
- * (`alchemy deploy .prisma-app/alchemy.run.ts`) to bisect a CLI bug from an
- * Alchemy bug.
- */
+/** Pipeline step 6: writes a regenerated-every-run, independently runnable stack module at `.prisma-app/alchemy.run.ts`. */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { AssembledServices } from '@prisma/app-assemble';
@@ -59,16 +47,7 @@ function renderOptions(input: StackFileInput): string {
   return lines.join('\n');
 }
 
-/**
- * Renders the stack module's source — exported separately so tests can
- * assert on its content without touching disk.
- *
- * The header is `//` line comments, not a block comment (F01): a `cwd`
- * containing a star immediately followed by a slash — a legal (if exotic)
- * unix path, e.g. a directory named "foo*" — would close a block comment
- * early and emit a syntactically broken stack file. `//` has no closing
- * delimiter for a path to collide with.
- */
+/** Renders the stack module's source (tests assert on it without touching disk) — uses `//` headers, not a block comment, since a cwd path with a star-slash could close one early. */
 export function renderStackFile(input: StackFileInput): string {
   const generatedDir = path.join(input.cwd, GENERATED_DIR);
   const appImport = relativeImportSpecifier(generatedDir, input.entryPath);
