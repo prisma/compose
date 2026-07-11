@@ -29,11 +29,13 @@ trigger, what was learned, the decision, and the affected artefacts (Drive I12).
   `ComputeService` **create bodies accept `branchId`**; spec §2/§7 said the ids arrive via a
   new `PrismaCloudOptions.projectId`/`fromEnv()`.
 - **Learned (verified against `@prisma/management-api-sdk@1.47.0`):**
-  1. `POST /v1/projects/:id/databases` and `.../compute-services` create bodies have **no
-     `branchId`**. A resource is created project-scoped and **attached to a Branch by `PATCH
-     /v1/databases/:id` / `PATCH /v1/compute-services/:id` with `{ branchId }`** (both PATCH
-     bodies accept `branchId`/`branchGitName`). `EnvironmentVariable`'s create body **does**
-     accept `branchId` + `class`.
+  1. `POST /v1/projects/:id/databases` create body has **no `branchId`** — a database is created
+     project-scoped and **attached to a Branch by `PATCH /v1/databases/:id` with `{ branchId }`**.
+     (`.../compute-services` create *does* accept `branchId`, but D3a uses the same PATCH mechanism
+     for both providers for uniformity — a harmless extra idempotent call for compute. Corrected
+     from an earlier claim that neither create body accepted it — the D3 Opus review caught it
+     against SDK line 8628.) `EnvironmentVariable`'s create body accepts `branchId` + `class`
+     directly. `Connection`/`Deployment` are not branch members (they inherit via their parent).
   2. There is no `fromEnv()`/`PrismaCloudOptions` id path today — the target reads env in
      `resolveOptions`. And the CLI evaluates `prismaCloud()` in the **parent** at config-load
      (before `ensureContainers` computes the ids), so `projectId` **cannot be required at

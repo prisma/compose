@@ -61,18 +61,22 @@ these, never *what they are*.
      target computes `class = branchId ? 'preview' : 'production'`; it never reads a Branch
      `role`. (Platform-derived `class` is the deferred end-state, ADR-0019.)
 
-6. **`branchId` on providers — assigned by PATCH, not a create-body field.** Verified against
-   `@prisma/management-api-sdk@1.47.0`: the `POST /v1/projects/:id/databases` and
-   `.../compute-services` **create bodies do NOT accept `branchId`** — a resource is created
-   project-scoped, then **attached to a Branch by `PATCH /v1/databases/:id` /
-   `PATCH /v1/compute-services/:id` with `{ branchId }`** (both PATCH bodies accept `branchId`).
-   So: add an optional `branchId` prop to the `Database` and `ComputeService` providers; when
-   set, the provider **PATCHes the resource to the Branch after observe-or-create, on every
-   reconcile** (idempotent — re-patching to the same Branch is a no-op), so a preview branch is
-   self-healing and a re-deploy stays a no-op. When `branchId` is unset (default stage), **no
-   PATCH** — byte-for-byte current behavior. `EnvironmentVariable` is different: its create body
-   **does** accept `branchId` + `class` (a preview-branch override when `branchId` is supplied),
-   so it already carries both and needs no PATCH.
+6. **`branchId` on providers — assigned by PATCH (uniformly).** Verified against
+   `@prisma/management-api-sdk@1.47.0`: the `POST /v1/projects/:id/databases` create body **does
+   NOT accept `branchId`** (only `name`/`region`/`isDefault`/`source`), so a database must be
+   created project-scoped and then **attached to a Branch by `PATCH /v1/databases/:id` with
+   `{ branchId }`**. The `.../compute-services` create body *does* accept `branchId`, but we use
+   the **same PATCH mechanism** (`PATCH /v1/compute-services/:id`) for both providers — one
+   uniform code path; the extra idempotent PATCH for compute is harmless. So: add an optional
+   `branchId` prop to the `Database` and `ComputeService` providers; when set, the provider
+   **PATCHes the resource to the Branch after observe-or-create, on every reconcile** (idempotent
+   — re-patching to the same Branch is a no-op), so a preview branch is self-healing and a
+   re-deploy stays a no-op. When `branchId` is unset (default stage), **no PATCH** — byte-for-byte
+   current behavior. `EnvironmentVariable` differs again: its create body accepts `branchId` +
+   `class` directly (a preview-branch override when `branchId` is supplied), so it carries both
+   in the create and needs no PATCH. (`Connection` and `Deployment` are **not** branch members —
+   they inherit the Branch through their parent database / compute-service — so they take no
+   `branchId`.)
 
 7. **`application.provision` references, never mints.** It stops calling `Prisma.Project(...)`;
    it reads `process.env['PRISMA_PROJECT_ID']` (**required here** — fail clearly if absent) and
