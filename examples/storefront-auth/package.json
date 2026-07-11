@@ -14,7 +14,6 @@
     "@prisma/app": "workspace:0.2.0",
     "@prisma/app-nextjs": "workspace:0.2.0",
     "@prisma/app-node": "workspace:0.2.0",
-    "@prisma/alchemy": "workspace:0.2.0",
     "@prisma/app-cloud": "workspace:0.2.0",
     "@prisma/app-rpc": "workspace:0.2.0",
     "@storefront-auth/auth": "workspace:0.2.0",

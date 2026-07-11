@@ -5,8 +5,8 @@ import { compute, postgres, postgresContract } from '../index.ts';
 import { configKey, deserialize } from '../serializer.ts';
 
 const build = {
-  kind: 'node',
-  pack: '@prisma/app-node',
+  extension: '@prisma/app-node',
+  type: 'node',
   module: 'file:///test/service.ts',
   entry: 'server.js',
 };
@@ -32,7 +32,7 @@ describe('postgres({ name })', () => {
     expect(isNode(node)).toBe(true);
     expect(node.kind).toBe('resource');
     expect(node.type).toBe('postgres');
-    expect(node.pack).toBe('@prisma/app-cloud');
+    expect(node.extension).toBe('@prisma/app-cloud');
     expect(node.name).toBe('db');
     expect(node.provides).toBe(postgresContract);
     expect('connection' in node).toBe(false);
@@ -140,7 +140,7 @@ describe('compute({ expose })', () => {
   });
 });
 
-describe("the config serializer (shared by run() and /target's serialize)", () => {
+describe("the config serializer (shared by run() and /control's serialize)", () => {
   test("configKey: lone-service root (address '') is unprefixed — owner ▸ name", () => {
     const app = compute({
       name: 'test-service',
@@ -249,7 +249,7 @@ describe("the config serializer (shared by run() and /target's serialize)", () =
   });
 
   test('round-trip: a numeric leaf serializes to a string and deserializes back to the identical number', async () => {
-    // The gap that hid the serialize bug: /target's serialize encodes typed→
+    // The gap that hid the serialize bug: /control's serialize encodes typed→
     // string (3000 → "3000"), and this same module's deserialize must read it
     // back as a number (3000). Emulate serialize's encoding for the `port`
     // param, keyed by the SHARED configKey, then read it back through
@@ -364,7 +364,7 @@ describe('compute().load()', () => {
   });
 });
 
-describe('the config pipeline over pack nodes', () => {
+describe('the config pipeline over extension nodes', () => {
   test('configOf is semantic — owner/name/type/secret, no platform keys', () => {
     const app = compute({
       name: 'test-service',

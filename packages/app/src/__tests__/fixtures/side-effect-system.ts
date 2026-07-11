@@ -6,19 +6,20 @@ export let bodyCallCount = 0;
 
 const svc = service({
   name: 'test-service',
-  pack: 'test/pack',
+  extension: 'test/pack',
   type: 'fixture/app',
   inputs: {},
   params: {},
   build: {
-    kind: 'node',
-    pack: '@prisma/app-node',
+    extension: '@prisma/app-node',
+    type: 'node',
     module: 'file:///test/service.ts',
     entry: 'server.js',
   },
 });
 
-export default system('fixture-system', (h) => {
+export default system('fixture-system', {}, ({ provision }) => {
   bodyCallCount += 1;
-  h.provision('app', svc);
+  provision('app', svc);
+  return {};
 });

@@ -26,7 +26,8 @@
   "dependencies": {
     "@prisma/app-assemble": "workspace:0.2.0",
     "@prisma/app": "workspace:0.2.0",
-    "clipanion": "^3.2.1"
+    "clipanion": "^3.2.1",
+    "c12": "^3.3.4"
   },
   "devDependencies": {
     "@prisma/app-tsdown": "workspace:0.2.0",

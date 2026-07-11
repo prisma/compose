@@ -1,25 +1,32 @@
 import { describe, expect, test } from 'bun:test';
 import * as Effect from 'effect/Effect';
+import * as Layer from 'effect/Layer';
+import type { ExtensionDescriptor, PrismaAppConfig } from '../app-config.ts';
 import type { Config } from '../config.ts';
 import {
   type AlchemyStateLayer,
   type Artifact,
   type Bundle,
   buildConfig,
+  type LowerContext,
   LowerError,
   type LoweredNode,
   type LowerOptions,
   lower,
   lowering,
+  mergedProviders,
   resolveStateLayer,
-  type Target,
 } from '../deploy.ts';
 import { Load } from '../graph.ts';
 import { type BuildAdapter, type Deps, dependency, resource, service, system } from '../node.ts';
 import { conn, providerContract } from './helpers.ts';
 
 const dbResource = () =>
-  resource({ name: 'db', pack: 'test/pack', provides: providerContract('fake/db', { url: '' }) });
+  resource({
+    name: 'db',
+    extension: 'test/pack',
+    provides: providerContract('fake/db', { url: '' }),
+  });
 const dbEnd = () =>
   dependency({
     name: 'db',
@@ -31,8 +38,8 @@ const httpEnd = () =>
   dependency({ type: 'fake/http', connection: conn({ url: { type: 'string' } }, () => ({})) });
 
 const defaultBuild: BuildAdapter = {
-  kind: 'node',
-  pack: '@prisma/app-node',
+  extension: '@prisma/app-node',
+  type: 'node',
   module: 'file:///test/service.ts',
   entry: 'server.js',
 };
@@ -45,12 +52,15 @@ const app = <D extends Deps>(
 ) =>
   service({
     name: 'test-service',
-    pack: 'test/pack',
+    extension: 'test/pack',
     type,
     inputs,
     params: params as never,
     build,
   });
+
+const stateSentinel = (tag: string): AlchemyStateLayer =>
+  ({ __sentinel: tag }) as unknown as AlchemyStateLayer;
 
 const opts = (extra: Partial<LowerOptions> = {}): LowerOptions => ({
   name: 'hello',
@@ -58,7 +68,7 @@ const opts = (extra: Partial<LowerOptions> = {}): LowerOptions => ({
   ...extra,
 });
 
-// ——— A fake target that records every call it receives, instead of driving
+// ——— A fake extension that records every call it receives, instead of driving
 // real Alchemy resources — the same recording strategy the old single-phase
 // suite used, extended to the phased SPI. Lets us assert the "environment
 // edge" (serialize's records reaching deploy) by inspecting what was
@@ -86,31 +96,29 @@ type Call =
       readonly environment: unknown;
     };
 
-function fakeTarget() {
+function fakeExtension() {
   const calls: Call[] = [];
-  const target: Target = {
-    name: 'fake',
+  const descriptor: ExtensionDescriptor = {
+    id: 'test/pack',
     providers: () => {
       throw new Error('providers() must not be called by lowering()');
     },
-    // Every target must supply a default state layer now (Target.state is
-    // required); this fake's is a sentinel, never booted by these tests
-    // (which drive `lowering()`, not `lower()`'s Alchemy.Stack wrapping).
-    state: () => ({ __sentinel: 'fake-target-default' }) as unknown as AlchemyStateLayer,
     application: {
       provision: (ctx) => {
         calls.push({ phase: 'application', id: ctx.id });
         return Effect.succeed({ outputs: { projectId: `${ctx.id}#project` } });
       },
     },
-    resources: {
-      'fake/db': (ctx) => {
-        calls.push({ phase: 'resource', id: ctx.id, type: ctx.node.type });
-        return Effect.succeed({ outputs: { url: `db://${ctx.id}` } });
-      },
-    },
-    services: {
+    nodes: {
+      'fake/db': Object.assign(
+        (ctx: LowerContext) => {
+          calls.push({ phase: 'resource', id: ctx.id, type: ctx.node.type });
+          return Effect.succeed({ outputs: { url: `db://${ctx.id}` } });
+        },
+        { kind: 'resource' as const },
+      ),
       'fake/compute': {
+        kind: 'service' as const,
         provision: (ctx) => {
           calls.push({ phase: 'provision', id: ctx.id, address: ctx.address });
           return Effect.succeed({
@@ -122,7 +130,7 @@ function fakeTarget() {
         },
         serialize: (ctx, _provisioned, config) => {
           calls.push({ phase: 'serialize', id: ctx.id, address: ctx.address, config });
-          // One "record" per Config leaf — mirrors the real pack's one
+          // One "record" per Config leaf — mirrors the real extension's one
           // EnvironmentVariable per leaf, keyed by input+name.
           const records = Object.entries(config.inputs).flatMap(([input, values]) =>
             Object.entries(values).map(([name, value]) => ({ input, name, value })),
@@ -155,7 +163,11 @@ function fakeTarget() {
       },
     },
   };
-  return { target, calls };
+  const config: PrismaAppConfig = {
+    extensions: [descriptor],
+    state: () => stateSentinel('config-default'),
+  };
+  return { descriptor, config, calls };
 }
 
 const run = (eff: ReturnType<typeof lowering>): LoweredNode =>
@@ -166,9 +178,10 @@ const runError = (eff: ReturnType<typeof lowering>): LowerError =>
 describe('buildConfig', () => {
   test("matches a dependency input's params by name to the wired producer's lowered outputs, via its dependency edge", () => {
     const auth = app('fake/compute', { db: dbEnd() }, { port: { type: 'number', default: 3000 } });
-    const root = system('shop', (h) => {
+    const root = system('shop', {}, (h) => {
       const db = h.provision('db', dbResource());
       h.provision('auth', auth, { db });
+      return {};
     });
     const graph = Load(root);
     const lowered = new Map<string, LoweredNode>([['db', { outputs: { url: 'db://db' } }]]);
@@ -181,9 +194,10 @@ describe('buildConfig', () => {
 
   test('a param the graph declares but the lowered outputs never produced resolves to undefined', () => {
     const auth = app('fake/compute', { db: dbEnd() });
-    const root = system('shop', (h) => {
+    const root = system('shop', {}, (h) => {
       const db = h.provision('db', dbResource());
       h.provision('auth', auth, { db });
+      return {};
     });
     const graph = Load(root);
 
@@ -199,29 +213,31 @@ const singleServiceSystem = (
   params: Record<string, { type: 'number' | 'string'; default?: unknown }> = {},
   build: BuildAdapter = defaultBuild,
 ) =>
-  system('hello', (h) => {
+  system('hello', {}, (h) => {
     h.provision('svc', app(type, {}, params, build));
+    return {};
   });
 
-// A single service whose one dependency is a system-provisioned db resource â
+// A single service whose one dependency is a system-provisioned db resource —
 // the resource model's minimal shape: a service never embeds a resource; the
 // system provisions it and wires the slot.
 const singleServiceWithDbSystem = (
   params: Record<string, { type: 'number' | 'string'; default?: unknown }> = {},
 ) =>
-  system('hello', (h) => {
+  system('hello', {}, (h) => {
     const db = h.provision('db', dbResource());
     h.provision('svc', app('fake/compute', { db: dbEnd() }, params), { db });
+    return {};
   });
 
 const svcBundles = { bundles: { svc: { dir: 'dist/bundle', entry: 'server.js' } } };
 
-describe('lowering a system root â a single service', () => {
+describe('lowering a system root — a single service', () => {
   test('a dependency-less service sequences application → provision → serialize → package → deploy; nothing is auto-provisioned', () => {
-    const { target, calls } = fakeTarget();
+    const { config, calls } = fakeExtension();
     const root = singleServiceSystem('fake/compute');
 
-    const result = run(lowering(root, target, opts(svcBundles)));
+    const result = run(lowering(root, config, opts(svcBundles)));
 
     expect(calls.map((c) => c.phase)).toEqual([
       'application',
@@ -236,10 +252,10 @@ describe('lowering a system root â a single service', () => {
   });
 
   test('a system-provisioned resource lowers before the service that consumes it', () => {
-    const { target, calls } = fakeTarget();
+    const { config, calls } = fakeExtension();
     const root = singleServiceWithDbSystem();
 
-    run(lowering(root, target, opts(svcBundles)));
+    run(lowering(root, config, opts(svcBundles)));
 
     expect(calls.map((c) => c.phase)).toEqual([
       'application',
@@ -252,10 +268,10 @@ describe('lowering a system root â a single service', () => {
   });
 
   test("buildConfig is fed to serialize with the resource's real lowered output", () => {
-    const { target, calls } = fakeTarget();
+    const { config, calls } = fakeExtension();
     const root = singleServiceWithDbSystem({ port: { type: 'number', default: 3000 } });
 
-    run(lowering(root, target, opts(svcBundles)));
+    run(lowering(root, config, opts(svcBundles)));
 
     const serialize = calls.find((c) => c.phase === 'serialize');
     expect(serialize).toMatchObject({
@@ -264,21 +280,21 @@ describe('lowering a system root â a single service', () => {
   });
 
   test('package receives the build adapter output dir/entry and the same address serialize used', () => {
-    const { target, calls } = fakeTarget();
+    const { config, calls } = fakeExtension();
     const root = singleServiceSystem('fake/compute');
     const bundle: Bundle = { dir: 'dist/bundle', entry: 'main.mjs' };
 
-    run(lowering(root, target, opts({ bundles: { svc: bundle } })));
+    run(lowering(root, config, opts({ bundles: { svc: bundle } })));
 
     const pkg = calls.find((c) => c.phase === 'package');
     expect(pkg).toMatchObject({ assembled: bundle, address: 'svc' });
   });
 
   test("the environment edge: deploy's `environment` IS serialize's returned records (by recording, not order)", () => {
-    const { target, calls } = fakeTarget();
+    const { config, calls } = fakeExtension();
     const root = singleServiceWithDbSystem();
 
-    run(lowering(root, target, opts(svcBundles)));
+    run(lowering(root, config, opts(svcBundles)));
 
     const serialize = calls.find((c) => c.phase === 'serialize');
     const deploy = calls.find((c) => c.phase === 'deploy');
@@ -288,47 +304,95 @@ describe('lowering a system root â a single service', () => {
       throw new Error('unreachable');
     expect(deploy.environment).toEqual([{ input: 'db', name: 'url', value: 'db://db' }]);
     // Same records the serialize call's own return produced (identity, not
-    // a coincidental re-derivation) — the fake target only ever returns them
-    // once, from serialize, and threads them through to deploy's argument.
+    // a coincidental re-derivation) — the fake extension only ever returns
+    // them once, from serialize, and threads them through to deploy's
+    // argument.
   });
 
-  test('the build descriptor is inert to lowering — any kind/entry lowers identically', () => {
-    const { target } = fakeTarget();
+  test('the build descriptor is inert to lowering — any build extension/type/entry lowers identically', () => {
+    const { config } = fakeExtension();
     const root = singleServiceSystem(
       'fake/compute',
       {},
       {
-        kind: 'nonsense',
-        pack: '@fake/adapter',
+        extension: '@fake/adapter',
+        type: 'nonsense',
         module: 'file:///test/service.ts',
         entry: 'whatever.js',
       },
     );
 
-    const result = run(lowering(root, target, opts(svcBundles)));
+    const result = run(lowering(root, config, opts(svcBundles)));
 
     expect(result).toEqual({ outputs: {} });
   });
 
   test('missing a bundle for a single-service system is a LowerError naming it', () => {
-    const { target } = fakeTarget();
+    const { config } = fakeExtension();
     const root = singleServiceSystem('fake/compute');
 
-    const error = runError(lowering(root, target, opts()));
+    const error = runError(lowering(root, config, opts()));
 
     expect(error).toBeInstanceOf(LowerError);
     expect(error.message).toContain('opts.bundles["svc"]');
   });
 
   test('fails with LowerError naming the type and the known types on an unknown service type', () => {
-    const { target } = fakeTarget();
+    const { config } = fakeExtension();
     const root = singleServiceSystem('fake/other-compute');
 
-    const error = runError(lowering(root, target, opts(svcBundles)));
+    const error = runError(lowering(root, config, opts(svcBundles)));
 
     expect(error).toBeInstanceOf(LowerError);
     expect(error.message).toContain('fake/other-compute');
     expect(error.message).toContain('fake/compute');
+  });
+
+  test('fails with LowerError naming the extension and the config fix when no configured extension matches', () => {
+    const { config } = fakeExtension();
+    const root = system('hello', {}, (h) => {
+      h.provision(
+        'svc',
+        service({
+          name: 'other',
+          extension: '@acme/other-cloud',
+          type: 'fake/compute',
+          inputs: {},
+          params: {},
+          build: defaultBuild,
+        }),
+      );
+      return {};
+    });
+
+    const error = runError(lowering(root, config, opts(svcBundles)));
+
+    expect(error).toBeInstanceOf(LowerError);
+    expect(error.message).toContain('@acme/other-cloud');
+    expect(error.message).toContain('prisma-app.config.ts');
+  });
+
+  test('a resource node routed to a service control is a LowerError naming (extension, type, expected kind)', () => {
+    const { config } = fakeExtension();
+    const root = system('hello', {}, (h) => {
+      h.provision(
+        'db',
+        resource({
+          name: 'db',
+          extension: 'test/pack',
+          // The registry's 'fake/compute' entry is a service control.
+          provides: providerContract('fake/compute', { url: '' }),
+        }),
+      );
+      return {};
+    });
+
+    const error = runError(lowering(root, config, opts()));
+
+    expect(error).toBeInstanceOf(LowerError);
+    expect(error.message).toContain('test/pack');
+    expect(error.message).toContain('fake/compute');
+    expect(error.message).toContain('"resource" control');
   });
 });
 
@@ -337,17 +401,18 @@ describe('lowering a system root — a provisioned resource and two connected se
   const storefrontService = () => app('fake/compute', { auth: httpEnd() });
 
   const twoServiceSystem = () =>
-    system('shop', (h) => {
+    system('shop', {}, (h) => {
       const db = h.provision('db', dbResource());
       const authRef = h.provision('auth', authService(), { db });
       h.provision('storefront', storefrontService(), { auth: authRef });
+      return {};
     });
 
   test("application provisions once; the resource and auth are FULLY deployed before storefront's serialize", () => {
-    const { target, calls } = fakeTarget();
+    const { config, calls } = fakeExtension();
 
     run(
-      lowering(twoServiceSystem(), target, {
+      lowering(twoServiceSystem(), config, {
         name: 'shop',
         bundles: {
           auth: { dir: 'systems/auth/dist/bundle', entry: 'server.js' },
@@ -374,10 +439,10 @@ describe('lowering a system root — a provisioned resource and two connected se
   });
 
   test("each system-provisioned service's address is its own provision id", () => {
-    const { target, calls } = fakeTarget();
+    const { config, calls } = fakeExtension();
 
     run(
-      lowering(twoServiceSystem(), target, {
+      lowering(twoServiceSystem(), config, {
         name: 'shop',
         bundles: {
           auth: { dir: 'systems/auth/dist/bundle', entry: 'server.js' },
@@ -393,10 +458,10 @@ describe('lowering a system root — a provisioned resource and two connected se
   });
 
   test("auth's Config.inputs.db carries the system-provisioned resource's lowered url", () => {
-    const { target, calls } = fakeTarget();
+    const { config, calls } = fakeExtension();
 
     run(
-      lowering(twoServiceSystem(), target, {
+      lowering(twoServiceSystem(), config, {
         name: 'shop',
         bundles: {
           auth: { dir: 'systems/auth/dist/bundle', entry: 'server.js' },
@@ -412,10 +477,10 @@ describe('lowering a system root — a provisioned resource and two connected se
   });
 
   test("storefront's Config.inputs.auth carries auth's REAL deploy-phase URL, not a placeholder", () => {
-    const { target, calls } = fakeTarget();
+    const { config, calls } = fakeExtension();
 
     run(
-      lowering(twoServiceSystem(), target, {
+      lowering(twoServiceSystem(), config, {
         name: 'shop',
         bundles: {
           auth: { dir: 'systems/auth/dist/bundle', entry: 'server.js' },
@@ -431,10 +496,10 @@ describe('lowering a system root — a provisioned resource and two connected se
   });
 
   test("the environment edge: auth's deploy environment IS its serialize records, resource url included", () => {
-    const { target, calls } = fakeTarget();
+    const { config, calls } = fakeExtension();
 
     run(
-      lowering(twoServiceSystem(), target, {
+      lowering(twoServiceSystem(), config, {
         name: 'shop',
         bundles: {
           auth: { dir: 'systems/auth/dist/bundle', entry: 'server.js' },
@@ -448,8 +513,9 @@ describe('lowering a system root — a provisioned resource and two connected se
       environment: [{ input: 'db', name: 'url', value: 'db://db' }],
     });
     // Same records the serialize call's own return produced (identity, not
-    // a coincidental re-derivation) — the fake target only ever returns them
-    // once, from serialize, and threads them through to deploy's argument.
+    // a coincidental re-derivation) — the fake extension only ever returns
+    // them once, from serialize, and threads them through to deploy's
+    // argument.
   });
 
   test('topo sort: a system authored consumer-before-producer (forged ref) still resolves real producer outputs at deploy', () => {
@@ -457,17 +523,18 @@ describe('lowering a system root — a provisioned resource and two connected se
     // consequence: before the sort, buildConfig read `lowered.get(edge.from)`
     // positionally, so a consumer walked before its producer saw undefined
     // outputs. With the sort, the producer is fully deployed first.
-    const { target, calls } = fakeTarget();
-    const root = system('shop', (h) => {
+    const { config, calls } = fakeExtension();
+    const root = system('shop', {}, (h) => {
       const db = h.provision('db', dbResource());
       h.provision('storefront', storefrontService(), {
         auth: { id: 'auth' } as never,
       });
       h.provision('auth', authService(), { db });
+      return {};
     });
 
     run(
-      lowering(root, target, {
+      lowering(root, config, {
         name: 'shop',
         bundles: {
           auth: { dir: 'systems/auth/dist/bundle', entry: 'server.js' },
@@ -490,10 +557,10 @@ describe('lowering a system root — a provisioned resource and two connected se
   });
 
   test('missing a bundle entry for one system-provisioned service is a LowerError naming it', () => {
-    const { target } = fakeTarget();
+    const { config } = fakeExtension();
 
     const error = runError(
-      lowering(twoServiceSystem(), target, {
+      lowering(twoServiceSystem(), config, {
         name: 'shop',
         bundles: { auth: { dir: 'systems/auth/dist/bundle', entry: 'server.js' } },
       }),
@@ -504,10 +571,10 @@ describe('lowering a system root — a provisioned resource and two connected se
   });
 
   test("a system root's own lowering has no outputs yet (boundary ports are future work)", () => {
-    const { target } = fakeTarget();
+    const { config } = fakeExtension();
 
     const result = run(
-      lowering(twoServiceSystem(), target, {
+      lowering(twoServiceSystem(), config, {
         name: 'shop',
         bundles: {
           auth: { dir: 'systems/auth/dist/bundle', entry: 'server.js' },
@@ -520,19 +587,20 @@ describe('lowering a system root — a provisioned resource and two connected se
   });
 
   test('fails with LowerError naming the type and the known types on an unknown resource type', () => {
-    const { target } = fakeTarget();
-    const root = system('shop', (h) => {
+    const { config } = fakeExtension();
+    const root = system('shop', {}, (h) => {
       h.provision(
         'cache',
         resource({
           name: 'cache',
-          pack: 'test/pack',
+          extension: 'test/pack',
           provides: providerContract('fake/unknown', {}),
         }),
       );
+      return {};
     });
 
-    const error = runError(lowering(root, target, { name: 'shop', bundles: {} }));
+    const error = runError(lowering(root, config, { name: 'shop', bundles: {} }));
 
     expect(error).toBeInstanceOf(LowerError);
     expect(error.message).toContain('fake/unknown');
@@ -542,10 +610,11 @@ describe('lowering a system root — a provisioned resource and two connected se
 
 describe('lowering a system root — one resource shared by two consumers', () => {
   const sharedSystem = () =>
-    system('shop', (h) => {
+    system('shop', {}, (h) => {
       const db = h.provision('db', dbResource());
       h.provision('auth', app('fake/compute', { authDb: dbEnd() }), { authDb: db });
       h.provision('billing', app('fake/compute', { billingDb: dbEnd() }), { billingDb: db });
+      return {};
     });
 
   const sharedOpts = {
@@ -557,9 +626,9 @@ describe('lowering a system root — one resource shared by two consumers', () =
   };
 
   test('the resource is lowered exactly once, regardless of consumer count', () => {
-    const { target, calls } = fakeTarget();
+    const { config, calls } = fakeExtension();
 
-    run(lowering(sharedSystem(), target, sharedOpts));
+    run(lowering(sharedSystem(), config, sharedOpts));
 
     expect(calls.filter((c) => c.phase === 'resource')).toEqual([
       { phase: 'resource', id: 'db', type: 'fake/db' },
@@ -567,9 +636,9 @@ describe('lowering a system root — one resource shared by two consumers', () =
   });
 
   test("both consumers' Configs receive the ONE resource's outputs, each under its own dep key", () => {
-    const { target, calls } = fakeTarget();
+    const { config, calls } = fakeExtension();
 
-    run(lowering(sharedSystem(), target, sharedOpts));
+    run(lowering(sharedSystem(), config, sharedOpts));
 
     const authSerialize = calls.find((c) => c.phase === 'serialize' && c.id === 'auth');
     const billingSerialize = calls.find((c) => c.phase === 'serialize' && c.id === 'billing');
@@ -584,15 +653,19 @@ describe('lowering a system root — one resource shared by two consumers', () =
 
 describe('lower()', () => {
   test('builds an Alchemy Stack wrapping the same lowering', () => {
-    // Unlike lowering(), lower() DOES call target.providers() eagerly (to
-    // hand it to Alchemy.Stack) — a different fake target than the
+    // Unlike lowering(), lower() DOES merge the extensions' providers eagerly
+    // (to hand them to Alchemy.Stack) — a different fake than the
     // lowering()-only suite above, which asserts the opposite.
-    const target: Target = { ...fakeTarget().target, providers: () => ({}) as never };
+    const { descriptor } = fakeExtension();
+    const config: PrismaAppConfig = {
+      extensions: [{ ...descriptor, providers: () => Layer.empty }],
+      state: () => stateSentinel('config-default'),
+    };
     const root = singleServiceSystem('fake/compute', {});
 
     const stack = lower(
       root,
-      target,
+      config,
       opts({ bundles: { svc: { dir: 'dist/bundle', entry: 'server.js' } } }),
     );
 
@@ -600,24 +673,76 @@ describe('lower()', () => {
   });
 });
 
+describe('lowering a nested system — dotted addresses (H1: system-composition)', () => {
+  test('a service provisioned by a system nested inside another system gets a dotted address, and lowering() finds its bundle by that full id', () => {
+    const { config } = fakeExtension();
+    const inner = system('auth', {}, (h) => {
+      h.provision('api', app('fake/compute', {}));
+      return {};
+    });
+    const root = system('shop', {}, (h) => {
+      h.provision('auth', inner);
+      return {};
+    });
+    const graph = Load(root);
+
+    expect(graph.nodes.some((n) => n.id === 'auth.api')).toBe(true);
+
+    const result = run(
+      lowering(
+        root,
+        config,
+        opts({ bundles: { 'auth.api': { dir: 'dist/bundle', entry: 'server.js' } } }),
+      ),
+    );
+
+    expect(result).toEqual({ outputs: {} });
+  });
+});
+
 describe('resolveStateLayer', () => {
   // Sentinel objects, not real Alchemy Layers — resolveStateLayer is a pure
   // selector, so identity comparison against sentinels proves precedence
   // without booting Alchemy.
-  const sentinel = (tag: string): AlchemyStateLayer =>
-    ({ __sentinel: tag }) as unknown as AlchemyStateLayer;
+  test("opts.state wins over the config's state", () => {
+    const optsState = stateSentinel('opts');
+    const { descriptor } = fakeExtension();
+    const config: PrismaAppConfig = {
+      extensions: [descriptor],
+      state: () => stateSentinel('config'),
+    };
 
-  test('opts.state wins over target.state', () => {
-    const optsState = sentinel('opts');
-    const target: Target = { ...fakeTarget().target, state: () => sentinel('target') };
-
-    expect(resolveStateLayer(opts({ state: optsState }), target)).toBe(optsState);
+    expect(resolveStateLayer(opts({ state: optsState }), config)).toBe(optsState);
   });
 
-  test('target.state is used when opts.state is absent — every target must supply one', () => {
-    const targetState = sentinel('target');
-    const target: Target = { ...fakeTarget().target, state: () => targetState };
+  test("the config's state is used when opts.state is absent — PrismaAppConfig.state is required", () => {
+    const configState = stateSentinel('config');
+    const { descriptor } = fakeExtension();
+    const config: PrismaAppConfig = { extensions: [descriptor], state: () => configState };
 
-    expect(resolveStateLayer(opts(), target)).toBe(targetState);
+    expect(resolveStateLayer(opts(), config)).toBe(configState);
+  });
+});
+
+describe('mergedProviders', () => {
+  test('an extension without providers is skipped; none at all yields the empty layer', () => {
+    const { descriptor } = fakeExtension();
+    const { providers: _dropped, ...bare } = descriptor;
+    const config: PrismaAppConfig = {
+      extensions: [bare],
+      state: () => stateSentinel('config'),
+    };
+
+    expect(mergedProviders(config)).toBe(Layer.empty);
+  });
+
+  test('a single providers() layer passes through merged', () => {
+    const { descriptor } = fakeExtension();
+    const config: PrismaAppConfig = {
+      extensions: [{ ...descriptor, providers: () => Layer.empty }],
+      state: () => stateSentinel('config'),
+    };
+
+    expect(mergedProviders(config)).toBeDefined();
   });
 });

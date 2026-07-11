@@ -22,12 +22,12 @@ function shippedSources(): { file: string; text: string }[] {
   return out;
 }
 
-describe('entry map: the pack splits into authoring + target only', () => {
-  test("package.json exports exactly '.' and './target' — no runtime entry", () => {
+describe('entry map: the extension splits into authoring + control only', () => {
+  test("package.json exports exactly '.' and './control' — no runtime entry", () => {
     const pkg = JSON.parse(fs.readFileSync(path.join(pkgDir, 'package.json'), 'utf8'));
     // `./package.json` is a conventional manifest export, not a code entry.
     const codeEntries = Object.keys(pkg.exports).filter((k) => k !== './package.json');
-    expect(codeEntries.sort()).toEqual(['.', './target']);
+    expect(codeEntries.sort()).toEqual(['.', './control']);
   });
 });
 
@@ -45,7 +45,7 @@ describe('invariant 2: authoring imports stay lean (core + pack)', () => {
     for (const token of [
       'alchemy',
       'effect',
-      '@prisma/alchemy',
+      'prisma-alchemy',
       'new SQL(',
       'ProviderCollection',
       'from "bun"',
@@ -56,8 +56,8 @@ describe('invariant 2: authoring imports stay lean (core + pack)', () => {
   });
 });
 
-describe('invariant 4: environment touches are confined to the config serializer and the CLI seam', () => {
-  test("the process-env token appears only in serializer.ts (deserialize's one read, stash's one write) and target.ts's fromEnv() (the pack's CLI seam, ADR-0003 — PRISMA_WORKSPACE_ID + optional PRISMA_REGION)", () => {
+describe('invariant 4: environment touches are confined to the config serializer and the control factory', () => {
+  test("the process-env token appears only in serializer.ts (deserialize's one read, stash's one write) and control.ts's prismaCloud() (the extension factory's env read, ADR-0017 — PRISMA_WORKSPACE_ID + optional PRISMA_REGION)", () => {
     const sources = shippedSources();
     expect(sources.length).toBeGreaterThan(0);
 
@@ -67,9 +67,9 @@ describe('invariant 4: environment touches are confined to the config serializer
       return count > 0 ? [{ file, count }] : [];
     });
 
-    expect(hits).toEqual([
+    expect(hits.sort((a, b) => a.file.localeCompare(b.file))).toEqual([
+      { file: 'control.ts', count: 2 },
       { file: 'serializer.ts', count: 2 },
-      { file: 'target.ts', count: 2 },
     ]);
   });
 });
@@ -114,6 +114,49 @@ describe('invariant 5: no runtime coupling in shipped surface', () => {
       expect(dep).not.toBe('bun');
       expect(dep).not.toMatch(/^@types\/(bun|node)$/);
       expect(dep).not.toMatch(/^node(-|:)/);
+    }
+  });
+});
+
+describe('invariant 6 (ADR-0017, extension config): the authoring entry never reaches the control entry', () => {
+  test('no module reachable from src/index.ts imports a /control entry — the firewall by file boundary', () => {
+    // Control-plane code (this extension's control.ts, and transitively
+    // prisma-alchemy/alchemy/effect) is imported ONLY by prisma-app.config.ts.
+    // A control import reachable from the authoring barrel would get followed
+    // and inlined by the wrapper's own bundler (tsdown/rolldown), dragging
+    // deploy-only tooling into the runtime artifact.
+    const importPattern =
+      /(?:import|export)\s+[^'"]*?from\s*["']([^"']+)["']|import\s*\(\s*["']([^"']+)["']\s*\)|import\s*["']([^"']+)["']/g;
+    const importSpecifiers = (text: string): string[] => {
+      const out: string[] = [];
+      for (const match of text.matchAll(importPattern)) {
+        const spec = match[1] ?? match[2] ?? match[3];
+        if (spec !== undefined) out.push(spec);
+      }
+      return out;
+    };
+
+    const seen = new Map<string, string[]>();
+    const queue = [path.join(srcDir, 'index.ts')];
+    while (queue.length > 0) {
+      const file = queue.pop();
+      if (file === undefined || seen.has(file)) continue;
+      const specs = importSpecifiers(fs.readFileSync(file, 'utf8'));
+      seen.set(file, specs);
+      for (const spec of specs) {
+        if (!spec.startsWith('.')) continue;
+        const resolved = path.resolve(path.dirname(file), spec);
+        if (fs.existsSync(resolved)) queue.push(resolved);
+      }
+    }
+
+    expect(seen.size).toBeGreaterThan(0);
+    for (const [file, specs] of seen) {
+      const offending = specs.filter((spec) => /\/control(\.ts)?$/.test(spec));
+      expect({ file: path.relative(srcDir, file), offending }).toEqual({
+        file: path.relative(srcDir, file),
+        offending: [],
+      });
     }
   });
 });

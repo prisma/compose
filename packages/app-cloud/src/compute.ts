@@ -7,14 +7,19 @@ const computeParams = { port: { type: 'number', default: 3000 } } as const;
 
 /**
  * A Prisma Compute service — declarations only (deps + build + the ports it
- * exposes), no handler. Returns the pack's runnable/loadable node:
+ * exposes), no handler. Returns the extension's runnable/loadable node:
  *   · run(address, boot) — the process controller: deserialize the platform
- *     environment (keyed off `address`, the pack's ONE env read) into a typed
- *     Config, re-emit it under address-free process-local stash keys, then call
- *     boot() to start the app's entry.
+ *     environment (keyed off `address`, the extension's ONE env read) into a
+ *     typed Config, re-emit it under address-free process-local stash keys,
+ *     then call boot() to start the app's entry.
  *   · load() — called from inside the app's entry: read the stash, hydrate the
  *     deps synchronously, memoize per process, return them merged with the
  *     resolved service params (typed).
+ *
+ * `service()`'s underlying node carries `extension: '@prisma/app-cloud'` —
+ * the control-plane registry key `prisma-app deploy` resolves through the
+ * app's `prisma-app.config.ts` (ADR-0017). This module loads nothing at
+ * deploy time; nodes are pure data.
  */
 export const compute = <D extends Deps, E extends Expose = Record<never, never>>(def: {
   name: string;
@@ -34,7 +39,7 @@ export const compute = <D extends Deps, E extends Expose = Record<never, never>>
   }
   const node = service<D, typeof computeParams, E>({
     name: def.name,
-    pack: '@prisma/app-cloud',
+    extension: '@prisma/app-cloud',
     type: 'compute',
     inputs: def.deps,
     params: computeParams,
@@ -44,7 +49,7 @@ export const compute = <D extends Deps, E extends Expose = Record<never, never>>
 
   let loaded: Loaded<D, typeof computeParams> | undefined;
 
-  const runnable: RunnableServiceNode<D, typeof computeParams, E> = {
+  const runnable = {
     ...node,
     async run(address: string, boot: () => Promise<unknown>) {
       const shape = configOf(node);
@@ -63,5 +68,10 @@ export const compute = <D extends Deps, E extends Expose = Record<never, never>>
       return loaded;
     },
   };
-  return Object.freeze(runnable);
+  return Object.freeze(
+    blindCast<
+      RunnableServiceNode<D, typeof computeParams, E>,
+      "the spread copies node's own enumerable data (including the Symbol.for brand) and adds run/load — exactly RunnableServiceNode's shape"
+    >(runnable),
+  );
 };

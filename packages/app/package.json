@@ -6,6 +6,7 @@
     ".": "./dist/index.mjs",
     "./assertions": "./dist/assertions.mjs",
     "./casts": "./dist/casts.mjs",
+    "./config": "./dist/config.mjs",
     "./deploy": "./dist/deploy.mjs",
     "./package.json": "./package.json"
   },

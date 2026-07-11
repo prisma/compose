@@ -1,10 +1,12 @@
 /**
- * Proves the CLI's entry-anchored module resolution (packages/app-cli/
- * src/resolve-from-entry.ts) against REAL target/adapter packs — not
- * fixtures. This cannot live in packages/app-cli's own suite: the CLI
- * itself must not depend on any specific pack (see test/README.md), but this
- * package genuinely does, so `prisma-app deploy` here resolves
- * `@prisma/app-cloud/target` and `@prisma/app-node/assemble` for real.
+ * Proves the extension-config design (ADR-0017) resolves REAL extension
+ * `/control` entries — not fixtures. This cannot live in packages/app-cli's
+ * own suite: the CLI itself must not depend on any specific extension (see
+ * test/README.md), but this package genuinely does, so `prisma-app deploy`
+ * here evaluates this package's own `prisma-app.config.ts`, whose static
+ * imports of `@prisma/app-cloud/control` and `@prisma/app-node/control`
+ * resolve from THIS app's own dependency tree — ambient resolution, no
+ * anchor file, no framework-constructed specifier.
  *
  * Drives the CLI as a binary (`node_modules/.bin/prisma-app`), the same way
  * the example apps do, rather than importing the CLI's internals.
@@ -15,10 +17,16 @@ import * as path from 'node:path';
 
 const integrationDir = path.resolve(import.meta.dir, '..');
 const prismaAppBin = path.join(integrationDir, 'node_modules', '.bin', 'prisma-app');
-const fixtureEntry = path.join(integrationDir, 'test', 'fixtures', 'entry-anchored', 'service.ts');
+const fixtureEntry = path.join(
+  integrationDir,
+  'test',
+  'fixtures',
+  'extension-config',
+  'service.ts',
+);
 
-describe('prisma-app deploy — real entry-anchored resolution of prisma-cloud + node', () => {
-  test('resolves both packs for real and fails at the missing built entry, not at resolution', () => {
+describe('prisma-app deploy — real extension-config resolution of prisma-cloud + node', () => {
+  test('resolves both /control entries for real and fails at the missing built entry, not at resolution', () => {
     const result = spawnSync('bun', [prismaAppBin, 'deploy', fixtureEntry], {
       cwd: integrationDir,
       encoding: 'utf8',
@@ -32,7 +40,7 @@ describe('prisma-app deploy — real entry-anchored resolution of prisma-cloud +
     expect(result.stderr).toContain("run this app's own build first");
   });
 
-  test('without PRISMA_WORKSPACE_ID, fails at the real prisma-cloud fromEnv() check — proving the /target entry actually resolved and ran', () => {
+  test('without PRISMA_WORKSPACE_ID, fails at the real prismaCloud() env check during config evaluation — proving the /control entry actually resolved and ran', () => {
     const env = { ...process.env };
     delete env['PRISMA_WORKSPACE_ID'];
 

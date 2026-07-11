@@ -2,7 +2,7 @@ import { dependency, service } from '@prisma/app';
 
 export default service({
   name: 'fixture-service-with-unwired-input',
-  pack: 'test/pack',
+  extension: 'test/pack',
   type: 'fixture/service',
   inputs: {
     auth: dependency({
@@ -11,5 +11,10 @@ export default service({
     }),
   },
   params: {},
-  build: { kind: 'node', pack: '@prisma/app-node', module: import.meta.url, entry: 'server.js' },
+  build: {
+    extension: 'test/build',
+    type: 'node',
+    module: import.meta.url,
+    entry: 'server.js',
+  },
 });
