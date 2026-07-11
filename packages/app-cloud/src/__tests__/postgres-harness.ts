@@ -13,6 +13,7 @@
  * go unexecuted.
  */
 import { execFileSync, spawnSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -23,24 +24,53 @@ export interface TestPostgres {
   readonly stop: () => void;
 }
 
+export interface TestDatabase {
+  /** A DSN pointing at the freshly-created, isolated database. */
+  readonly url: string;
+  /** Drop the database (terminating any lingering connections first). */
+  readonly drop: () => Promise<void>;
+}
+
+/** Swap the database segment of a Postgres DSN, preserving user/host/params. */
+function withDatabase(url: string, database: string): string {
+  const parsed = new URL(url);
+  parsed.pathname = `/${database}`;
+  return parsed.toString();
+}
+
 /**
- * Reset the target database to empty — drop the contract's `public` schema and
- * Prisma Next's `prisma_contract` (marker + ledger) schema, then recreate
- * `public`. Integration tests call this in `beforeAll` so they start clean
- * regardless of what another test file left in a SHARED Postgres (CI reuses one
- * `STATE_TEST_DATABASE_URL` across every file; only the local ephemeral cluster
- * is per-file). Next `dbInit` re-creates `prisma_contract`.
+ * Create a fresh, uniquely-named database on the same server as `baseUrl` and
+ * return a DSN for it plus a `drop`. Integration tests own a database instead
+ * of a schema, so they never touch the tables another suite shares in the CI
+ * Postgres's `public` (the state-store suite lives there). Isolates the PN
+ * tests from the state store AND from each other, in any order, on one server.
+ * `baseUrl`'s own database is the admin connection used to CREATE/DROP.
  */
-export async function resetDatabase(url: string): Promise<void> {
-  const client = new pg.Client({ connectionString: url });
-  await client.connect();
+export async function createTestDatabase(baseUrl: string): Promise<TestDatabase> {
+  const name = `pn_test_${randomUUID().replace(/-/g, '')}`;
+  const admin = new pg.Client({ connectionString: baseUrl });
+  await admin.connect();
   try {
-    await client.query('DROP SCHEMA IF EXISTS public CASCADE');
-    await client.query('DROP SCHEMA IF EXISTS prisma_contract CASCADE');
-    await client.query('CREATE SCHEMA public');
+    await admin.query(`CREATE DATABASE "${name}"`);
   } finally {
-    await client.end();
+    await admin.end();
   }
+  return {
+    url: withDatabase(baseUrl, name),
+    drop: async () => {
+      const a = new pg.Client({ connectionString: baseUrl });
+      await a.connect();
+      try {
+        await a.query(
+          'SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()',
+          [name],
+        );
+        await a.query(`DROP DATABASE IF EXISTS "${name}"`);
+      } finally {
+        await a.end();
+      }
+    },
+  };
 }
 
 // Some sandboxes leave LANG/LC_* unset or pointed at a locale glibc/ICU can't

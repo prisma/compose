@@ -24,7 +24,12 @@ import gadgetContractJson from './fixtures/gadget-contract/emitted/contract.json
 import widgetContractJson from './fixtures/widget-contract/emitted/contract.json' with {
   type: 'json',
 };
-import { resetDatabase, startTestPostgres, type TestPostgres } from './postgres-harness.ts';
+import {
+  createTestDatabase,
+  startTestPostgres,
+  type TestDatabase,
+  type TestPostgres,
+} from './postgres-harness.ts';
 
 const pg: TestPostgres | undefined = startTestPostgres();
 
@@ -51,18 +56,21 @@ async function readMarkerHash(url: string): Promise<string | null> {
 
 describe.skipIf(pg === undefined)('applyPnMigration — live against real Postgres', () => {
   if (pg === undefined) return;
-  const url = pg.url;
   // An empty migrations dir: dbInit synthesizes the additive first-apply plan;
   // `migrate` (no authored packages) finds no path between unrelated hashes.
   let migrationsDir: string;
+  // A database this suite owns — never the shared `postgres`/`public` the
+  // state-store suite uses — so the empty-DB assertion holds in any order.
+  let db: TestDatabase;
+  let url: string;
 
   beforeAll(async () => {
     migrationsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prisma-app-pn-mig-'));
-    // Self-isolate: a shared CI Postgres may carry another test file's marker;
-    // start from an empty DB so the marker-is-null assertion holds in any order.
-    await resetDatabase(url);
+    db = await createTestDatabase(pg.url);
+    url = db.url;
   });
-  afterAll(() => {
+  afterAll(async () => {
+    await db?.drop().catch(() => {});
     pg.stop();
     if (migrationsDir !== undefined) fs.rmSync(migrationsDir, { recursive: true, force: true });
   });

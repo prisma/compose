@@ -1,25 +1,26 @@
 /**
  * The `PnMigration` Alchemy resource wiring (slice 2 D2), proven WITHOUT Prisma
  * Cloud:
- *   - the descriptor-level provider merge resolves the resource — the open
- *     question: `Layer.merge(Prisma.providers(), PnMigrationProvider())` makes
- *     Alchemy find the `PnMigration` provider (direct provider-tag lookup, no
- *     `@prisma/alchemy` change), and merging does not shadow the Prisma
- *     providers. Resolved through a scoped `Layer.build` + `provideContext`
- *     (stable public Effect API), not `Effect.provide(layer)`'s internals;
+ *   - the merge/lookup MECHANISM the descriptor relies on — `Layer.merge` of two
+ *     `Provider.effect` layers keeps BOTH provider tags reachable by
+ *     `tryFindProviderByType` (no shadowing). Exercised with two synthetic clean
+ *     providers, not the real `Prisma.providers()`: that layer's sub-layers hit
+ *     an environment-fragile Effect internal (`layer.build is not a function`)
+ *     when built from a test, and the real `Prisma.providers()` + `PnMigration`
+ *     merge is already proven end to end by the green live E2E deploy — so the
+ *     test only needs the mechanism, not Prisma's provider internals;
  *   - the provider's `reconcile` routes to `applyPnMigration` — driven directly
- *     against the exported provider service (no layer building), proven live
- *     against a real local Postgres (empty → init, re-run → no-op, no-path →
- *     rejects). The full merge is proven end to end by the live E2E deploy.
+ *     against the exported provider service, proven live against a real local
+ *     Postgres (empty → init, re-run → no-op, no-path → rejects).
  *
- * Self-isolating: the reconcile suite resets the DB in `beforeAll` so it starts
- * clean in a shared CI Postgres (any test order).
+ * Self-isolating: the reconcile suite owns a uniquely-named database, so it
+ * never touches tables another suite shares in the CI Postgres.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import * as Prisma from '@prisma/alchemy';
+import { Resource } from 'alchemy';
 import * as Provider from 'alchemy/Provider';
 import type * as Context from 'effect/Context';
 import * as Effect from 'effect/Effect';
@@ -33,36 +34,49 @@ import gadgetContractJson from './fixtures/gadget-contract/emitted/contract.json
 import widgetContractJson from './fixtures/widget-contract/emitted/contract.json' with {
   type: 'json',
 };
-import { resetDatabase, startTestPostgres, type TestPostgres } from './postgres-harness.ts';
+import {
+  createTestDatabase,
+  startTestPostgres,
+  type TestDatabase,
+  type TestPostgres,
+} from './postgres-harness.ts';
 
-// Prisma.providers() reads PRISMA_SERVICE_TOKEN at layer-build (Layer.orDie).
-// Building the layer to resolve a provider TAG makes no API call — a placeholder
-// token is enough; nothing here contacts Prisma Cloud.
-process.env['PRISMA_SERVICE_TOKEN'] ??= 'test-token-not-used';
+// A trivial second Alchemy resource + provider — a clean stand-in for "some
+// other extension's provider", so the merge mechanism is exercised without the
+// real Prisma.providers() (whose sub-layers are fragile to build from a test).
+type TestProbe = Resource<'PrismaNext.TestProbe', { readonly n: number }, { readonly n: number }>;
+const TestProbe = Resource<TestProbe>('PrismaNext.TestProbe');
+const TestProbeProvider = () =>
+  Provider.effect(
+    TestProbe,
+    Effect.succeed<Provider.ProviderService<TestProbe>>({
+      list: () => Effect.succeed([]),
+      reconcile: ({ news }) => Effect.succeed({ n: news.n }),
+      delete: () => Effect.void,
+    }),
+  );
 
-const descriptorMerged = Layer.merge(Prisma.providers(), PnMigrationProvider());
-
-// Resolve a value from the built merged-provider context, using only stable
-// public Effect APIs: build the layer inside a scope, then provide the resulting
-// Context to the lookup. Avoids `Effect.provide(layer)`, whose internal
-// `layer.build(...)` handling proved fragile across environments.
+// The exact merge shape the extension descriptor uses (`Layer.merge(providerA,
+// providerB)`), with two clean providers. Resolved via a scoped `Layer.build` +
+// `provideContext` (stable public Effect API), not `Effect.provide(layer)`.
+const merged = Layer.merge(PnMigrationProvider(), TestProbeProvider());
 const resolveInMerged = <A>(lookup: Effect.Effect<A, never, never>): Promise<A> =>
   Effect.runPromise(
     Effect.scoped(
-      Layer.build(descriptorMerged).pipe(
+      Layer.build(merged).pipe(
         Effect.flatMap((context: Context.Context<never>) => Effect.provideContext(lookup, context)),
       ),
     ),
   );
 
-describe('PnMigration provider merge (descriptor-level, no @prisma/alchemy change)', () => {
+describe('provider merge mechanism (Layer.merge keeps both tags reachable)', () => {
   test('the merged layer resolves the PnMigration provider by type', async () => {
     const resolved = await resolveInMerged(Provider.tryFindProviderByType('PrismaNext.Migration'));
     expect(Option.isSome(resolved)).toBe(true);
   });
 
-  test('merging does not shadow the Prisma providers (Database still resolves)', async () => {
-    const resolved = await resolveInMerged(Provider.tryFindProviderByType('Prisma.Database'));
+  test('merging does not shadow the other provider (TestProbe still resolves)', async () => {
+    const resolved = await resolveInMerged(Provider.tryFindProviderByType('PrismaNext.TestProbe'));
     expect(Option.isSome(resolved)).toBe(true);
   });
 });
@@ -78,8 +92,9 @@ if (pg === undefined) {
 
 describe.skipIf(pg === undefined)('PnMigration reconcile routes through applyPnMigration', () => {
   if (pg === undefined) return;
-  const url = pg.url;
   let migrationsDir: string;
+  let testDb: TestDatabase;
+  let url: string;
 
   // Drive the reconcile through the exported provider service directly — no
   // Effect layer to build, so the routing assertion can't be flaked by
@@ -98,9 +113,11 @@ describe.skipIf(pg === undefined)('PnMigration reconcile routes through applyPnM
 
   beforeAll(async () => {
     migrationsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prisma-app-pn-res-'));
-    await resetDatabase(url);
+    testDb = await createTestDatabase(pg.url);
+    url = testDb.url;
   });
-  afterAll(() => {
+  afterAll(async () => {
+    await testDb?.drop().catch(() => {});
     pg.stop();
     if (migrationsDir !== undefined) fs.rmSync(migrationsDir, { recursive: true, force: true });
   });
