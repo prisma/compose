@@ -1,7 +1,7 @@
 import * as Data from 'effect/Data';
 import * as Effect from 'effect/Effect';
 import { type ManagementApiClient, ManagementClient } from './client.ts';
-import { call, type PrismaApiError } from './http.ts';
+import { call, callVoid, type PrismaApiError } from './http.ts';
 
 export interface ResolveContainerOptions {
   /** The workspace to resolve the Project in. */
@@ -161,4 +161,19 @@ export const resolveContainer = (
 
     const branchId = yield* resolveBranch(client, projectId, opts.stage, opts.appName, ensure);
     return { projectId, branchId };
+  });
+
+/**
+ * Soft-deletes a Branch. Tolerates a 404 (already gone). The API refuses if
+ * the Branch still has live members or is the production/default Branch —
+ * that surfaces as a `PrismaApiError`.
+ */
+export const deleteBranch = (
+  branchId: string,
+): Effect.Effect<void, PrismaApiError, ManagementClient> =>
+  Effect.gen(function* () {
+    const client = yield* ManagementClient;
+    yield* callVoid(() =>
+      client.DELETE('/v1/branches/{branchId}', { params: { path: { branchId } } }),
+    );
   });

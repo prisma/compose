@@ -484,12 +484,91 @@ describe('run() — the full pipeline over fakes', () => {
           alchemyCalls.push(input);
           return 0;
         },
+        deleteBranch: async () => {},
       });
 
       expect(status).toBe(0);
       expect(ensureCalls[0]?.stage).toBe('staging');
       expect(alchemyCalls[0]?.stage).toBe('staging');
       expect(alchemyCalls[0]?.branchId).toBe('branch-staging');
+    });
+  });
+
+  describe('post-destroy Branch soft-delete (spec §10)', () => {
+    test('destroy --stage staging, on a successful alchemy destroy, deletes the resolved Branch', async () => {
+      const app = makeAppDir();
+      process.chdir(app.dir);
+      const deleteCalls: { branchId: string }[] = [];
+
+      const status = await run(['destroy', app.entryPath, '--stage', 'staging'], {
+        config: fakeConfig(),
+        runAssembler: fakeAssembler,
+        ensureContainers: fakeEnsureContainers,
+        alchemy: () => 0,
+        deleteBranch: async (input) => {
+          deleteCalls.push(input);
+        },
+      });
+
+      expect(status).toBe(0);
+      expect(deleteCalls).toEqual([{ branchId: 'branch-staging' }]);
+    });
+
+    test('destroy --production never deletes a Branch (there is none)', async () => {
+      const app = makeAppDir();
+      process.chdir(app.dir);
+      const deleteCalls: { branchId: string }[] = [];
+
+      const status = await run(['destroy', app.entryPath, '--production'], {
+        config: fakeConfig(),
+        runAssembler: fakeAssembler,
+        ensureContainers: fakeEnsureContainers,
+        alchemy: () => 0,
+        deleteBranch: async (input) => {
+          deleteCalls.push(input);
+        },
+      });
+
+      expect(status).toBe(0);
+      expect(deleteCalls).toEqual([]);
+    });
+
+    test('destroy --stage staging with a FAILED alchemy destroy does not delete the Branch', async () => {
+      const app = makeAppDir();
+      process.chdir(app.dir);
+      const deleteCalls: { branchId: string }[] = [];
+
+      const status = await run(['destroy', app.entryPath, '--stage', 'staging'], {
+        config: fakeConfig(),
+        runAssembler: fakeAssembler,
+        ensureContainers: fakeEnsureContainers,
+        alchemy: () => 1,
+        deleteBranch: async (input) => {
+          deleteCalls.push(input);
+        },
+      });
+
+      expect(status).toBe(1);
+      expect(deleteCalls).toEqual([]);
+    });
+
+    test('deploy never deletes a Branch', async () => {
+      const app = makeAppDir();
+      process.chdir(app.dir);
+      const deleteCalls: { branchId: string }[] = [];
+
+      const status = await run(['deploy', app.entryPath, '--stage', 'staging'], {
+        config: fakeConfig(),
+        runAssembler: fakeAssembler,
+        ensureContainers: fakeEnsureContainers,
+        alchemy: () => 0,
+        deleteBranch: async (input) => {
+          deleteCalls.push(input);
+        },
+      });
+
+      expect(status).toBe(0);
+      expect(deleteCalls).toEqual([]);
     });
   });
 });

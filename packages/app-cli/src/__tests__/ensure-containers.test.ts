@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { ManagementApiClient } from '@prisma/alchemy';
 import { CliError } from '../cli-error.ts';
-import { ensureContainers, validateStageName } from '../ensure-containers.ts';
+import { deleteStageBranch, ensureContainers, validateStageName } from '../ensure-containers.ts';
 
 interface FakeProject {
   id: string;
@@ -21,6 +21,9 @@ interface FakeState {
   branches: Record<string, FakeBranch[]>;
   projectCreateCalls: number;
   branchCreateCalls: number;
+  deleteBranchCalls: string[];
+  /** Overrides the DELETE response status — defaults to a 204 success. */
+  deleteBranchResponseStatus?: number;
 }
 
 const newFakeState = (overrides: Partial<FakeState> = {}): FakeState => ({
@@ -28,12 +31,19 @@ const newFakeState = (overrides: Partial<FakeState> = {}): FakeState => ({
   branches: {},
   projectCreateCalls: 0,
   branchCreateCalls: 0,
+  deleteBranchCalls: [],
   ...overrides,
 });
 
 const okResponse = <T>(data: T, status = 200) => ({
   data,
   error: undefined,
+  response: new Response(null, { status }),
+});
+
+const errorResponse = (status: number) => ({
+  data: undefined,
+  error: { message: 'stubbed failure' },
   response: new Response(null, { status }),
 });
 
@@ -96,8 +106,22 @@ const fakeClient = (state: FakeState): ManagementApiClient => {
     throw new Error(`fakeClient: unexpected POST ${path}`);
   };
 
+  const DELETE = (path: string, init: { params?: { path?: Record<string, string> } } = {}) => {
+    if (path === '/v1/branches/{branchId}') {
+      const branchId = init.params?.path?.['branchId'] ?? '';
+      state.deleteBranchCalls.push(branchId);
+      const status = state.deleteBranchResponseStatus ?? 204;
+      return Promise.resolve(
+        status >= 400
+          ? errorResponse(status)
+          : { data: undefined, error: undefined, response: new Response(null, { status }) },
+      );
+    }
+    throw new Error(`fakeClient: unexpected DELETE ${path}`);
+  };
+
   // biome-ignore lint/suspicious/noExplicitAny: test stub — see the doc comment above.
-  return { GET, POST } as any as ManagementApiClient;
+  return { GET, POST, DELETE } as any as ManagementApiClient;
 };
 
 const baseEnv = { PRISMA_WORKSPACE_ID: 'ws-1', PRISMA_SERVICE_TOKEN: 'tok' };
@@ -265,5 +289,41 @@ describe('ensureContainers()', () => {
 
     expect(error).toBeInstanceOf(CliError);
     expect((error as CliError).message).toContain('Nothing deployed for storefront —');
+  });
+});
+
+describe('deleteStageBranch()', () => {
+  test('missing PRISMA_SERVICE_TOKEN (no injected client) is a CliError', async () => {
+    await expect(deleteStageBranch({ branchId: 'br-1', env: {} })).rejects.toThrow(
+      /PRISMA_SERVICE_TOKEN/,
+    );
+  });
+
+  test('with an injected client, calls DELETE with the branchId', async () => {
+    const state = newFakeState();
+
+    await deleteStageBranch({ branchId: 'br-1' }, { client: fakeClient(state) });
+
+    expect(state.deleteBranchCalls).toEqual(['br-1']);
+  });
+
+  test('tolerates a 404 (already gone) without throwing', async () => {
+    const state = newFakeState({ deleteBranchResponseStatus: 404 });
+
+    await deleteStageBranch({ branchId: 'br-1' }, { client: fakeClient(state) });
+
+    expect(state.deleteBranchCalls).toEqual(['br-1']);
+  });
+
+  test('a refused delete (e.g. live members, or the production Branch) throws CliError', async () => {
+    const state = newFakeState({ deleteBranchResponseStatus: 409 });
+
+    const error: unknown = await deleteStageBranch(
+      { branchId: 'br-1' },
+      { client: fakeClient(state) },
+    ).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(CliError);
+    expect((error as CliError).message).toContain('Failed to delete the stage Branch');
   });
 });

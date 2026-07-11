@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, test } from 'bun:test';
 import * as Effect from 'effect/Effect';
 import type { ManagementApiClient } from '../client.ts';
 import { ManagementClient } from '../client.ts';
-import { ContainerNotFoundError, resolveContainer } from '../container.ts';
+import { ContainerNotFoundError, deleteBranch, resolveContainer } from '../container.ts';
+import { PrismaApiError } from '../http.ts';
 
 interface FakeProject {
   id: string;
@@ -25,6 +26,9 @@ interface FakeState {
   /** When set, the first create for this gitName 409s (racing create), after seeding the winner's branch as if a concurrent caller created it first. */
   raceGitName?: string;
   raced: boolean;
+  deleteBranchCalls: string[];
+  /** Overrides the DELETE response status — defaults to a 204 success. */
+  deleteBranchResponseStatus?: number;
 }
 
 const newFakeState = (overrides: Partial<FakeState> = {}): FakeState => ({
@@ -33,6 +37,7 @@ const newFakeState = (overrides: Partial<FakeState> = {}): FakeState => ({
   projectCreateCalls: 0,
   branchCreateCalls: 0,
   raced: false,
+  deleteBranchCalls: [],
   ...overrides,
 });
 
@@ -120,8 +125,22 @@ const fakeClient = (state: FakeState): ManagementApiClient => {
     throw new Error(`fakeClient: unexpected POST ${path}`);
   };
 
+  const DELETE = (path: string, init: { params?: { path?: Record<string, string> } } = {}) => {
+    if (path === '/v1/branches/{branchId}') {
+      const branchId = init.params?.path?.['branchId'] ?? '';
+      state.deleteBranchCalls.push(branchId);
+      const status = state.deleteBranchResponseStatus ?? 204;
+      return Promise.resolve(
+        status >= 400
+          ? errorResponse(status)
+          : { data: undefined, error: undefined, response: new Response(null, { status }) },
+      );
+    }
+    throw new Error(`fakeClient: unexpected DELETE ${path}`);
+  };
+
   // biome-ignore lint/suspicious/noExplicitAny: test stub — see the doc comment above.
-  return { GET, POST } as any as ManagementApiClient;
+  return { GET, POST, DELETE } as any as ManagementApiClient;
 };
 
 const run = (
@@ -375,5 +394,41 @@ describe('resolveContainer — ensure: false (find-only, used by destroy)', () =
     expect(result.projectId).toBe('proj-1');
     expect(result.branchId).toBeUndefined();
     expect(state.projectCreateCalls).toBe(0);
+  });
+});
+
+describe('deleteBranch', () => {
+  let state: FakeState;
+
+  beforeEach(() => {
+    state = newFakeState();
+  });
+
+  const runDelete = (branchId: string) =>
+    Effect.runPromise(
+      deleteBranch(branchId).pipe(Effect.provideService(ManagementClient, fakeClient(state))),
+    );
+
+  test('issues DELETE /v1/branches/{branchId}', async () => {
+    await runDelete('br-1');
+
+    expect(state.deleteBranchCalls).toEqual(['br-1']);
+  });
+
+  test('tolerates a 404 (already gone) without throwing', async () => {
+    state.deleteBranchResponseStatus = 404;
+
+    await runDelete('br-1');
+
+    expect(state.deleteBranchCalls).toEqual(['br-1']);
+  });
+
+  test('surfaces a non-404 error (e.g. live members, or the production Branch) as PrismaApiError', async () => {
+    state.deleteBranchResponseStatus = 409;
+
+    const error: unknown = await runDelete('br-1').catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(PrismaApiError);
+    expect((error as PrismaApiError).status).toBe(409);
   });
 });

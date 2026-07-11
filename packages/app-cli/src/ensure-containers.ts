@@ -5,6 +5,7 @@
  */
 import { spawnSync } from 'node:child_process';
 import {
+  deleteBranch,
   fromEnv,
   type ManagementApiClient,
   ManagementClient,
@@ -85,4 +86,34 @@ export async function ensureContainers(
   const outcome = await Effect.runPromise(provided);
   if (!outcome.ok) throw new CliError(outcome.message);
   return outcome.container;
+}
+
+/**
+ * Soft-deletes a named stage's Branch after a successful `alchemy destroy`
+ * has removed its members (spec §10) — the Management API refuses to delete
+ * a Branch that still has live members.
+ */
+export async function deleteStageBranch(
+  input: { readonly branchId: string; readonly env?: NodeJS.ProcessEnv },
+  deps?: { readonly client?: ManagementApiClient },
+): Promise<void> {
+  const env = input.env ?? process.env;
+  if (deps?.client === undefined && (env['PRISMA_SERVICE_TOKEN'] ?? '').length === 0) {
+    throw new CliError('environment variable PRISMA_SERVICE_TOKEN is required.');
+  }
+  const program = deleteBranch(input.branchId).pipe(
+    Effect.map(() => ({ ok: true as const })),
+    Effect.catchTag('PrismaApiError', (e) =>
+      Effect.succeed({
+        ok: false as const,
+        message: `Failed to delete the stage Branch: ${e.message}.`,
+      }),
+    ),
+  );
+  const provided =
+    deps?.client !== undefined
+      ? program.pipe(Effect.provideService(ManagementClient, deps.client))
+      : program.pipe(Effect.provide(managementClientLayer().pipe(Layer.provide(fromEnv()))));
+  const outcome = await Effect.runPromise(provided);
+  if (!outcome.ok) throw new CliError(outcome.message);
 }

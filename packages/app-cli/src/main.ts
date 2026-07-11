@@ -11,7 +11,11 @@ import type { PrismaAppConfig } from '@prisma/app/config';
 import { assembleServices, type RunAssembler } from '@prisma/app-assemble';
 import { Cli, Command, Option, UsageError } from 'clipanion';
 import { CliError } from './cli-error.ts';
-import { type EnsureContainersInput, ensureContainers } from './ensure-containers.ts';
+import {
+  deleteStageBranch,
+  type EnsureContainersInput,
+  ensureContainers,
+} from './ensure-containers.ts';
 import { GENERATED_STACK_RELATIVE_PATH, writeStackFile } from './generate-stack.ts';
 import { findConfigPathForEntry, loadAppConfig, missingConfigError } from './load-config.ts';
 import { loadEntry } from './load-entry.ts';
@@ -131,6 +135,7 @@ export interface RunDeps {
   readonly runAssembler?: RunAssembler;
   readonly ensureContainers?: (input: EnsureContainersInput) => Promise<ResolvedContainer>;
   readonly alchemy?: (input: RunAlchemyInput) => number;
+  readonly deleteBranch?: (input: { branchId: string }) => Promise<void>;
   /** Substituted for the c12 evaluation of the discovered config file (discovery itself still runs — the generated stack file needs the real path). */
   readonly config?: PrismaAppConfig;
 }
@@ -271,6 +276,10 @@ export async function run(argv: readonly string[], deps: RunDeps = {}): Promise<
         `Run \`alchemy ${args.command} ${GENERATED_STACK_RELATIVE_PATH} --yes\` from ` +
           `${cwd} to reproduce this directly.`,
       );
+      return status;
+    }
+    if (args.command === 'destroy' && branchId !== undefined) {
+      await (deps.deleteBranch ?? ((input) => deleteStageBranch(input)))({ branchId });
     }
     return status;
   } catch (error) {
