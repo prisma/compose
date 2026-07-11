@@ -1,132 +1,185 @@
-# Testing apps built on the framework
+# Testing an app built on the framework
 
-How a Prisma App is tested — from a single page component up to the full
-request path — with no deployment, no cloud account, and no change to the code
-under test. It rests on one fact: **every dependency an app touches flows
-through one seam, `service.load()`**, so a test injects its doubles at that
-single point and nothing about the application code moves.
+You test a Prisma App by controlling one function: `service.load()`, the single
+call through which application code gets its dependencies. You never change the
+code under test to make it testable — you decide what `load()` hands it. Two
+tools cover the two situations you'll meet:
 
-## The one seam: `service.load()`
+- **`mockService`** — unit-test a piece of code (a page, a server action, a
+  helper) with fake dependencies.
+- **`bootstrapService`** — integration-test the real request path: the service
+  actually boots and serves, talking to stand-ins you run yourself.
 
-A service declares its dependencies (`deps`) and the ports it exposes
-(`expose`). Its runtime code — the RPC server, a Next.js page, a server action,
-a plain helper — never receives its dependencies as arguments and never reaches
-for a global. It calls `service.load()`, which reads the process config
-(deserialized from the environment the deploy injected — see
-[`deploy-cli.md`](deploy-cli.md)), hydrates each dependency to its client or
-binding (ADR-0015), and returns them typed.
+## A worked example
 
-Because that is the *only* way application code obtains a dependency, it is the
-only place a test has to touch. A test never edits the code under test to accept
-a fake; it controls what `load()` yields. Two altitudes need two tools — but
-they hit the same seam from opposite sides: one replaces `load()`'s output, the
-other feeds `load()`'s input.
+The `storefront` app has a page that depends on an `auth` service:
 
-## Unit — `mockService`: replace the seam's output
+```tsx
+// storefront/app/page.tsx — ordinary application code
+import service from '../src/service.ts';
 
-For code that calls `load()` directly and is exercised directly — a page
-component, a server action, a utility — the test mocks the service module so
-`load()` returns doubles, then calls the code with no server and no environment.
+export default async function Page() {
+  const { auth } = service.load();
+  const { ok } = await auth.verify({ token: 'demo' });
+  return <p>Signed in: {String(ok)}</p>;
+}
+```
 
-```ts
+The page gets `auth` by calling `service.load()`. To test it without a real auth
+service — no database, no deployment, no cloud account — you replace what
+`load()` returns:
+
+```tsx
 // storefront/app/page.test.tsx
 import { mockService } from '@prisma/app/testing';
-// mock storefront's own service module so load() returns a typed fake auth
+
 vi.mock('../src/service.ts', () => ({
-  default: mockService(realService, { auth: { verify: async () => ({ ok: true }) } }),
+  default: mockService(realService, {
+    auth: { verify: async () => ({ ok: true }) },
+  }),
 }));
+
 import Page from './page.tsx';
 
-// the double is checked against Client<authContract>; a wrong shape fails to compile
-expect(await Page()).toContain('true');
+expect(renderToString(await Page())).toContain('Signed in: true');
 ```
 
-`mockService(service, overrides)` returns a service node whose `load()` yields the
-overrides merged with the service's param defaults, **typed against the
-service's own `deps`** — a double that does not satisfy `Client<authContract>`
-is a compile error. This is ordinary dependency-injection testing; the app code
-runs unchanged. It is target-agnostic (every service node has a `load()`), so it
-lives in core, `@prisma/app/testing`. The one runner-specific step — how the
-module substitution is wired (`vi.mock`, bun `mock.module`) — stays in the test;
-the framework supplies the typed payload, not the mock call.
+The page runs its real logic; only `auth` is a stand-in. Everything below
+expands on this one move.
 
-## Integration — `bootstrapService`: feed the seam's input
+## Why one function is enough
 
-For the real request path — the actual boot, the real client, the real wire
-format — the test is the in-process counterpart of the deploy bootstrap. The
-deploy bootstrap is `main.run(address, () => import(appEntry))`
-([deploy-cli.md](deploy-cli.md)); `run` writes the resolved config into the
-environment and boots the entry. `bootstrapService` does exactly that with a
-config the test chooses:
+A service declares the dependencies it needs and the ports it exposes. Its code
+— a page, a server action, an RPC handler, a plain function — never receives
+those dependencies as arguments and never reaches for a global. It calls
+`service.load()`.
+
+`load()` does three things: it reads the service's configuration (which a
+deployment places in the process environment), turns each dependency into the
+concrete client the code will call (ADR-0015), and returns them with their real
+types. Because this is the *only* way application code reaches a dependency, it
+is the only place a test has to intervene — which is what lets the tests leave
+the application code completely untouched.
+
+The two tools intervene at the same point from opposite directions.
+`mockService` decides what `load()` **returns**; `bootstrapService` decides what
+`load()` **reads**. Which you want depends on how much of the real path you're
+testing.
+
+## Unit tests: `mockService`
+
+When you want to test a piece of code in isolation — call it directly, assert on
+what it returns or renders — use `mockService`. You mock the service module so
+`load()` yields doubles, then exercise the code with no server and no
+environment. That is the worked example above.
+
+`mockService(service, doubles)` returns a copy of the service whose `load()`
+returns your doubles merged with the service's own parameter defaults. The
+doubles are typed against the service's declared dependencies: a fake `auth`
+must be a valid `authContract` client, so a wrong-shaped fake is a compile
+error, not a test that passes by accident.
+
+It works for any service — every service has a `load()` — so it lives in the
+framework core, `@prisma/app/testing`. The one part that depends on your test
+runner is *how* you substitute the module (`vi.mock` in Vitest, `mock.module`
+in bun test). The framework gives you the typed value to substitute; wiring it
+into the runner stays in your test.
+
+## Integration tests: `bootstrapService`
+
+When you want the real request path — the actual server boot, the real network
+client, the real wire format — use `bootstrapService`. It starts your service's
+real entry point in a configuration you choose, in-process, and hands you
+something you can send HTTP requests to. You point one of its dependencies at a
+stand-in you run yourself, and drive the round trip.
 
 ```ts
+// storefront/app/page.integration.test.ts
 import { bootstrapService } from '@prisma/app-cloud/testing';
-import fakeAuth from '@storefront-auth/auth/fake'; // a serve() handler, no db
+import fakeAuth from '@storefront-auth/auth/fake'; // an in-memory auth handler, no database
 import storefront from '../src/service.ts';
 
+// run the fake auth on a loopback port
 const fake = Bun.serve({ port: 0, fetch: fakeAuth });
 
-// storefront's build is nextjs(), whose entry lives in Next's standalone output
-// dir — not module-relative — so it supplies an explicit boot thunk. A `node`
-// service (like auth) needs none: the default derivation fits it.
-const app = await bootstrapService(
-  storefront,
-  { service: { port: 4310 }, inputs: { auth: { url: fake.url.href } } },
-  bootStandaloneNext(storefront.build),
-);
+const app = await bootstrapService(storefront, {
+  service: { port: 4310 },
+  inputs: { auth: { url: fake.url.href } }, // point storefront's auth dependency at the fake
+});
 
 const res = await app.fetch(new Request(app.url));
-expect(await res.text()).toContain('Auth /verify says: <!-- -->true');
+expect(await res.text()).toContain('Signed in: true');
 ```
 
-Nothing about `server.ts` changes — it boots and listens exactly as in
-production; the test just points its `auth` binding at a local fake and drives
-it over loopback. `load()` deserializes the injected environment identically to
-a deployed process. The fidelity is the point: an integration test exercises the
-production code path, not a stubbed one.
+The point is what *doesn't* change: `storefront`'s server code is untouched. It
+boots and listens exactly as it does in production; the test only chooses the
+configuration it boots with. `load()` reads that configuration the same way a
+deployed process would, so pointing `auth` at `http://localhost:…` is the same
+mechanism a deployment uses to point it at the real service. You exercise the
+production code path, not a rewrite of it.
 
-`bootstrapService` is **target-specific** — writing the environment is the
-target's serializer's job — so it ships in the target's testing entry
-(`@prisma/app-cloud/testing`), not core. It reuses the exact `stash` the deploy
-boot uses, so `load()` reads the injected config identically to a deployed
-process; nothing about it lives in the production runtime. `config.service.port`
-must be concrete (the entry self-listens and never reports an OS-assigned port
-back), and there is no `close()` — teardown rides bun-test's per-file process
-isolation. `mockService` stays in core (`@prisma/app/testing`); it is
-target-agnostic because every service node has a `load()`.
+Starting a service the way a deployment does is specific to the platform you
+deploy to, so `bootstrapService` ships in that platform's testing entry
+(`@prisma/app-cloud/testing`), not the core. (`mockService` only substitutes a
+return value, so it needs to know nothing about deployment and stays in core.)
 
-## The doubles: same contract, by type
+Three practical notes:
 
-A dependency's *hydrated type* is its contract. An RPC dependency
-`rpc(authContract)` hydrates to `Client<authContract>` — `{ verify(input):
-Promise<output> }` — so a double is any value of that type, checked at compile
-time. Three grades, increasing fidelity:
+- **You choose the port.** The service listens on it and never reports an
+  OS-assigned one back, so pass a concrete number.
+- **There is no `close()`.** Run each integration-test file in its own process
+  (bun test does), and the server it started is cleaned up when the file ends.
+- **A Next.js service needs one extra argument.** `bootstrapService` finds most
+  services' entry points automatically, but a Next.js app's built entry lives
+  inside Next's standalone output directory, so you pass a small function that
+  imports it:
 
-- **A bare object** — `{ verify: async () => ({ ok: true }) }`. Fastest; skips
-  the wire entirely. For unit tests where only the return value matters.
-- **A contract-faithful in-process fake** — `makeClient(authContract, url, {
-  fetch: serve(fakeAuth, handlers) })`: the *real* client over a *fake*
-  transport, so JSON encode/decode and both schema validations still run. Same
-  process, no socket.
-- **A real local server** — the fake `serve()`d on a loopback port, reached by
-  the real client over real HTTP. What `bootstrapService` uses.
+  ```ts
+  import { standaloneEntryPath } from '@prisma/app-nextjs/control';
 
-The fake ships from the dependency's own package (a `/fake` export), so its
-handler map is typed against the same `authContract` the real service exposes —
-the contract cannot drift between the real service and its fake.
+  await bootstrapService(storefront, config, async () => {
+    await import(standaloneEntryPath(storefront.build));
+  });
+  ```
 
-## Non-goals
+## The stand-in: same contract, checked by the compiler
 
-- **Running a whole composed graph locally.** `bootstrapService` boots one
-  service; wiring several services together in-process (a local `dev`
-  orchestration) is a separate capability, not this seam.
-- **A runner-agnostic mock abstraction.** The framework ships the typed double
-  builder and documents the `vi.mock` / `mock.module` patterns; it does not wrap
-  every test runner's module system.
+What do you pass as the fake? A dependency's type *is* its contract. An RPC
+dependency on `authContract` becomes a client with a `verify(input) =>
+Promise<output>` method, so any value of that shape is a valid double and the
+compiler rejects one that isn't. You choose how realistic to make it:
+
+- **A bare object** — `{ verify: async () => ({ ok: true }) }`. Fastest; no
+  network, no serialization. Right when only the return value matters.
+- **The real client over an in-memory handler** — the framework's own client
+  talking to your fake through an in-process function instead of the network.
+  JSON encoding and both schema validations still run; there is just no socket.
+- **A real local server** — the fake served on a loopback port and reached over
+  real HTTP. This is what `bootstrapService` drives.
+
+A dependency's package can ship its own fake as a separate entry point, kept out
+of the deployed code. Because that fake is written against the same contract the
+real service exposes, the two cannot drift apart.
+
+## Alternatives considered
+
+- **Add injection points to the code under test** (constructor or parameter
+  injection, so a test passes fakes in directly). Rejected: application code
+  would carry test-only seams, and there is nothing to add — `load()` already
+  *is* the single point every dependency flows through.
+- **Boot the whole composed app locally**, several services wired together in
+  one process. Rejected as a *different* capability: `bootstrapService` boots
+  one service. Running a full graph locally (a local `dev`) is worth building on
+  its own terms, but it is not this seam.
+- **A runner-agnostic mock wrapper** hiding `vi.mock`/`mock.module` behind one
+  API. Rejected: runners differ in module-mock mechanics (hoisting, ESM
+  handling) in ways not worth papering over. The framework supplies the typed
+  value and documents the per-runner pattern instead.
 
 ## Related
 
 - [`core-model.md`](core-model.md) — the `run`/`load` split these tools drive.
-- [`deploy-cli.md`](deploy-cli.md) — the deploy bootstrap `bootstrapService` mirrors.
+- [`deploy-cli.md`](deploy-cli.md) — the deployment boot that `bootstrapService`
+  mirrors.
 - [`../90-decisions/ADR-0015-dependencies-resolve-to-bindings-clients-are-app-side.md`](../90-decisions/ADR-0015-dependencies-resolve-to-bindings-clients-are-app-side.md)
-  — why the hydrated dependency is a client the seam can double.
+  — why a hydrated dependency is a client a test can stand in for.
