@@ -21,17 +21,21 @@ stage it returns `branchId: undefined` and creates no Branch.
 
 ## Dispatch 2 — CLI ensure-containers step (`@prisma/app-cli`)
 
-**Outcome.** Before generating/running the stack, the deploy pipeline: validates the
-stage name against git `check-ref-format` (fail clearly if invalid, spec §4); calls the
-D1 resolver with the app name (root system name or `--name`) and the stage; and sets
-`PRISMA_PROJECT_ID` (always) and `PRISMA_BRANCH_ID` (named stages only) on the
-`alchemy deploy` child process (spec §2). Default `prisma-app deploy` from a fresh
-checkout still works with only a token.
+**Outcome.** Before running the stack, the pipeline (for **both** deploy and destroy):
+validates a named stage against git `check-ref-format` (fail clearly if invalid, spec §4);
+calls the D1 resolver with the app name (root system name or `--name`) and the stage —
+`ensure: true` for deploy (create-if-absent), `ensure: false` for destroy (find-only,
+clear "nothing deployed" error if absent, spec §10); and sets `PRISMA_PROJECT_ID` (always)
+and `PRISMA_BRANCH_ID` (named stages only) on the `alchemy` child (spec §2). Default
+`prisma-app deploy` from a fresh checkout still works with only a token. Adds the `ensure`
+option to `@prisma/alchemy`'s `resolveContainer` and surfaces the Management-client layer
+from its barrel so the CLI can provide `ManagementClient` over `PRISMA_SERVICE_TOKEN`.
 
 - **Builds on:** D1.
-- **Hands to:** D3 — an `alchemy deploy` invocation carrying the ids in its env.
-- **Focus:** `run-alchemy.ts` (child env) + the pre-stack step in `main.ts`/`generate-stack.ts`;
-  stage-name validation. No provider or target-lowering changes.
+- **Hands to:** D3 — an `alchemy` invocation carrying the ids in its env.
+- **Focus:** `run-alchemy.ts` (child env) + the pre-stack step in `main.ts`; stage-name
+  validation; the `ensure` flag + barrel export in `@prisma/alchemy`. No provider or
+  target-lowering changes. Branch soft-delete on destroy is **D4**, not here.
 
 ## Dispatch 3 — Pack + providers consume the ids (`@prisma/alchemy`, `@prisma/app-cloud`)
 
@@ -55,12 +59,14 @@ hardcoded `production`.
 `prisma-app deploy` (production) then `prisma-app deploy --stage staging` for
 `examples/storefront-auth` stand up two isolated environments; staging ingress →
 `auth.verify()` returns `{ ok: true }`; re-deploy of each is a no-op;
-`destroy --stage staging` removes the staging Branch + resources, production untouched.
+`destroy --stage staging` removes the staging resources, then **soft-deletes the staging
+Branch** via `DELETE /v1/branches/:branchId` (spec §10) — production untouched.
 
 - **Builds on:** D1–D3.
 - **Hands to:** — (slice DoD).
-- **Focus:** end-to-end proof + destroy. Report (do not fix) any gap in per-branch state
-  segregation or Management-API branch/role behavior as follow-up.
+- **Focus:** the branch soft-delete teardown step (spec §10) + end-to-end proof + destroy.
+  Report (do not fix) any gap in per-branch state segregation or Management-API branch/role
+  behavior as follow-up.
 
 ## Notes
 

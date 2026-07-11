@@ -17,10 +17,12 @@ these, never *what they are*.
    *within* them. Neither Project nor Branch is an Alchemy resource.
 
 2. **Id threading = environment variables.** The CLI, after resolving, sets
-   `PRISMA_PROJECT_ID` and (named stages only) `PRISMA_BRANCH_ID` on the `alchemy deploy`
-   child process (`run-alchemy.ts`). `fromEnv()` reads them; `PrismaCloudOptions` gains
-   `projectId: string` and `branchId?: string`. This mirrors the existing
-   `PRISMA_WORKSPACE_ID` → `fromEnv()` path. **Not** codegen into the stack file.
+   `PRISMA_PROJECT_ID` and (named stages only) `PRISMA_BRANCH_ID` on the `alchemy` child
+   process — **both `deploy` and `destroy`** (`run-alchemy.ts`), because `alchemy destroy`
+   re-imports and re-evaluates the same stack, so its target reconstruction needs the same
+   ids. `fromEnv()` reads them; `PrismaCloudOptions` gains `projectId: string` and
+   `branchId?: string`. This mirrors the existing `PRISMA_WORKSPACE_ID` → `fromEnv()` path.
+   **Not** codegen into the stack file.
 
 3. **Project resolver.** List *live* Projects in the workspace whose name matches the
    app name (root system name, or `--name`), oldest-first; **adopt the oldest**; if none,
@@ -70,6 +72,20 @@ these, never *what they are*.
 9. **State is inherited.** Alchemy's `--stage` already segregates deploy state and
    physical names per environment; the store keys by `(stack, stage)`. No state work in
    this slice.
+
+10. **Destroy resolves find-only; teardown removes the named-stage Branch.** `destroy`
+    runs the same two-phase flow, but ensure-containers is **find-only**: it must never
+    create anything. `resolveContainer` gains `ensure: boolean` — `deploy` passes `true`
+    (create-if-absent, decisions 3–4 unchanged), `destroy` passes `false` (find only). On
+    `ensure: false`, an absent Project (or, for a named stage, an absent Branch) makes the
+    CLI **fail with a clear "nothing deployed for `<app>`[`/<stage>`]"** message. The
+    resolved ids are injected on the `destroy` child exactly as for deploy (decision 2).
+    After `alchemy destroy` removes the Branch's members (compute, database, config), the
+    CLI **soft-deletes the named-stage Branch** via `DELETE /v1/branches/:branchId` — the
+    members must be gone first (the API refuses to delete a Branch that is the default/
+    production Branch or still has live members). The production (default-stage) Branch is
+    never deleted. **D2 wires the find-only resolution + id injection for both commands;
+    the branch soft-delete is implemented and proven in D4.**
 
 ## Scope
 
