@@ -31,4 +31,5 @@ _Earlier drafts (ADR-0001, ADR-0002) were retired as the high-level design settl
 - [ADR-0013](ADR-0013-resources-are-provisioned-by-systems-deps-are-declarations.md) — Resources are provisioned by systems; dependencies are uniform contract-checked slots.
 - [ADR-0014](ADR-0014-name-the-framework-prisma-app-and-its-unit-system.md) — Name the framework "Prisma App" (`@prisma/app`), its unit "System" with one `system()` primitive, the CLI `prisma-app`.
 - [ADR-0015](ADR-0015-dependencies-resolve-to-bindings-clients-are-app-side.md) — Dependencies resolve to bindings (a client for protocol-owned kinds, typed config for resources); clients are constructed app-side.
+- [ADR-0016](ADR-0016-a-prisma-app-is-one-project-a-stage-is-a-branch.md) — A Prisma App is one Prisma Cloud Project; Systems are Apps/Databases inside it; a Stage is a Branch, and deploy state is per `(Project, Branch)`.
 
