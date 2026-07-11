@@ -16,44 +16,44 @@ describe('resource()', () => {
     const provides = dbContract();
     const node = resource({
       name: 'db',
-      pack: '@prisma/app-cloud',
+      extension: '@prisma/app-cloud',
       provides,
     });
 
     expect(isNode(node)).toBe(true);
     expect(node.kind).toBe('resource');
     expect(node.name).toBe('db');
-    expect(node.pack).toBe('@prisma/app-cloud');
+    expect(node.extension).toBe('@prisma/app-cloud');
     expect(node.type).toBe('fake/db');
     expect(node.provides).toBe(provides);
     expect(Object.isFrozen(node)).toBe(true);
   });
 
   test('throws when provides is missing or not a contract (kind + satisfies)', () => {
-    expect(() => resource({ name: 'db', pack: 'test/pack', provides: {} as never })).toThrow(
+    expect(() => resource({ name: 'db', extension: 'test/pack', provides: {} as never })).toThrow(
       /requires `provides`/,
     );
     expect(() =>
       resource({
         name: 'db',
-        pack: 'test/pack',
+        extension: 'test/pack',
         provides: { kind: '', satisfies: () => true } as never,
       }),
     ).toThrow(/requires `provides`/);
     expect(() =>
-      resource({ name: 'db', pack: 'test/pack', provides: { kind: 'fake/db' } as never }),
+      resource({ name: 'db', extension: 'test/pack', provides: { kind: 'fake/db' } as never }),
     ).toThrow(/requires `provides`/);
   });
 
   test('throws on an empty name', () => {
-    expect(() => resource({ name: '', pack: 'test/pack', provides: dbContract() })).toThrow(
+    expect(() => resource({ name: '', extension: 'test/pack', provides: dbContract() })).toThrow(
       /non-empty name/,
     );
   });
 
-  test('throws on an empty pack', () => {
-    expect(() => resource({ name: 'db', pack: '', provides: dbContract() })).toThrow(
-      /non-empty pack/,
+  test('throws on an empty extension', () => {
+    expect(() => resource({ name: 'db', extension: '', provides: dbContract() })).toThrow(
+      /non-empty extension/,
     );
   });
 });
@@ -131,13 +131,13 @@ describe('dependency()', () => {
 
 describe('service()', () => {
   const build = {
-    kind: 'node',
-    pack: '@prisma/app-node',
+    extension: '@prisma/app-node',
+    type: 'node',
     module: 'file:///app/src/service.ts',
     entry: 'dist/server.js',
   };
 
-  test('returns a branded, frozen service node with frozen name, pack, inputs, params, and build', () => {
+  test('returns a branded, frozen service node with frozen name, extension, inputs, params, and build', () => {
     const db = dependency({
       name: 'db',
       type: 'fake/db',
@@ -145,7 +145,7 @@ describe('service()', () => {
     });
     const node = service({
       name: 'hello',
-      pack: '@prisma/app-cloud',
+      extension: '@prisma/app-cloud',
       type: 'fake/app',
       inputs: { db },
       params: { port: { type: 'number', default: 3000 } },
@@ -155,13 +155,13 @@ describe('service()', () => {
     expect(isNode(node)).toBe(true);
     expect(node.kind).toBe('service');
     expect(node.name).toBe('hello');
-    expect(node.pack).toBe('@prisma/app-cloud');
+    expect(node.extension).toBe('@prisma/app-cloud');
     expect(node.type).toBe('fake/app');
     expect(node.inputs.db).toBe(db);
     expect(node.params).toEqual({ port: { type: 'number', default: 3000 } });
     expect(node.build).toEqual({
-      kind: 'node',
-      pack: '@prisma/app-node',
+      extension: '@prisma/app-node',
+      type: 'node',
       module: 'file:///app/src/service.ts',
       entry: 'dist/server.js',
     });
@@ -175,7 +175,7 @@ describe('service()', () => {
   test('carries no handler — the node is a pure description', () => {
     const node = service({
       name: 'hello',
-      pack: 'test/pack',
+      extension: 'test/pack',
       type: 'fake/app',
       inputs: {
         db: dependency({
@@ -189,14 +189,14 @@ describe('service()', () => {
     });
 
     expect('invoke' in node).toBe(false);
-    expect(node.build.kind).toBe('node');
+    expect(node.build.type).toBe('node');
   });
 
   test('throws on an empty type', () => {
     expect(() =>
       service({
         name: 'hello',
-        pack: 'test/pack',
+        extension: 'test/pack',
         type: '',
         inputs: {},
         params: {},
@@ -209,13 +209,26 @@ describe('service()', () => {
     expect(() =>
       service({
         name: '',
-        pack: 'test/pack',
+        extension: 'test/pack',
         type: 'fake/app',
         inputs: {},
         params: {},
         build,
       }),
     ).toThrow(/non-empty name/);
+  });
+
+  test('throws on an empty extension', () => {
+    expect(() =>
+      service({
+        name: 'hello',
+        extension: '',
+        type: 'fake/app',
+        inputs: {},
+        params: {},
+        build,
+      }),
+    ).toThrow(/non-empty extension/);
   });
 
   test('rejects an underscore in an input name', () => {
@@ -227,7 +240,7 @@ describe('service()', () => {
     expect(() =>
       service({
         name: 'hello',
-        pack: 'test/pack',
+        extension: 'test/pack',
         type: 'fake/app',
         inputs: { my_db: db },
         params: {},
@@ -240,7 +253,7 @@ describe('service()', () => {
     expect(() =>
       service({
         name: 'hello',
-        pack: 'test/pack',
+        extension: 'test/pack',
         type: 'fake/app',
         inputs: {},
         params: { max_conns: { type: 'number', default: 1 } },
@@ -252,7 +265,7 @@ describe('service()', () => {
   test('expose is absent by default', () => {
     const node = service({
       name: 'hello',
-      pack: 'test/pack',
+      extension: 'test/pack',
       type: 'fake/app',
       inputs: {},
       params: {},
@@ -266,7 +279,7 @@ describe('service()', () => {
     const authContract = fakeContract({ verify: async () => ({ ok: true }) });
     const node = service({
       name: 'hello',
-      pack: 'test/pack',
+      extension: 'test/pack',
       type: 'fake/app',
       inputs: {},
       params: {},
@@ -283,8 +296,9 @@ describe('service()', () => {
 describe('system()', () => {
   test('construction is INERT — the body runs only at Load', () => {
     let bodyCalls = 0;
-    const node = system('shop', () => {
+    const node = system('shop', {}, () => {
       bodyCalls += 1;
+      return {};
     });
 
     expect(bodyCalls).toBe(0);
@@ -295,6 +309,6 @@ describe('system()', () => {
   });
 
   test('throws on an empty name', () => {
-    expect(() => system('', () => {})).toThrow(/non-empty name/);
+    expect(() => system('', {}, () => ({}))).toThrow(/non-empty name/);
   });
 });

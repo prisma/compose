@@ -7,7 +7,7 @@ export interface PostgresConfig {
 
 /**
  * The contract a Postgres provides — and the contract its consumers require.
- * `satisfies` compares KIND, not identity: a pack module can be duplicated
+ * `satisfies` compares KIND, not identity: an extension module can be duplicated
  * across a workspace (same rationale as the Symbol.for node brand), and every
  * duplicate's contract must still satisfy. `__cmp` is the connection config a
  * postgres offers; core never inspects it.
@@ -39,7 +39,11 @@ export function postgres(opts?: {
   name: string;
 }): ResourceNode<typeof postgresContract> | DependencyEnd<PostgresConfig, typeof postgresContract> {
   if (opts?.name !== undefined) {
-    return resource({ name: opts.name, pack: '@prisma/app-cloud', provides: postgresContract });
+    return resource({
+      name: opts.name,
+      extension: '@prisma/app-cloud',
+      provides: postgresContract,
+    });
   }
   return dependency<
     { url: { type: 'string'; secret: true } },

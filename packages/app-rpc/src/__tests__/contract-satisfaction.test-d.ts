@@ -17,8 +17,8 @@ import { contract } from '../contract.ts';
 import { type Client, rpc } from '../rpc.ts';
 
 const build: BuildAdapter = {
-  kind: 'node',
-  pack: '@prisma/app-node',
+  extension: '@prisma/app-node',
+  type: 'node',
   module: 'file:///test/service.ts',
   entry: 'server.js',
 };
@@ -71,7 +71,7 @@ const legacyEnd = () =>
 const provider = <C extends Contract<string, unknown>>(exposed: C) =>
   service({
     name: 'test-service',
-    pack: 'test/pack',
+    extension: 'test/pack',
     type: 'fake/compute',
     inputs: {},
     params: {},
@@ -81,7 +81,7 @@ const provider = <C extends Contract<string, unknown>>(exposed: C) =>
 
 const storefront = service({
   name: 'test-service',
-  pack: 'test/pack',
+  extension: 'test/pack',
   type: 'fake/compute',
   inputs: { auth: rpc(authContract), legacy: legacyEnd() },
   params: {},

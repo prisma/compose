@@ -22,13 +22,13 @@ const db = dependency({
 
 const app = service({
   name: 'test-service',
-  pack: 'test/pack',
+  extension: 'test/pack',
   type: 'probe/app',
   inputs: { db },
   params: { port: { type: 'number', default: 3000 } },
   build: {
-    kind: 'node',
-    pack: '@prisma/app-node',
+    extension: '@prisma/app-node',
+    type: 'node',
     module: 'file:///test/service.ts',
     entry: 'server.js',
   },
@@ -41,25 +41,26 @@ const peer = dependency({
 
 const caller = service({
   name: 'test-service',
-  pack: 'test/pack',
+  extension: 'test/pack',
   type: 'probe/app',
   inputs: { peer },
   params: {},
   build: {
-    kind: 'node',
-    pack: '@prisma/app-node',
+    extension: '@prisma/app-node',
+    type: 'node',
     module: 'file:///test/service.ts',
     entry: 'server.js',
   },
 });
 
-const dbNode = resource({ name: 'db', pack: 'test/pack', provides: dbContract });
+const dbNode = resource({ name: 'db', extension: 'test/pack', provides: dbContract });
 
 export const graph = Load(
-  system('probe-system', (h) => {
-    const dbRef = h.provision('db', dbNode);
-    const ref = h.provision('app', app, { db: dbRef });
-    h.provision('caller', caller, { peer: ref });
+  system('probe-system', {}, ({ provision }) => {
+    const dbRef = provision('db', dbNode);
+    const ref = provision('app', app, { db: dbRef });
+    provision('caller', caller, { peer: ref });
+    return {};
   }),
   { id: 'probe' },
 );

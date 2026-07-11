@@ -27,15 +27,16 @@ export type {
   Expose,
   Hydrated,
   HydratedDeps,
+  InputRef,
   Loaded,
-  NodeBase,
-  PackAuthoredNode,
   ProvisionedRef,
   RefPort,
   ResourceNode,
   RunnableServiceNode,
   ServiceNode,
   SystemBuilder,
+  SystemContext,
   SystemNode,
+  SystemOutputs,
 } from './node.ts';
 export { dependency, isNode, resource, service, system } from './node.ts';

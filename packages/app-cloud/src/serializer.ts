@@ -1,6 +1,6 @@
 /**
- * The pack's config serializer — the semantic↔physical mapping, private to
- * the pack, SHARED by run() (boot) and /target's serialize (deploy) so writer
+ * The extension's config serializer — the semantic↔physical mapping, private to
+ * the extension, SHARED by run() (boot) and /control's serialize (deploy) so writer
  * and reader cannot drift.
  *
  * Keys are unique per service within the shared project namespace: the
@@ -49,8 +49,8 @@ function coerce(raw: string | undefined, d: ConfigDeclaration, key: string): unk
 
 /**
  * Boot: read each declared param from env by its key, coerce to its type
- * (the pack reversing its own serialization — missing/unparseable fails
- * loudly), assemble the typed Config. The one place in the pack that reads
+ * (the extension reversing its own serialization — missing/unparseable fails
+ * loudly), assemble the typed Config. The one place in the extension that reads
  * the platform environment.
  */
 export const deserialize = (shape: readonly ConfigDeclaration[], address: string): Config => {
