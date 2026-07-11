@@ -4,6 +4,7 @@ import { configOf, hydrateSync, isNode, number, param, string } from '@prisma/ap
 import { type } from 'arktype';
 import { compute, postgres, postgresContract } from '../index.ts';
 import { configKey, deserialize, encode } from '../serializer.ts';
+import { bootstrapService } from '../testing.ts';
 
 function scalarDeclaration(
   owner: ConfigDeclaration['owner'],
@@ -357,6 +358,69 @@ describe('compute().run(address, boot) → load() — the round trip', () => {
     });
 
     expect(bootCalls).toBe(1);
+  });
+});
+
+describe('bootstrapService(service, config, boot) — the in-process integration seam', () => {
+  test("stashes the given Config address-free (like run('', ...)) so the booted entry's load() reads it", async () => {
+    const app = compute({ name: 'test-service', deps: { db: postgres() }, build });
+
+    let deps: unknown;
+    let cfg: unknown;
+    await withEnv({ DB_URL: '', PORT: '' }, () =>
+      bootstrapService(
+        app,
+        { service: { port: 4321 }, inputs: { db: { url: 'postgres://bootstrap' } } },
+        async () => {
+          deps = app.load();
+          cfg = app.config();
+        },
+      ),
+    );
+
+    expect(deps).toEqual({ db: { url: 'postgres://bootstrap' } });
+    expect(cfg).toEqual({ port: 4321 });
+  });
+
+  test('needs no pre-set environment — the caller supplies the Config directly, unlike run()', async () => {
+    const app = compute({ name: 'test-service', deps: { db: postgres() }, build });
+
+    let deps: unknown;
+    let cfg: unknown;
+    await withEnv({ DB_URL: 'stale', PORT: 'stale' }, () =>
+      bootstrapService(
+        app,
+        { service: { port: 5555 }, inputs: { db: { url: 'postgres://fresh' } } },
+        async () => {
+          deps = app.load();
+          cfg = app.config();
+        },
+      ),
+    );
+
+    expect(deps).toEqual({ db: { url: 'postgres://fresh' } });
+    expect(cfg).toEqual({ port: 5555 });
+  });
+
+  test('returns { url, fetch } pointing at the configured port', async () => {
+    const app = compute({ name: 'test-service', deps: {}, build });
+
+    const svc = await bootstrapService(
+      app,
+      { service: { port: 6789 }, inputs: {} },
+      async () => {},
+    );
+
+    expect(svc.url).toBe('http://localhost:6789/');
+    expect(typeof svc.fetch).toBe('function');
+  });
+
+  test('rejects a Config with no concrete port — the entry self-listens', async () => {
+    const app = compute({ name: 'test-service', deps: {}, build });
+
+    await expect(
+      bootstrapService(app, { service: {}, inputs: {} }, async () => {}),
+    ).rejects.toThrow(/concrete port number/);
   });
 });
 
