@@ -33,13 +33,13 @@ const db: DependencyEnd<FakeDb> = dependency({
 });
 const node = service({
   name: 'test-service',
-  pack: 'test/pack',
+  extension: 'test/pack',
   type: 'fake/rpc-test',
   inputs: { db },
   params: {},
   build: {
-    kind: 'fake',
-    assembler: '@fake/adapter/assemble',
+    extension: '@fake/adapter',
+    type: 'fake',
     module: 'file:///test/service.ts',
     entry: 'x',
   },

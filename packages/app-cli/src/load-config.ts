@@ -10,8 +10,9 @@
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { blindCast } from '@prisma/app/casts';
 import type { ExtensionDescriptor, PrismaAppConfig } from '@prisma/app/config';
-import { loadConfig as c12LoadConfig } from 'c12';
+import * as c12 from 'c12';
 import { CliError } from './cli-error.ts';
 
 export const CONFIG_FILENAME = 'prisma-app.config.ts';
@@ -42,12 +43,14 @@ export function missingConfigError(entryPath: string): CliError {
   );
 }
 
-function requireField(condition: boolean, field: string, requirement: string): void {
-  if (!condition) {
-    throw new CliError(
-      `${CONFIG_FILENAME}: \`${field}\` ${requirement} — see defineConfig() in '@prisma/app/config'.`,
-    );
-  }
+function fieldError(field: string, requirement: string): CliError {
+  return new CliError(
+    `${CONFIG_FILENAME}: \`${field}\` ${requirement} — see defineConfig() in '@prisma/app/config'.`,
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
 }
 
 /**
@@ -56,35 +59,35 @@ function requireField(condition: boolean, field: string, requirement: string): v
  * Returns the same object, typed.
  */
 export function validateConfigShape(loaded: unknown, configPath: string): PrismaAppConfig {
-  if (typeof loaded !== 'object' || loaded === null || Object.keys(loaded).length === 0) {
+  if (!isRecord(loaded) || Object.keys(loaded).length === 0) {
     throw new CliError(
       `"${configPath}" exported no config — it must default-export ` +
         "defineConfig({ extensions: [...], state: ... }) from '@prisma/app/config'.",
     );
   }
-  const candidate = loaded as { extensions?: unknown; state?: unknown };
 
-  requireField(Array.isArray(candidate.extensions), 'extensions', 'must be an array');
-  const extensions = candidate.extensions as unknown[];
+  const extensions = loaded['extensions'];
+  if (!Array.isArray(extensions)) {
+    throw fieldError('extensions', 'must be an array');
+  }
   const seen = new Set<string>();
   for (const [index, entry] of extensions.entries()) {
-    requireField(
-      typeof entry === 'object' && entry !== null,
-      `extensions[${index}]`,
-      'must be an extension descriptor object',
-    );
-    const descriptor = entry as { id?: unknown; nodes?: unknown };
-    requireField(
-      typeof descriptor.id === 'string' && descriptor.id.length > 0,
-      `extensions[${index}].id`,
-      'must be a non-empty string (the extension package name)',
-    );
-    requireField(
-      typeof descriptor.nodes === 'object' && descriptor.nodes !== null,
-      `extensions[${index}].nodes`,
-      'must be an object (the node-ID → control registry)',
-    );
-    const id = descriptor.id as string;
+    if (!isRecord(entry)) {
+      throw fieldError(`extensions[${index}]`, 'must be an extension descriptor object');
+    }
+    const id = entry['id'];
+    if (typeof id !== 'string' || id.length === 0) {
+      throw fieldError(
+        `extensions[${index}].id`,
+        'must be a non-empty string (the extension package name)',
+      );
+    }
+    if (!isRecord(entry['nodes'])) {
+      throw fieldError(
+        `extensions[${index}].nodes`,
+        'must be an object (the node-ID → control registry)',
+      );
+    }
     if (seen.has(id)) {
       throw new CliError(
         `${CONFIG_FILENAME}: extension "${id}" is listed more than once in \`extensions\`.`,
@@ -93,13 +96,17 @@ export function validateConfigShape(loaded: unknown, configPath: string): Prisma
     seen.add(id);
   }
 
-  requireField(
-    typeof candidate.state === 'function',
-    'state',
-    'must be a function returning the deploy state layer (e.g. () => prismaState())',
-  );
+  if (typeof loaded['state'] !== 'function') {
+    throw fieldError(
+      'state',
+      'must be a function returning the deploy state layer (e.g. () => prismaState())',
+    );
+  }
 
-  return loaded as PrismaAppConfig;
+  return blindCast<
+    PrismaAppConfig,
+    'the field-by-field checks above validate the runtime shape (extensions array with string ids + object registries, state a function); the control functions inside each registry cannot be structurally checked at runtime'
+  >(loaded);
 }
 
 /**
@@ -108,7 +115,7 @@ export function validateConfigShape(loaded: unknown, configPath: string): Prisma
  * findConfigPathForEntry).
  */
 export async function loadAppConfig(configPath: string): Promise<LoadedAppConfig> {
-  const result = await c12LoadConfig({
+  const result = await c12.loadConfig({
     name: 'prisma-app',
     configFile: configPath,
     cwd: path.dirname(configPath),

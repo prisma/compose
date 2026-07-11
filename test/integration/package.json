@@ -17,22 +17,5 @@
     "@types/bun": "^1.3.13",
     "@types/node": "^24.10.13",
     "typescript": "^6.0.3"
-  },
-  "dependenciesMeta": {
-    "@prisma/app": {
-      "injected": true
-    },
-    "@prisma/app-node": {
-      "injected": true
-    },
-    "@prisma/app-nextjs": {
-      "injected": true
-    },
-    "@prisma/app-cloud": {
-      "injected": true
-    },
-    "@prisma/alchemy": {
-      "injected": true
-    }
   }
 }

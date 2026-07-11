@@ -1,6 +1,6 @@
 /**
  * The pack's config serializer — the semantic↔physical mapping, private to
- * the pack, SHARED by run() (boot) and /target's serialize (deploy) so writer
+ * the extension, SHARED by run() (boot) and /control's serialize (deploy) so writer
  * and reader cannot drift.
  *
  * Keys are unique per service within the shared project namespace: the

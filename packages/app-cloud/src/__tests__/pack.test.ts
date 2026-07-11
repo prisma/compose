@@ -140,7 +140,7 @@ describe('compute({ expose })', () => {
   });
 });
 
-describe("the config serializer (shared by run() and /target's serialize)", () => {
+describe("the config serializer (shared by run() and /control's serialize)", () => {
   test("configKey: lone-service root (address '') is unprefixed — owner ▸ name", () => {
     const app = compute({
       name: 'test-service',
@@ -249,7 +249,7 @@ describe("the config serializer (shared by run() and /target's serialize)", () =
   });
 
   test('round-trip: a numeric leaf serializes to a string and deserializes back to the identical number', async () => {
-    // The gap that hid the serialize bug: /target's serialize encodes typed→
+    // The gap that hid the serialize bug: /control's serialize encodes typed→
     // string (3000 → "3000"), and this same module's deserialize must read it
     // back as a number (3000). Emulate serialize's encoding for the `port`
     // param, keyed by the SHARED configKey, then read it back through
