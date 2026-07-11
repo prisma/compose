@@ -82,24 +82,25 @@ export function targetStorageHash(contractJson: unknown): string {
  * `prisma-next.config.ts` by the caller).
  */
 /**
- * Relax a TLS-requiring `sslmode` to `no-verify` so node-postgres connects to
- * Prisma Postgres at deploy time.
+ * Pin a deprecating TLS `sslmode` to the explicit `verify-full` so the deploy
+ * connection is warning-free and future-proof.
  *
- * PPG's DSN carries `sslmode=require`. node-postgres's `pg-connection-string`
- * (8.21) treats `require`/`prefer`/`verify-ca` as aliases for `verify-full` —
- * strict certificate + hostname verification — and does NOT set
- * `rejectUnauthorized: false`, so the TLS handshake fails against PPG's cert
- * chain (which isn't in node's default trust store). The app's *runtime* path
- * uses Bun's `SQL`, which connects to the same DB fine, so this only bites the
- * deploy-time migration through `pg`. The control driver builds its client as
- * `new Client({ connectionString: url })` — no way to pass a `ssl` config
- * object — so the fix is URL-level: rewrite the strict `sslmode` to
- * `no-verify` (TLS on, certificate not verified — the same posture the runtime
- * connection uses, and the connection is to a Prisma-managed endpoint at deploy
- * time). A DSN with no `sslmode` (a plain local Postgres) is left untouched, so
- * it still connects without TLS.
+ * Prisma Postgres DSNs carry `sslmode=require`. node-postgres's
+ * `pg-connection-string` (8.21) treats `require`/`prefer`/`verify-ca` as
+ * aliases for `verify-full` (strict certificate + hostname verification) and
+ * emits a `deprecatedSslModeWarning` warning that these will get weaker libpq
+ * semantics in pg v9. PPG's certificate is publicly trusted, so `verify-full`
+ * connects fine (proven live against a real PPG database — every ssl posture
+ * connects once the DB is warm); the connection failures were never TLS. This
+ * just rewrites those modes to the explicit `verify-full` they already mean,
+ * which silences the deprecation warning and keeps full verification when the
+ * pg-9 semantics change lands. A DSN with no `sslmode`, or `disable`/`no-verify`,
+ * is left untouched (a plain local Postgres still connects without TLS).
+ *
+ * The control driver builds its client as `new Client({ connectionString: url })`
+ * — no `ssl` config object is accepted — so this is necessarily URL-level.
  */
-export function relaxSslModeForPg(url: string): string {
+export function normalizeSslMode(url: string): string {
   let parsed: URL;
   try {
     parsed = new URL(url);
@@ -108,10 +109,49 @@ export function relaxSslModeForPg(url: string): string {
     return url;
   }
   const sslmode = parsed.searchParams.get('sslmode');
-  // No TLS requested (local Postgres), or already non-verifying — nothing to do.
-  if (sslmode === null || sslmode === 'disable' || sslmode === 'no-verify') return url;
-  parsed.searchParams.set('sslmode', 'no-verify');
-  return parsed.toString();
+  if (sslmode === 'require' || sslmode === 'prefer' || sslmode === 'verify-ca') {
+    parsed.searchParams.set('sslmode', 'verify-full');
+    return parsed.toString();
+  }
+  return url;
+}
+
+/**
+ * Retry a connection-bearing operation past Prisma Postgres's cold-start.
+ *
+ * A freshly-provisioned PPG database's edge proxy rejects the first
+ * connection(s) with `Failed to connect to upstream database` (a fast,
+ * `err.code`-less server reject — not TLS, network, or auth; confirmed live)
+ * while its upstream warms up, recovering on a later attempt — the same
+ * FT-5219 transient the runtime verify scripts retry for. The deploy migration
+ * connects immediately after provisioning, so it hits that window; retrying the
+ * connect+operation rides it out. A real migration failure (`PnMigrationError`
+ * — no authored path, runner error) is NOT a transient: it is surfaced
+ * immediately, never retried.
+ */
+export async function withConnectionRetry<T>(
+  operation: () => Promise<T>,
+  opts: {
+    readonly attempts?: number;
+    readonly delayMs?: number;
+    readonly sleep?: (ms: number) => Promise<void>;
+  } = {},
+): Promise<T> {
+  const attempts = opts.attempts ?? 12;
+  const delayMs = opts.delayMs ?? 5000;
+  const sleep =
+    opts.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (error instanceof PnMigrationError) throw error;
+      lastError = error;
+      if (attempt < attempts) await sleep(delayMs);
+    }
+  }
+  throw lastError;
 }
 
 export async function applyPnMigration(opts: {
@@ -120,7 +160,20 @@ export async function applyPnMigration(opts: {
   readonly migrationsDir: string;
 }): Promise<PnMigrationOutcome> {
   const target = targetStorageHash(opts.contractJson);
-  const client = createPostgresControlClient({ connection: relaxSslModeForPg(opts.url) });
+  const connection = normalizeSslMode(opts.url);
+  // Retry the connect+operation past PPG's cold-start (see withConnectionRetry).
+  return withConnectionRetry(() =>
+    runMigration(connection, opts.contractJson, opts.migrationsDir, target),
+  );
+}
+
+async function runMigration(
+  connection: string,
+  contractJson: unknown,
+  migrationsDir: string,
+  target: string,
+): Promise<PnMigrationOutcome> {
+  const client = createPostgresControlClient({ connection });
   await client.connect();
   try {
     const marker = await client.readMarker();
@@ -135,9 +188,9 @@ export async function applyPnMigration(opts: {
     // signs the marker; it never runs a destructive step.
     if (marker === null) {
       const result = await client.dbInit({
-        contract: opts.contractJson,
+        contract: contractJson,
         mode: 'apply',
-        migrationsDir: opts.migrationsDir,
+        migrationsDir,
       });
       if (!result.ok) {
         throw new PnMigrationError('INIT_FAILED', result.failure.summary, result.failure.why);
@@ -148,8 +201,8 @@ export async function applyPnMigration(opts: {
     // Existing marker at a different hash — walk the AUTHORED migration graph
     // toward the target. Fails on no path / runner error; never synthesizes.
     const result = await client.migrate({
-      contract: opts.contractJson,
-      migrationsDir: opts.migrationsDir,
+      contract: contractJson,
+      migrationsDir,
     });
     if (!result.ok) {
       const code: PnMigrationFailureCode =

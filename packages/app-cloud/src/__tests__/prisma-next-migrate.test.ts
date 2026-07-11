@@ -1,57 +1,116 @@
 /**
- * `relaxSslModeForPg` — the deploy-time connection-string normalization that
- * lets node-postgres connect to Prisma Postgres (slice 2, live-E2E fix). Pure
- * string logic, no database: a live PPG deploy is the ultimate proof, but this
- * locks the URL transform (a PPG `sslmode=require` becomes `no-verify`; a plain
- * local DSN is untouched) so a regression is caught without a live run.
+ * The deploy-time connection handling for the migration step (slice 2, live-E2E
+ * fix). Pure logic — no database; a live PPG deploy is the ultimate proof, but
+ * these lock the two pieces the live diagnosis pinned down:
+ *   - `normalizeSslMode` — pin the deprecating `sslmode=require` (etc.) to the
+ *     explicit `verify-full` it already means (warning-free, secure — PPG's cert
+ *     is publicly trusted); a plain local DSN is untouched.
+ *   - `withConnectionRetry` — ride out PPG's post-provision cold-start (the real
+ *     failure: an `err.code`-less "upstream" reject that recovers on retry),
+ *     while surfacing a real `PnMigrationError` immediately.
  */
 import { describe, expect, test } from 'bun:test';
-import { relaxSslModeForPg } from '../prisma-next-migrate.ts';
+import { normalizeSslMode, PnMigrationError, withConnectionRetry } from '../prisma-next-migrate.ts';
 
-describe('relaxSslModeForPg', () => {
-  test('rewrites a Prisma Postgres sslmode=require DSN to no-verify', () => {
-    const out = relaxSslModeForPg(
-      'postgres://user:pass@db.prisma-data.net:5432/postgres?sslmode=require',
-    );
-    expect(new URL(out).searchParams.get('sslmode')).toBe('no-verify');
-    // credentials, host, and database are preserved.
+const noSleep = async (): Promise<void> => {};
+
+describe('normalizeSslMode', () => {
+  test('pins a Prisma Postgres sslmode=require DSN to verify-full', () => {
+    const out = normalizeSslMode('postgres://user:pass@db.prisma.io:5432/postgres?sslmode=require');
     const u = new URL(out);
+    expect(u.searchParams.get('sslmode')).toBe('verify-full');
+    // credentials, host, and database are preserved.
     expect(u.username).toBe('user');
     expect(u.password).toBe('pass');
-    expect(u.host).toBe('db.prisma-data.net:5432');
+    expect(u.host).toBe('db.prisma.io:5432');
     expect(u.pathname).toBe('/postgres');
   });
 
-  test('preserves other query params while relaxing sslmode', () => {
-    const out = relaxSslModeForPg(
-      'postgresql://u:p@host:5432/db?sslmode=require&connection_limit=5',
-    );
+  test('preserves other query params while pinning sslmode', () => {
+    const out = normalizeSslMode('postgresql://u:p@h:5432/db?sslmode=require&connection_limit=5');
     const params = new URL(out).searchParams;
-    expect(params.get('sslmode')).toBe('no-verify');
+    expect(params.get('sslmode')).toBe('verify-full');
     expect(params.get('connection_limit')).toBe('5');
   });
 
-  test('relaxes every TLS-verifying sslmode (prefer / verify-ca / verify-full)', () => {
-    for (const mode of ['prefer', 'verify-ca', 'verify-full']) {
-      const out = relaxSslModeForPg(`postgres://u:p@h:5432/db?sslmode=${mode}`);
-      expect(new URL(out).searchParams.get('sslmode')).toBe('no-verify');
+  test('pins prefer and verify-ca (the other deprecating modes) to verify-full', () => {
+    for (const mode of ['prefer', 'verify-ca']) {
+      const out = normalizeSslMode(`postgres://u:p@h:5432/db?sslmode=${mode}`);
+      expect(new URL(out).searchParams.get('sslmode')).toBe('verify-full');
     }
   });
 
-  test('leaves a DSN with no sslmode untouched (plain local Postgres)', () => {
-    const local = 'postgres://postgres@127.0.0.1:22801/postgres';
-    expect(relaxSslModeForPg(local)).toBe(local);
-  });
-
-  test('leaves sslmode=disable and sslmode=no-verify untouched', () => {
-    const disabled = 'postgres://u:p@h:5432/db?sslmode=disable';
-    const already = 'postgres://u:p@h:5432/db?sslmode=no-verify';
-    expect(relaxSslModeForPg(disabled)).toBe(disabled);
-    expect(relaxSslModeForPg(already)).toBe(already);
+  test('leaves verify-full, no-verify, disable, and no-sslmode DSNs untouched', () => {
+    for (const url of [
+      'postgres://u:p@h:5432/db?sslmode=verify-full',
+      'postgres://u:p@h:5432/db?sslmode=no-verify',
+      'postgres://u:p@h:5432/db?sslmode=disable',
+      'postgres://postgres@127.0.0.1:22801/postgres',
+    ]) {
+      expect(normalizeSslMode(url)).toBe(url);
+    }
   });
 
   test('returns an unparseable connection string unchanged', () => {
-    const garbage = 'not a url';
-    expect(relaxSslModeForPg(garbage)).toBe(garbage);
+    expect(normalizeSslMode('not a url')).toBe('not a url');
+  });
+});
+
+describe('withConnectionRetry', () => {
+  test('returns the result when the operation succeeds first try', async () => {
+    let calls = 0;
+    const result = await withConnectionRetry(
+      async () => {
+        calls++;
+        return 'ok';
+      },
+      { sleep: noSleep },
+    );
+    expect(result).toBe('ok');
+    expect(calls).toBe(1);
+  });
+
+  test('retries a transient (cold-start) failure and returns once it succeeds', async () => {
+    let calls = 0;
+    const result = await withConnectionRetry(
+      async () => {
+        calls++;
+        if (calls < 3) throw new Error('Failed to connect to upstream database');
+        return 'connected';
+      },
+      { attempts: 5, sleep: noSleep },
+    );
+    expect(result).toBe('connected');
+    expect(calls).toBe(3);
+  });
+
+  test('gives up after `attempts` and throws the last error', async () => {
+    let calls = 0;
+    const boom = new Error('Failed to connect to upstream database');
+    await expect(
+      withConnectionRetry(
+        async () => {
+          calls++;
+          throw boom;
+        },
+        { attempts: 4, sleep: noSleep },
+      ),
+    ).rejects.toBe(boom);
+    expect(calls).toBe(4);
+  });
+
+  test('does NOT retry a real migration failure (PnMigrationError) — surfaces it at once', async () => {
+    let calls = 0;
+    const err = new PnMigrationError('MIGRATION_PATH_NOT_FOUND', 'no authored path');
+    await expect(
+      withConnectionRetry(
+        async () => {
+          calls++;
+          throw err;
+        },
+        { attempts: 5, sleep: noSleep },
+      ),
+    ).rejects.toBe(err);
+    expect(calls).toBe(1);
   });
 });
