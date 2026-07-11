@@ -1,9 +1,24 @@
 import { describe, expect, test } from 'bun:test';
-import type { Contract } from '@prisma/app';
+import type { ConfigDeclaration, Contract } from '@prisma/app';
 import { configOf, hydrateSync, isNode, number, param, string } from '@prisma/app';
 import { type } from 'arktype';
 import { compute, postgres, postgresContract } from '../index.ts';
 import { configKey, deserialize, encode } from '../serializer.ts';
+
+function scalarDecl(
+  owner: ConfigDeclaration['owner'],
+  name: string,
+  opts: { secret?: boolean; optional?: boolean; default?: unknown } = {},
+): ConfigDeclaration {
+  return {
+    owner,
+    name,
+    schema: { vendor: '@prisma/app' },
+    secret: opts.secret ?? false,
+    optional: opts.optional ?? false,
+    default: opts.default,
+  };
+}
 
 const build = {
   extension: '@prisma/app-node',
@@ -376,22 +391,8 @@ describe('the config pipeline over extension nodes', () => {
     });
 
     expect(configOf(app)).toEqual([
-      {
-        owner: { input: 'db' },
-        name: 'url',
-        schema: { vendor: '@prisma/app' },
-        secret: true,
-        optional: false,
-        default: undefined,
-      },
-      {
-        owner: 'service',
-        name: 'port',
-        schema: { vendor: '@prisma/app' },
-        secret: false,
-        optional: false,
-        default: 3000,
-      },
+      scalarDecl({ input: 'db' }, 'url', { secret: true }),
+      scalarDecl('service', 'port', { default: 3000 }),
     ]);
     expect(JSON.stringify(configOf(app))).not.toContain('DATABASE_URL');
   });
@@ -403,16 +404,7 @@ describe('the config pipeline over extension nodes', () => {
       build,
     });
 
-    expect(configOf(app)).toEqual([
-      {
-        owner: 'service',
-        name: 'port',
-        schema: { vendor: '@prisma/app' },
-        secret: false,
-        optional: false,
-        default: 3000,
-      },
-    ]);
+    expect(configOf(app)).toEqual([scalarDecl('service', 'port', { default: 3000 })]);
   });
 });
 
