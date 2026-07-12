@@ -1,7 +1,7 @@
-/** The `postgres` node kind's handler: one Prisma Postgres Database (plus its Connection), warmed before any consumer deploys. */
+/** The `postgres` node kind's descriptor: one Prisma Postgres Database (plus its Connection), warmed before any consumer deploys. */
 
 import * as Prisma from '@prisma/alchemy';
-import type { NodeHandler } from '@prisma/app/config';
+import type { NodeDescriptor } from '@prisma/app/config';
 import type { Lowering } from '@prisma/app/deploy';
 import * as Output from 'alchemy/Output';
 import * as Effect from 'effect/Effect';
@@ -14,7 +14,7 @@ import { DEFAULT_REGION, projectIdOf, type ResolvedCloudOptions, validateName } 
  * system provision id, so a resource shared by several consumers is created
  * exactly once.
  */
-export function postgresHandler(o: ResolvedCloudOptions): NodeHandler {
+export function postgresDescriptor(o: ResolvedCloudOptions): NodeDescriptor {
   const lowering: Lowering = ({ id, application }) =>
     Effect.gen(function* () {
       validateName(id, 'resource name (from provision id)');

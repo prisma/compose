@@ -1,13 +1,13 @@
-/** The `compute` node kind's handler: the four service hooks — provision, serialize, package, deploy. */
+/** The `compute` node kind's descriptor: the four service hooks — provision, serialize, package, deploy. */
 
 import * as Prisma from '@prisma/alchemy';
 import type { ServiceNode } from '@prisma/app';
-import type { NodeHandler } from '@prisma/app/config';
+import type { NodeDescriptor } from '@prisma/app/config';
 import * as Effect from 'effect/Effect';
 import { configKey, encode, paramEntries } from '../serializer.ts';
 import { DEFAULT_REGION, projectIdOf, type ResolvedCloudOptions, validateName } from './shared.ts';
 
-export function computeHandler(o: ResolvedCloudOptions): NodeHandler {
+export function computeDescriptor(o: ResolvedCloudOptions): NodeDescriptor {
   return {
     kind: 'service' as const,
     // The service as a PLACE inside the application's Project: the App,

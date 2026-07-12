@@ -118,17 +118,17 @@ function applicationOf(descriptor: Descriptor) {
   if (descriptor.application === undefined) throw new Error('expected an application hook');
   return descriptor.application;
 }
-function resourceHandlerOf(descriptor: Descriptor, type: string) {
-  const handler = descriptor.nodes[type];
-  if (handler === undefined || handler.kind !== 'resource')
-    throw new Error(`expected a resource handler for "${type}"`);
-  return handler;
+function resourceDescriptorOf(ext: Descriptor, type: string) {
+  const descriptor = ext.nodes[type];
+  if (descriptor === undefined || descriptor.kind !== 'resource')
+    throw new Error(`expected a resource descriptor for "${type}"`);
+  return descriptor;
 }
-function serviceHandlerOf(descriptor: Descriptor, type: string) {
-  const handler = descriptor.nodes[type];
-  if (handler === undefined || handler.kind !== 'service')
-    throw new Error(`expected a service handler for "${type}"`);
-  return handler;
+function serviceDescriptorOf(ext: Descriptor, type: string) {
+  const descriptor = ext.nodes[type];
+  if (descriptor === undefined || descriptor.kind !== 'service')
+    throw new Error(`expected a service descriptor for "${type}"`);
+  return descriptor;
 }
 const configFor = (descriptor: Descriptor) => ({
   extensions: [descriptor],
@@ -218,7 +218,7 @@ describe('prismaCloud().application.provision (once-per-lowering hook)', () => {
   });
 });
 
-describe("prismaCloud().nodes['postgres'] — the resource handler", () => {
+describe("prismaCloud().nodes['postgres'] — the resource descriptor", () => {
   test("creates a Database + Connection in the application's project; url unwraps the Redacted connection string", async () => {
     await withEnv({ PRISMA_BRANCH_ID: undefined }, () => {
       const target = prismaCloud({ workspaceId: 'ws_1' });
@@ -228,7 +228,7 @@ describe("prismaCloud().nodes['postgres'] — the resource handler", () => {
         application: { outputs: { projectId: 'shop-project#cloud-id' } },
       } as unknown as LowerContext;
 
-      const result = run<LoweredNode>(resourceHandlerOf(target, 'postgres')(ctx));
+      const result = run<LoweredNode>(resourceDescriptorOf(target, 'postgres')(ctx));
 
       expect(result.outputs).toEqual({ url: 'postgres://data-conn' });
       expect(recorded.db).toEqual([
@@ -249,7 +249,7 @@ describe("prismaCloud().nodes['postgres'] — the resource handler", () => {
       } as unknown as LowerContext;
       const before = recorded.db.length;
 
-      run<LoweredNode>(resourceHandlerOf(target, 'postgres')(ctx));
+      run<LoweredNode>(resourceDescriptorOf(target, 'postgres')(ctx));
 
       expect(recorded.db.slice(before)).toEqual([
         [
@@ -266,7 +266,7 @@ describe("prismaCloud().nodes['postgres'] — the resource handler", () => {
   });
 });
 
-describe("prismaCloud().nodes['compute'] — the service handler", () => {
+describe("prismaCloud().nodes['compute'] — the service descriptor", () => {
   test("provision creates a ComputeService inside the application's project", async () => {
     await withEnv({ PRISMA_BRANCH_ID: undefined }, () => {
       const target = prismaCloud({ workspaceId: 'ws_1' });
@@ -275,7 +275,7 @@ describe("prismaCloud().nodes['compute'] — the service handler", () => {
         application: { outputs: { projectId: 'shop-project#cloud-id' } },
       } as unknown as LowerContext;
 
-      const result = run<LoweredNode>(serviceHandlerOf(target, 'compute').provision(ctx));
+      const result = run<LoweredNode>(serviceDescriptorOf(target, 'compute').provision(ctx));
 
       expect(result.outputs).toEqual({
         serviceId: 'auth-svc#cloud-id',
@@ -296,7 +296,7 @@ describe("prismaCloud().nodes['compute'] — the service handler", () => {
       } as unknown as LowerContext;
       const before = recorded.svc.length;
 
-      run<LoweredNode>(serviceHandlerOf(target, 'compute').provision(ctx));
+      run<LoweredNode>(serviceDescriptorOf(target, 'compute').provision(ctx));
 
       expect(recorded.svc.slice(before)).toEqual([
         [
@@ -334,7 +334,7 @@ describe("prismaCloud().nodes['compute'] — the service handler", () => {
       const config = { service: { port: 3000 }, inputs: { db: { url: 'postgres://real-db' } } };
 
       const result = run<LoweredNode>(
-        serviceHandlerOf(target, 'compute').serialize(ctx, provisioned, config),
+        serviceDescriptorOf(target, 'compute').serialize(ctx, provisioned, config),
       );
 
       expect(recorded.envVar.slice(-2)).toEqual([
@@ -388,7 +388,7 @@ describe("prismaCloud().nodes['compute'] — the service handler", () => {
       const config = { service: { port: 3000 }, inputs: {} };
       const before = recorded.envVar.length;
 
-      run<LoweredNode>(serviceHandlerOf(target, 'compute').serialize(ctx, provisioned, config));
+      run<LoweredNode>(serviceDescriptorOf(target, 'compute').serialize(ctx, provisioned, config));
 
       expect(recorded.envVar.slice(before)).toEqual([
         [
@@ -425,7 +425,7 @@ describe("prismaCloud().nodes['compute'] — the service handler", () => {
       const config = { service: { port: 8080 }, inputs: {} };
 
       const result = run<LoweredNode>(
-        serviceHandlerOf(target, 'compute').serialize(ctx, provisioned, config),
+        serviceDescriptorOf(target, 'compute').serialize(ctx, provisioned, config),
       );
 
       expect(result.outputs['port']).toBe(8080);
@@ -437,7 +437,7 @@ describe("prismaCloud().nodes['compute'] — the service handler", () => {
     const ctx = { id: 'auth' } as unknown as LowerContext;
 
     const result = run(
-      serviceHandlerOf(target, 'compute').package(ctx, {
+      serviceDescriptorOf(target, 'compute').package(ctx, {
         assembled: { dir: 'systems/auth/dist/bundle', entry: 'server.js' },
         address: 'auth',
       }),
@@ -472,7 +472,7 @@ describe("prismaCloud().nodes['compute'] — the service handler", () => {
     };
 
     const result = run<LoweredNode>(
-      serviceHandlerOf(target, 'compute').deploy(ctx, provisioned, artifact, serialized),
+      serviceDescriptorOf(target, 'compute').deploy(ctx, provisioned, artifact, serialized),
     );
 
     expect(recorded.deploy).toEqual([

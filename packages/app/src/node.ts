@@ -14,17 +14,17 @@ const NODE: unique symbol = Symbol.for('prisma:node') as never;
 // biome-ignore lint/suspicious/noExplicitAny: the one alias for this bound — see doc comment.
 export type AnyContract = Contract<any, any>;
 
-/** How a service's app becomes a runnable artifact — the build handler's routing key (`extension`/`type`) plus paths resolved relative to the authoring module. */
+/** How a service's app becomes a runnable artifact — the build descriptor's routing key (`extension`/`type`) plus paths resolved relative to the authoring module. */
 export interface BuildAdapter {
-  /** The extension package that provides the build handler, e.g. "@prisma/app-node". */
+  /** The extension package that provides the build descriptor, e.g. "@prisma/app-node". */
   readonly extension: string;
-  /** The build handler's node ID within its extension, e.g. "node" · "nextjs". */
+  /** The build descriptor's node ID within its extension, e.g. "node" · "nextjs". */
   readonly type: string;
   /** The authoring module's `import.meta.url` — every other path on this descriptor resolves relative to `dirname(module)`. */
   readonly module: string;
   /**
    * The app's built runnable, resolved relative to `dirname(module)` and
-   * interpreted by the type's build handler (e.g. "node": a server file path;
+   * interpreted by the type's build descriptor (e.g. "node": a server file path;
    * "nextjs": a filename inside the standalone output dir).
    */
   readonly entry: string;
@@ -49,7 +49,7 @@ export interface ResourceNode<C extends AnyContract = AnyContract> {
 
 /**
  * A Service: inputs + its own declared params + how it is built. Inspectable,
- * inert until run, and carries NO runtime handler — an extension's factory
+ * inert until run, and carries NO runtime behavior — an extension's factory
  * wraps it into a runnable/loadable shape (see RunnableServiceNode).
  */
 export interface ServiceNode<
@@ -353,7 +353,7 @@ export function resource<C extends AnyContract>(def: {
 
 /**
  * Constructs a branded, frozen Service node — declarations only (inputs,
- * params, build adapter, and the ports it exposes). Pure; carries no runtime handler.
+ * params, build adapter, and the ports it exposes). Pure; carries no runtime behavior.
  */
 export function service<
   D extends Deps,

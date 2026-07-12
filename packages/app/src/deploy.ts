@@ -1,11 +1,11 @@
-/** Routes each graph node to its extension handler (by node.extension/type) and runs provision → serialize → package → deploy in dependency order. */
+/** Routes each graph node to its extension descriptor (by node.extension/type) and runs provision → serialize → package → deploy in dependency order. */
 
 import type { StackServices } from 'alchemy';
 import * as Alchemy from 'alchemy';
 import type { State } from 'alchemy/State/State';
 import * as Effect from 'effect/Effect';
 import * as Layer from 'effect/Layer';
-import type { ExtensionDescriptor, NodeHandler, PrismaAppConfig } from './app-config.ts';
+import type { ExtensionDescriptor, NodeDescriptor, PrismaAppConfig } from './app-config.ts';
 import type { Config } from './config.ts';
 import { type Graph, Load, type NodeId } from './graph.ts';
 import type { BuildAdapter, ResourceNode, ServiceNode, SystemNode } from './node.ts';
@@ -14,11 +14,11 @@ import type { BuildAdapter, ResourceNode, ServiceNode, SystemNode } from './node
 export type AlchemyStateLayer = Layer.Layer<State, never, StackServices>;
 
 /**
- * An extension's application-level handler: shared infrastructure that runs
+ * An extension's application-level descriptor: shared infrastructure that runs
  * once per lowering, before any node. Its outputs reach the extension's own
  * SPI calls via LowerContext.application.
  */
-export interface ApplicationHandler {
+export interface ApplicationDescriptor {
   provision(ctx: LowerContext): Effect.Effect<LoweredNode, unknown, unknown>;
 }
 
@@ -53,7 +53,7 @@ export interface ServiceLowering {
 
 /** Input to an extension's package() step: the built bundle and the node's graph address. */
 export interface PackageInput {
-  /** The build handler's normalized output: the bundle dir + the app's runnable. */
+  /** The build descriptor's normalized output: the bundle dir + the app's runnable. */
   readonly assembled: Bundle;
   /** The node's graph address — baked into the printed bootstrap. */
   readonly address: string;
@@ -98,13 +98,13 @@ export interface LowerOptions {
   readonly state?: AlchemyStateLayer;
 }
 
-/** A build handler's normalized output: the produced bundle dir plus the app's runnable entry within it. */
+/** A build descriptor's normalized output: the produced bundle dir plus the app's runnable entry within it. */
 export interface Bundle {
   readonly dir: string;
   readonly entry: string;
 }
 
-/** Shared input shape for every extension's build handler. */
+/** Shared input shape for every extension's build descriptor. */
 export interface AssembleInput {
   readonly build: BuildAdapter;
   /** Extra patterns to inline into the wrapper besides `@prisma/app*` (e.g. the app's own workspace packages). */
@@ -184,10 +184,10 @@ function unknownExtensionError(extension: string, id: NodeId): LowerError {
   );
 }
 
-function unknownNodeTypeError(descriptor: ExtensionDescriptor, type: string): LowerError {
+function unknownNodeTypeError(extension: ExtensionDescriptor, type: string): LowerError {
   return new LowerError(
-    `Extension "${descriptor.id}" has no handler for node type "${type}" ` +
-      `(known: ${Object.keys(descriptor.nodes).join(', ')}).`,
+    `Extension "${extension.id}" has no descriptor for node type "${type}" ` +
+      `(known: ${Object.keys(extension.nodes).join(', ')}).`,
   );
 }
 
@@ -198,25 +198,25 @@ function wrongKindError(
   got: string,
 ): LowerError {
   return new LowerError(
-    `Extension "${extension}"'s handler for node type "${type}" is a "${got}" handler — ` +
-      `this node needs a "${expected}" handler.`,
+    `Extension "${extension}"'s descriptor for node type "${type}" is a "${got}" descriptor — ` +
+      `this node needs a "${expected}" descriptor.`,
   );
 }
 
-/** Looks up one node's handler: descriptor by `node.extension`, then handler by `node.type`, then the kind check. */
-function handlerFor(
+/** Looks up one node's descriptor: extension by `node.extension`, then descriptor by `node.type`, then the kind check. */
+function descriptorFor(
   extensions: ReadonlyMap<string, ExtensionDescriptor>,
   node: ServiceNode | ResourceNode,
   id: NodeId,
-): Effect.Effect<NodeHandler, LowerError> {
-  const descriptor = extensions.get(node.extension);
-  if (descriptor === undefined) return Effect.fail(unknownExtensionError(node.extension, id));
-  const handler = descriptor.nodes[node.type];
-  if (handler === undefined) return Effect.fail(unknownNodeTypeError(descriptor, node.type));
-  if (handler.kind !== node.kind) {
-    return Effect.fail(wrongKindError(node.extension, node.type, node.kind, handler.kind));
+): Effect.Effect<NodeDescriptor, LowerError> {
+  const extension = extensions.get(node.extension);
+  if (extension === undefined) return Effect.fail(unknownExtensionError(node.extension, id));
+  const descriptor = extension.nodes[node.type];
+  if (descriptor === undefined) return Effect.fail(unknownNodeTypeError(extension, node.type));
+  if (descriptor.kind !== node.kind) {
+    return Effect.fail(wrongKindError(node.extension, node.type, node.kind, descriptor.kind));
   }
-  return Effect.succeed(handler);
+  return Effect.succeed(descriptor);
 }
 
 /**
@@ -293,32 +293,32 @@ export function lowering(
         lowered,
       };
 
-      const handler = yield* handlerFor(extensions, node, id);
+      const descriptor = yield* descriptorFor(extensions, node, id);
 
-      if (handler.kind === 'resource') {
-        lowered.set(id, yield* handler(ctx));
+      if (descriptor.kind === 'resource') {
+        lowered.set(id, yield* descriptor(ctx));
         continue;
       }
-      if (handler.kind !== 'service') {
-        // handlerFor already matched kinds; a 'build' handler can never match
+      if (descriptor.kind !== 'service') {
+        // descriptorFor already matched kinds; a 'build' descriptor can never match
         // a graph node's kind — unreachable, kept for TS's exhaustive narrowing.
         return yield* Effect.fail(
-          wrongKindError(node.extension, node.type, node.kind, handler.kind),
+          wrongKindError(node.extension, node.type, node.kind, descriptor.kind),
         );
       }
 
-      const provisioned = yield* handler.provision(ctx);
+      const provisioned = yield* descriptor.provision(ctx);
       const typedConfig = buildConfig(node as ServiceNode, id, graph, lowered);
-      const serialized = yield* handler.serialize(ctx, provisioned, typedConfig);
+      const serialized = yield* descriptor.serialize(ctx, provisioned, typedConfig);
       const bundle = opts.bundles[id];
       if (bundle === undefined) {
         return yield* Effect.fail(missingBundleError(id));
       }
-      const artifact = yield* handler.package(ctx, {
+      const artifact = yield* descriptor.package(ctx, {
         assembled: { dir: bundle.dir, entry: bundle.entry },
         address: id,
       });
-      lowered.set(id, yield* handler.deploy(ctx, provisioned, artifact, serialized));
+      lowered.set(id, yield* descriptor.deploy(ctx, provisioned, artifact, serialized));
     }
 
     return { outputs: {} };

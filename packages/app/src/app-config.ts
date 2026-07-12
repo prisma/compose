@@ -1,8 +1,8 @@
-/** The `prisma-app.config.ts` surface (ADR-0017): statically imports each extension's handler registry plus the state store; core defines only the types. */
+/** The `prisma-app.config.ts` surface (ADR-0017): statically imports each extension's node-descriptor registry plus the state store; core defines only the types. */
 import type * as Layer from 'effect/Layer';
 import type {
   AlchemyStateLayer,
-  ApplicationHandler,
+  ApplicationDescriptor,
   AssembleInput,
   Bundle,
   Lowering,
@@ -18,9 +18,9 @@ export interface ExtensionDescriptor {
   /** The extension's package name, e.g. "@prisma/app-cloud" — what a node's `extension` field is matched against. */
   readonly id: string;
   /** ONE registry per extension, keyed by node ID. */
-  readonly nodes: Record<string, NodeHandler>;
+  readonly nodes: Record<string, NodeDescriptor>;
   /** Once-per-lowering hook — the application's shared infrastructure (e.g. prisma-cloud's Project). */
-  readonly application?: ApplicationHandler;
+  readonly application?: ApplicationDescriptor;
   /** The extension's Alchemy providers — merged across all configured extensions (config order). */
   readonly providers?: () => Layer.Layer<never>;
 }
@@ -28,9 +28,9 @@ export interface ExtensionDescriptor {
 /**
  * What one registry entry can do. The `kind` discriminant is checked at every
  * lookup site against what the site needs — a resource node looked up against
- * a `service` handler is an error naming (extension, type, expected kind).
+ * a `service` descriptor is an error naming (extension, type, expected kind).
  */
-export type NodeHandler =
+export type NodeDescriptor =
   | ({ readonly kind: 'resource' } & Lowering)
   | ({ readonly kind: 'service' } & ServiceLowering)
   | { readonly kind: 'build'; assemble(input: AssembleInput): Promise<Bundle> };

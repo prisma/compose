@@ -1,10 +1,10 @@
-/** Helpers shared by the per-node-kind handlers under `src/handlers/` and the extension factory in `control.ts`. */
+/** Helpers shared by the per-node-kind descriptors under `src/descriptors/` and the extension factory in `control.ts`. */
 
 import type * as Prisma from '@prisma/alchemy';
 import { blindCast } from '@prisma/app/casts';
 
 /**
- * The factory's resolved options each node handler closes over. `projectId`
+ * The factory's resolved options each node descriptor closes over. `projectId`
  * and `branchId` come from the CLI (stage-as-branch): a named stage sets
  * `branchId`, routing every branch-scoped resource there with the `preview` class.
  */

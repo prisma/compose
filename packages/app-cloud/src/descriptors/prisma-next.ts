@@ -1,7 +1,7 @@
-/** The `prisma-next` node kind's handler: a Postgres DB (like `postgres`) plus a migration step that brings it to the contract's storageHash (ADR-0022). */
+/** The `prisma-next` node kind's descriptor: a Postgres DB (like `postgres`) plus a migration step that brings it to the contract's storageHash (ADR-0022). */
 
 import * as Prisma from '@prisma/alchemy';
-import type { NodeHandler } from '@prisma/app/config';
+import type { NodeDescriptor } from '@prisma/app/config';
 import type { Lowering } from '@prisma/app/deploy';
 import * as Output from 'alchemy/Output';
 import * as Effect from 'effect/Effect';
@@ -18,7 +18,7 @@ import { DEFAULT_REGION, projectIdOf, type ResolvedCloudOptions, validateName } 
  * target REF identity (hash + sorted invariants): unchanged redeploy is a
  * no-op, a contract or ref-invariant change re-migrates.
  */
-export function prismaNextHandler(o: ResolvedCloudOptions): NodeHandler {
+export function prismaNextDescriptor(o: ResolvedCloudOptions): NodeDescriptor {
   const lowering: Lowering = ({ id, node, application }) =>
     Effect.gen(function* () {
       validateName(id, 'resource name (from provision id)');

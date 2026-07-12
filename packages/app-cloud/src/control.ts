@@ -7,10 +7,10 @@ import * as Prisma from '@prisma/alchemy';
 import type { ExtensionDescriptor } from '@prisma/app/config';
 import * as Effect from 'effect/Effect';
 import * as Layer from 'effect/Layer';
-import { computeHandler } from './handlers/compute.ts';
-import { postgresHandler } from './handlers/postgres.ts';
-import { prismaNextHandler } from './handlers/prisma-next.ts';
-import type { ResolvedCloudOptions } from './handlers/shared.ts';
+import { computeDescriptor } from './descriptors/compute.ts';
+import { postgresDescriptor } from './descriptors/postgres.ts';
+import { prismaNextDescriptor } from './descriptors/prisma-next.ts';
+import type { ResolvedCloudOptions } from './descriptors/shared.ts';
 import { PgWarmProvider } from './pg-warm-resource.ts';
 import { PnMigrationProvider } from './pn-migration-resource.ts';
 
@@ -106,9 +106,9 @@ export const prismaCloud = (opts: PrismaCloudOptions = {}): ExtensionDescriptor 
     },
 
     nodes: {
-      postgres: postgresHandler(o),
-      'prisma-next': prismaNextHandler(o),
-      compute: computeHandler(o),
+      postgres: postgresDescriptor(o),
+      'prisma-next': prismaNextDescriptor(o),
+      compute: computeDescriptor(o),
     },
   };
 };
