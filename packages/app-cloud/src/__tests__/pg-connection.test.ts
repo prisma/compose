@@ -8,11 +8,14 @@
  *     failure is retryable; a real query (SQL-state) error is not.
  *   - `withConnectionRetry` — retries per `shouldRetry` and gives up after
  *     `attempts`, surfacing the last error.
+ *   - `retryTransientConnect` — the runtime client's seam: retry a transient
+ *     cold-start on connection acquisition, surface a real query error at once.
  */
 import { describe, expect, test } from 'bun:test';
 import {
   isTransientConnectionError,
   normalizeSslMode,
+  retryTransientConnect,
   withConnectionRetry,
 } from '../pg-connection.ts';
 
@@ -165,6 +168,36 @@ describe('withConnectionRetry', () => {
         { attempts: 5, sleep: noSleep, shouldRetry: isTransientConnectionError },
       ),
     ).rejects.toBe(queryError);
+    expect(calls).toBe(1);
+  });
+});
+
+describe('retryTransientConnect (the runtime client seam)', () => {
+  test('retries a transient cold-start on acquire, then returns the connection', async () => {
+    let calls = 0;
+    const connection = { released: false };
+    const acquire = async () => {
+      calls++;
+      if (calls < 3) throw new Error('Failed to connect to upstream database');
+      return connection;
+    };
+    const result = await retryTransientConnect(acquire, { attempts: 5, sleep: noSleep });
+    expect(result).toBe(connection);
+    expect(calls).toBe(3);
+  });
+
+  test('surfaces a real query error immediately — no retry', async () => {
+    let calls = 0;
+    const queryError = Object.assign(new Error('syntax error at or near "slect"'), {
+      code: '42601',
+    });
+    const acquire = async () => {
+      calls++;
+      throw queryError;
+    };
+    await expect(retryTransientConnect(acquire, { attempts: 5, sleep: noSleep })).rejects.toBe(
+      queryError,
+    );
     expect(calls).toBe(1);
   });
 });

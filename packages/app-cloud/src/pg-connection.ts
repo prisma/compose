@@ -113,3 +113,21 @@ export async function withConnectionRetry<T>(
   }
   throw lastError;
 }
+
+/**
+ * Retry acquiring a database connection past a transient cold-start (bounded
+ * ~1 min), surfacing a real query error at once. The runtime client's seam:
+ * {@link withConnectionRetry} with {@link isTransientConnectionError} fixed as
+ * the predicate, so only a connection-establishment failure retries — a
+ * SQL-state error thrown by the query itself is re-thrown immediately.
+ */
+export function retryTransientConnect<T>(
+  acquire: () => Promise<T>,
+  opts: {
+    readonly attempts?: number;
+    readonly delayMs?: number;
+    readonly sleep?: (ms: number) => Promise<void>;
+  } = {},
+): Promise<T> {
+  return withConnectionRetry(acquire, { ...opts, shouldRetry: isTransientConnectionError });
+}

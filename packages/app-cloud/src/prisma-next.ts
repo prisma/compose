@@ -27,8 +27,11 @@
 
 import type { Contract, DependencyEnd, ResourceNode } from '@prisma/app';
 import { dependency, resource, string } from '@prisma/app';
+import { blindCast } from '@prisma/app/casts';
 import pnPostgresRuntime, { type PostgresClient } from '@prisma-next/postgres/runtime';
 import type { SqlStorage } from '@prisma-next/sql-contract/types';
+import pg from 'pg';
+import { normalizeSslMode, retryTransientConnect } from './pg-connection.ts';
 
 /**
  * Any Prisma Next contract this primitive can carry — the bound both
@@ -185,11 +188,48 @@ function isPnPostgresContract(value: unknown): value is PnPostgresContract {
   );
 }
 
+/**
+ * Builds the typed Prisma Next client over a connection pool that rides out a
+ * transient cold-start (slice 3, FT-5226) — a belt to the deploy-time `PgWarm`,
+ * since a Prisma Postgres database can scale to zero again after deploy and the
+ * next runtime connect then eats the "Failed to connect to upstream database"
+ * reject.
+ *
+ * We pass our OWN `pg.Pool` (via the runtime's `pg` binding) rather than a bare
+ * `url`, deliberately: for a pool binding the runtime's own connect step is a
+ * no-op and the real connection happens lazily at `pool.connect()` on the first
+ * query, so wrapping THAT with a bounded retry is enough. The bare-`url` path
+ * can't be made resilient — the runtime fires a background connect whose first
+ * failure sets a permanent error the client then throws forever. `hydrate` must
+ * stay synchronous (`load()` uses `hydrateSync`), and a lazily-connecting pool
+ * fits: nothing connects until the first query.
+ */
 function buildClient<C extends PnPostgresContract>(contract: C, url: string): Client<C> {
   return pnPostgresRuntime<PnContractOf<C>>({
     contractJson: contract.__cmp.contractJson,
-    url,
+    pg: resilientPool(url),
   });
+}
+
+/**
+ * A `pg.Pool` whose connection acquisition retries a transient cold-start
+ * (bounded ~1 min). Only `pool.connect()` is wrapped — a real query error is
+ * thrown by `client.query()` after acquisition, so it still surfaces at once.
+ * The pool options match the runtime's own bare-`url` defaults; `normalizeSslMode`
+ * keeps a Prisma Postgres DSN warning-free.
+ */
+function resilientPool(url: string): pg.Pool {
+  const pool = new pg.Pool({
+    connectionString: normalizeSslMode(url),
+    connectionTimeoutMillis: 20_000,
+    idleTimeoutMillis: 30_000,
+  });
+  const acquire = pool.connect.bind(pool);
+  pool.connect = blindCast<
+    typeof pool.connect,
+    'the pn postgres pool driver only calls pool.connect() (the no-arg promise form)'
+  >(() => retryTransientConnect(() => acquire()));
+  return pool;
 }
 
 /** Reads `__cmp.contractJson.storage.storageHash` off a `prisma-next` Contract, defensively — `__cmp` is opaque to core, so nothing guarantees its shape without a runtime check. */
