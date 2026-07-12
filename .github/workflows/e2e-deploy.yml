@@ -98,7 +98,7 @@ jobs:
         # the full pattern set so the first run also clears the backlog.
         if: always()
         working-directory: examples/storefront-auth
-        run: bun ../scripts/ci-cleanup.ts storefront-auth pn-widgets
+        run: bun ../scripts/ci-cleanup.ts storefront-auth pn-widgets hello
 
   deploy-pn-widgets:
     name: Deploy, verify, destroy (pn-widgets)
@@ -175,4 +175,4 @@ jobs:
         # the full pattern set so the first run also clears the backlog.
         if: always()
         working-directory: examples/pn-widgets
-        run: bun ../scripts/ci-cleanup.ts storefront-auth pn-widgets
+        run: bun ../scripts/ci-cleanup.ts storefront-auth pn-widgets hello

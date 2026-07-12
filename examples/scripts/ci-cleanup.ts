@@ -18,13 +18,19 @@
  * PRISMA_SERVICE_TOKEN. Logs project names and timestamps only — never
  * tokens or connection strings.
  *
+ * A run whose destroy never completed leaves a LIVE compute deployment, and
+ * the project DELETE then refuses with `409 … active deployment` — for a
+ * matched project that hits this, the sweep tears the project's compute
+ * services down first (the platform removes their versions/deployments with
+ * them) and retries the project delete; see `deleteProjectDeep`.
+ *
  * Failure posture: a per-project delete failure is logged and skipped
  * (cleanup must not redden a green run over one stuck project), but the run
  * exits non-zero when matches existed and NOT ONE could be deleted — and an
  * API/auth failure at listing time always surfaces.
  */
 
-import { isEphemeralCiProjectName } from './ci-cleanup-utils.ts';
+import { deleteProjectDeep, type HttpCall, isEphemeralCiProjectName } from './ci-cleanup-utils.ts';
 
 const API = 'https://api.prisma.io/v1';
 
@@ -83,17 +89,14 @@ async function listAllProjects(): Promise<ProjectRow[]> {
   return rows;
 }
 
-async function deleteProject(project: ProjectRow): Promise<boolean> {
-  const response = await fetch(`${API}/projects/${project.id}`, {
-    method: 'DELETE',
+/** The HTTP seam `deleteProjectDeep` sequences over — a thin fetch wrapper. */
+const http: HttpCall = async (method, path) => {
+  const response = await fetch(`${API}${path}`, {
+    method,
     headers: { Authorization: `Bearer ${token}` },
   });
-  if (response.ok || response.status === 404) return true;
-  console.error(
-    `  DELETE failed for "${project.name}" (${project.id}): ${response.status} ${await response.text()}`,
-  );
-  return false;
-}
+  return { status: response.status, ok: response.ok, body: await response.text() };
+};
 
 const projects = await listAllProjects();
 console.log(`Workspace has ${projects.length} project(s):`);
@@ -114,7 +117,7 @@ if (matches.length === 0) {
 let deleted = 0;
 for (const project of matches) {
   console.log(`Sweeping "${project.name}" (created ${project.createdAt})…`);
-  if (await deleteProject(project)) deleted++;
+  if (await deleteProjectDeep(http, project, { log: (line) => console.error(line) })) deleted++;
 }
 console.log(`Swept ${deleted}/${matches.length} ephemeral CI project(s).`);
 
