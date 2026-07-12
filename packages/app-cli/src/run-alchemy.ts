@@ -35,11 +35,15 @@ export interface RunAlchemyInput {
   readonly stackFileRelativePath: string;
   readonly cwd: string;
   readonly stage: string | undefined;
+  /** The resolved Project — set on the child as `PRISMA_PROJECT_ID` (`fromEnv()` reads it). */
+  readonly projectId: string;
+  /** The resolved Branch, named stages only — set on the child as `PRISMA_BRANCH_ID`. */
+  readonly branchId?: string;
   /** Defaults to `process.env`; overridable so tests can pin a fake bin's inputs. */
   readonly env?: NodeJS.ProcessEnv;
 }
 
-/** Runs `alchemy deploy|destroy <stack file> --yes [--stage <stage>]`, inheriting stdio + env. */
+/** Runs `alchemy deploy|destroy <stack file> --yes [--stage <stage>]`, inheriting stdio + env, plus the resolved Project/Branch ids. */
 export function runAlchemy(input: RunAlchemyInput): number {
   const bin = resolveAlchemyBin(input.cwd);
   const args = [input.command, input.stackFileRelativePath, '--yes'];
@@ -48,7 +52,11 @@ export function runAlchemy(input: RunAlchemyInput): number {
   const result = spawnSync(bin, args, {
     cwd: input.cwd,
     stdio: 'inherit',
-    env: input.env ?? process.env,
+    env: {
+      ...(input.env ?? process.env),
+      PRISMA_PROJECT_ID: input.projectId,
+      ...(input.branchId !== undefined ? { PRISMA_BRANCH_ID: input.branchId } : {}),
+    },
   });
 
   if (result.error !== undefined) throw result.error;

@@ -206,3 +206,11 @@ system('inferred-bad', {}, ({ provision }) => {
   provision(chargeConsumer, { deps: { pay: provider.verify } });
   return {};
 });
+
+// Closed-root overload: no boundary argument, no return. `ctx` still carries
+// `provision`, and `inputs` is empty — the body needs nothing else. (The
+// id-defaulted ok/reject cases are already covered by inferred-ok/inferred-bad
+// above, which also exercise system-node inference.)
+system('closed-root', ({ provision }) => {
+  provision(verifyProvider(), { id: 'provider' });
+});
