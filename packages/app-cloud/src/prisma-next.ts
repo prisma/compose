@@ -85,10 +85,13 @@ export class PnPostgresResourceNode<
   C extends PnPostgresContract = PnPostgresContract,
 > extends ResourceNodeBase<C> {
   readonly config: string;
+  /** Optional target ref NAME (`migrations/app/refs/<name>.json`) — see `pnPostgres`. */
+  declare readonly targetRef?: string;
 
-  constructor(def: { name: string; contract: C; config: string }) {
+  constructor(def: { name: string; contract: C; config: string; targetRef?: string }) {
     super({ name: def.name, extension: '@prisma/app-cloud', provides: def.contract });
     this.config = def.config;
+    if (def.targetRef !== undefined) this.targetRef = def.targetRef;
     freezeNode(this);
   }
 }
@@ -142,18 +145,27 @@ export function pnContract(contract: unknown): unknown {
 }
 
 /**
- * `{ name, contract, config }` — the resource identity a system provisions:
- * the ONE place the database exists. Two doors (ADR-0022): `contract` is
- * consumed as the provided port (`provides`), typing and wiring the resource
- * and carrying the target `storageHash`; `config` is the `prisma-next.config.ts`
- * PATH — deploy-only metadata the migration lowering loads to locate the
- * migrations directory. The app build never imports the config; only the
- * deploy lowering reads it, via `isPnPostgresResourceNode`.
+ * `{ name, contract, config, targetRef? }` — the resource identity a system
+ * provisions: the ONE place the database exists. Two doors (ADR-0022):
+ * `contract` is consumed as the provided port (`provides`), typing and wiring
+ * the resource and carrying the target contract; `config` is the
+ * `prisma-next.config.ts` PATH — deploy-only metadata the migration lowering
+ * loads to locate the migrations directory. The app build never imports the
+ * config; only the deploy lowering reads it, via `isPnPostgresResourceNode`.
+ *
+ * `targetRef` (optional) names a Prisma Next ref — a
+ * `migrations/app/refs/<name>.json` file carrying `{ hash, invariants }` —
+ * as the migration target instead of the default head (the emitted
+ * contract's hash). A ref's `invariants` are named postconditions
+ * established by `data`-class migration steps (e.g. a backfill); the deploy
+ * migrates until the live marker is at the ref's hash AND carries every
+ * ref invariant. Deploy-only, like `config`.
  */
 export function pnPostgres<C extends PnPostgresContract>(opts: {
   name: string;
   contract: C;
   config: string;
+  targetRef?: string;
 }): PnPostgresResourceNode<C>;
 /**
  * `pnPostgres(contract)` — a service's dependency on a Prisma Next-typed
@@ -162,7 +174,9 @@ export function pnPostgres<C extends PnPostgresContract>(opts: {
  */
 export function pnPostgres<C extends PnPostgresContract>(contract: C): DependencyEnd<Client<C>, C>;
 export function pnPostgres(
-  arg: { name: string; contract: PnPostgresContract; config: string } | PnPostgresContract,
+  arg:
+    | { name: string; contract: PnPostgresContract; config: string; targetRef?: string }
+    | PnPostgresContract,
 ): unknown {
   if (!isPnPostgresContract(arg)) {
     return new PnPostgresResourceNode(arg);

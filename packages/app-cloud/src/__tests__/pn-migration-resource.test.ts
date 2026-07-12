@@ -109,7 +109,13 @@ describe.skipIf(pg === undefined)('PnMigration reconcile routes through applyPnM
     pnMigrationProviderService.reconcile({
       id: 'db',
       instanceId: 'db',
-      news: { url, contractJson, migrationsDir, targetHash: targetStorageHash(contractJson) },
+      news: {
+        url,
+        contractJson,
+        migrationsDir,
+        targetHash: targetStorageHash(contractJson),
+        invariants: [],
+      },
       olds: undefined,
       output: undefined,
       // The plan session / bindings are unused by this provider's reconcile.

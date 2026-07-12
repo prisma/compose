@@ -15,15 +15,17 @@ import { PgWarm } from '../pg-warm-resource.ts';
 import { resolveMigrationsDir } from '../pn-config.ts';
 import { PnMigration } from '../pn-migration-resource.ts';
 import { isPnPostgresResourceNode } from '../prisma-next.ts';
-import { targetStorageHash } from '../prisma-next-migrate.ts';
+import { resolveTargetRef } from '../prisma-next-migrate.ts';
 import { DEFAULT_REGION, projectIdOf, type ResolvedCloudOptions, validateName } from './shared.ts';
 
 /**
  * The migration is a tracked `PnMigration` Alchemy resource keyed on the
- * target hash, so it participates in deploy state: unchanged redeploy is a
- * no-op, a contract change re-migrates, a failed apply leaves the DB
- * unchanged. `node` carries the config path (`isPnPostgresResourceNode`) and
- * the contract (`provides`); the config is read at deploy-time only.
+ * target REF identity (hash + sorted invariants), so it participates in
+ * deploy state: unchanged redeploy is a no-op, a contract change — or a
+ * data-only change that adds a ref invariant — re-migrates, a failed apply
+ * leaves the DB unchanged. `node` carries the config path
+ * (`isPnPostgresResourceNode`), the contract (`provides`), and the optional
+ * `targetRef` name; all deploy-time only.
  */
 export function prismaNextControl(o: ResolvedCloudOptions): NodeControl {
   const lowering: Lowering = ({ id, node, application }) =>
@@ -43,8 +45,13 @@ export function prismaNextControl(o: ResolvedCloudOptions): NodeControl {
         throw new Error(`prisma-next lowering received a non-prisma-next node (${id}).`);
       }
       const contractJson = node.provides.__cmp.contractJson;
-      const targetHash = targetStorageHash(contractJson);
       const migrationsDir = yield* Effect.promise(() => resolveMigrationsDir(node.config));
+      // The target is a REF `{ hash, invariants }` — the node's named
+      // `targetRef`, or the head (the emitted contract) by default. Resolved
+      // here, ONCE, so the same identity keys the resource's diff below.
+      const ref = yield* Effect.promise(() =>
+        resolveTargetRef(migrationsDir, contractJson, node.targetRef),
+      );
 
       // Warm the DB first (FT-5226), then migrate against the now-warm url —
       // `warm.url` threads the ordering (PgWarm → PnMigration). The migration
@@ -53,11 +60,15 @@ export function prismaNextControl(o: ResolvedCloudOptions): NodeControl {
 
       // Register the migration as a tracked resource — its provider's reconcile
       // receives the RESOLVED (warm) url at apply-time and runs the migration.
+      // Keyed on the ref identity (hash + sorted invariants): a data-only
+      // change (same hash, new invariant) must still trigger reconcile.
       yield* PnMigration(`${id}-migrate`, {
         url: warm.url,
         contractJson,
         migrationsDir,
-        targetHash,
+        targetHash: ref.hash,
+        invariants: [...ref.invariants].sort(),
+        ...(node.targetRef !== undefined ? { refName: node.targetRef } : {}),
       });
 
       return { outputs: { url: warm.url } };

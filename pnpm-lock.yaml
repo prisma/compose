@@ -316,6 +316,9 @@ importers:
       '@prisma-next/contract':
         specifier: 0.14.0
         version: 0.14.0(typescript@6.0.3)
+      '@prisma-next/migration-tools':
+        specifier: 0.14.0
+        version: 0.14.0(typescript@6.0.3)
       '@prisma-next/postgres':
         specifier: 0.14.0
         version: 0.14.0(typanion@3.14.0)(typescript@6.0.3)

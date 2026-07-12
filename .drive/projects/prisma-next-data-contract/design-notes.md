@@ -87,24 +87,36 @@ migrations directory, but the frozen core `ResourceNode`
 - **What `config` carries:** the `prisma-next.config.ts` path (string). At
   deploy the lowering loads that config (deploy-time only — PN machinery never
   enters the app bundle) to resolve the migrations dir PN's control client
-  needs (`dbInit`/`migrate`'s `migrationsDir`). The provided contract (already
-  on `provides`) gives the target `storageHash`.
+  needs (`dbInit`/`migrate`'s `migrationsDir`). The resource's optional
+  `targetRef` (a ref NAME, also deploy-only) pins the migration target; the
+  default is the head — the emitted contract's hash.
 
 ## Deploy lowering
 
 Per PN-postgres resource, after DB provisioning, a **tracked Alchemy resource**
-(keyed on the target `storageHash`) runs `applyPnMigration`:
+runs `applyPnMigration` against a target **ref** `{ hash, invariants }` — the
+named `targetRef` (`migrations/app/refs/<name>.json`, fail loudly if missing)
+or the head by default (PN synthesizes the app head from the emitted contract:
+its hash, zero invariants). The resource is keyed on the **ref identity**
+(hash + sorted invariants) — a pure data-invariant change is an A→A self-edge
+at the same hash, so the invariants must participate or the deploy would
+wrongly no-op it.
 
-1. `readMarker()` on the live DB → compare marker `storageHash` to the
-   contract's.
-2. Equal → no-op (idempotent redeploy; also an Alchemy-level no-op via the
-   `storageHash` key).
-3. No marker (fresh DB) → `dbInit({ mode: 'apply' })`. Existing marker at a
-   different hash → `migrate`: walk the authored migration graph from the
-   marker's hash to the target. Resume-safe; marker writes are atomic with
-   apply.
-4. Fail the deploy on: no authored path (`MIGRATION_PATH_NOT_FOUND`), or runner
-   failure (`RUNNER_FAILED` / `INIT_FAILED`). A failed apply leaves marker and
+1. `readMarker()` on the live DB → decide against the ref
+   (`decideMigrationAction`, mirroring PN's verifier).
+2. Marker at the ref's hash AND every ref invariant on the marker → no-op
+   (idempotent redeploy; also an Alchemy-level no-op via the ref key).
+3. No marker (fresh DB) and **no required invariants** → `dbInit({ mode:
+   'apply' })` — dbInit is additive-only synthesis and never runs app-space
+   data steps, so it's ruled out whenever invariants are required. Anything
+   else (different hash, missing invariant, fresh DB with required
+   invariants) → `migrate`: walk the authored migration graph to the ref
+   (with a named ref, `refHash`/`refInvariants`/`refName` thread into PN's
+   invariant-aware path planning, exactly like the CLI's `migrate --to`).
+   Resume-safe; marker writes are atomic with apply.
+4. Fail the deploy on: no authored path (`MIGRATION_PATH_NOT_FOUND`), a
+   missing named ref (`TARGET_REF_NOT_FOUND`), or runner failure
+   (`RUNNER_FAILED` / `INIT_FAILED`). A failed apply leaves marker and
    schema unchanged (confirmed live).
 
 **Safety model — authored-only, never synthesize.** The guarantee is that the

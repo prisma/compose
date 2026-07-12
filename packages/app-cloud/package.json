@@ -19,6 +19,7 @@
   "dependencies": {
     "@prisma-next/cli": "0.14.0",
     "@prisma-next/contract": "0.14.0",
+    "@prisma-next/migration-tools": "0.14.0",
     "@prisma-next/postgres": "0.14.0",
     "@prisma-next/sql-contract": "0.14.0",
     "@prisma/alchemy": "workspace:0.2.0",
