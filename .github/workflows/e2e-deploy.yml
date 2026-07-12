@@ -91,6 +91,10 @@ jobs:
   deploy-pn-widgets:
     name: Deploy, verify, destroy (pn-widgets)
     runs-on: ubuntu-latest
+    # Not a logical dependency — run after the storefront job so the two
+    # deploys never hold projects/databases concurrently (workspace DB-quota
+    # headroom; parallel peak usage exceeded the plan's database cap).
+    needs: deploy
     timeout-minutes: 20
     # Secrets aren't available to forked-PR workflow runs; skip rather than
     # fail loudly on a run that could never have them.
