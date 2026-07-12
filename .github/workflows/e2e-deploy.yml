@@ -134,7 +134,7 @@ jobs:
 
       - name: Verify the round trip (pnPostgres typed client)
         working-directory: examples/pn-widgets
-        run: bash scripts/e2e-verify.sh
+        run: bun scripts/e2e-verify.ts
 
       - name: Destroy
         # Runs whenever the Deploy step actually started (success or failure) —
