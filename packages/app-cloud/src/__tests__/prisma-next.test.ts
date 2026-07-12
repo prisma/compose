@@ -162,7 +162,7 @@ describe('the config path rides through provisioning (brand intact)', () => {
 
     const graph = Load(
       system('pn-system', {}, ({ provision }) => {
-        provision('db', node);
+        provision(node, { id: 'db' });
         return {};
       }),
       { id: 'pn' },

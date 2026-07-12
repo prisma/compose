@@ -157,57 +157,61 @@ export type ProvisionedRef<E extends Expose = Record<never, never>> = { readonly
 // biome-ignore lint/suspicious/noExplicitAny: generic DependencyEnd bound — Req is opaque here.
 type ReqOf<DE> = DE extends DependencyEnd<any, infer Req> ? Req : never;
 
-/** `provision`'s wiring argument: one producer ref per dependency slot, checked against its required contract. */
-type Wiring<D extends Deps> = { [K in keyof D]: NoInfer<ReqOf<D[K]>> };
+/**
+ * The producers that satisfy a node's declared dependency slots — one ref per
+ * slot, checked against its required contract. A slot also accepts
+ * `InputRef<D[K]>` so a system body can forward its own `ctx.inputs` straight
+ * into a nested `provision()` call — the same value shape a producer's own
+ * exposed port carries.
+ */
+type DepBindings<D extends Deps> = {
+  [K in keyof D]: NoInfer<ReqOf<D[K]>> | InputRef<D[K]>;
+};
+
+/**
+ * `provision`'s trailing options: an explicit `id` (default: the node's own
+ * `name`) plus, for a node that declares dependency slots, the `deps` that
+ * satisfy them. `deps` is required exactly when the node has slots —
+ * `[keyof D] extends [never]` is the "no slots" test — so a dependency can
+ * never be left unwired at compile time. The whole object is therefore
+ * optional for a slot-less node and required for one with slots.
+ */
+type ProvisionArgs<D extends Deps> = [keyof D] extends [never]
+  ? [opts?: { id?: string }]
+  : [opts: { id?: string; deps: DepBindings<D> }];
 
 export interface SystemBuilder {
-  /** Provisions an owned resource under a stable id, returning its ref for wiring into a consumer. */
+  /** Provisions an owned resource; its id defaults to the node's `name`. */
   provision<C extends AnyContract>(
-    id: string,
     resource: ResourceNode<C>,
+    opts?: { id?: string },
   ): { readonly id: string } & RefPort<C>;
-  /** Registers an owned service under a stable id, returning a ref carrying its exposed ports. */
-  provision<E extends Expose>(
-    id: string,
-    // biome-ignore lint/suspicious/noExplicitAny: accepts any concrete service node; ServiceNode generics are invariant so `any` is required.
-    service: ServiceNode<any, any, E>,
-  ): ProvisionedRef<E>;
-  /** Registers an owned service under a stable id, wiring a producer ref into each of its dependency slots. */
+  /** Registers an owned service; its id defaults to the node's `name`, and `deps` is required iff it declares dependency slots. */
   provision<D extends Deps, E extends Expose>(
-    id: string,
-    // biome-ignore lint/suspicious/noExplicitAny: accepts any concrete service node; ServiceNode generics are invariant so `any` is required.
+    // biome-ignore lint/suspicious/noExplicitAny: accepts any concrete service node; ServiceNode's params generic is opaque here.
     service: ServiceNode<D, any, E>,
-    wiring: Wiring<D>,
+    ...args: ProvisionArgs<D>
   ): ProvisionedRef<E>;
-  /** Registers an owned child system under a stable id — same call shape as the no-wiring service overload. */
+  /**
+   * The service call with `deps` spelled out. `ProvisionArgs` above cannot
+   * resolve while `D` is still an unbound type parameter — a generic wrapper
+   * like `cron()` provisioning a caller-supplied service — so that call site
+   * resolves to this concrete-`deps` overload instead.
+   */
   provision<D extends Deps, E extends Expose>(
-    id: string,
-    child: SystemNode<D, E>,
-  ): ProvisionedRef<E>;
-  /** Registers an owned child system under a stable id, wiring a producer ref into each of its declared deps. */
-  provision<D extends Deps, E extends Expose>(
-    id: string,
-    child: SystemNode<D, E>,
-    wiring: Wiring<D>,
-  ): ProvisionedRef<E>;
-  /** Same as the id-first overloads, but the child's own `name` becomes its id. */
-  // biome-ignore lint/suspicious/noExplicitAny: opaque per-contract Cmp — matches RefPort's own `any` bound.
-  provision<C extends Contract<any, any>>(
-    resource: ResourceNode<C>,
-  ): { readonly id: string } & RefPort<C>;
-  provision<E extends Expose>(
-    // biome-ignore lint/suspicious/noExplicitAny: accepts any concrete service node; ServiceNode generics are invariant so `any` is required.
-    service: ServiceNode<any, any, E>,
-  ): ProvisionedRef<E>;
-  provision<D extends Deps, E extends Expose>(
-    // biome-ignore lint/suspicious/noExplicitAny: accepts any concrete service node; ServiceNode generics are invariant so `any` is required.
+    // biome-ignore lint/suspicious/noExplicitAny: accepts any concrete service node; ServiceNode's params generic is opaque here.
     service: ServiceNode<D, any, E>,
-    wiring: Wiring<D>,
+    opts: { id?: string; deps: DepBindings<D> },
   ): ProvisionedRef<E>;
-  provision<D extends Deps, E extends Expose>(child: SystemNode<D, E>): ProvisionedRef<E>;
+  /** Registers an owned child system; its id defaults to the node's `name`, and `deps` is required iff it declares dependency slots. */
   provision<D extends Deps, E extends Expose>(
     child: SystemNode<D, E>,
-    wiring: Wiring<D>,
+    ...args: ProvisionArgs<D>
+  ): ProvisionedRef<E>;
+  /** The child-system call with `deps` spelled out — the same generic-wrapper escape as the service overload above. */
+  provision<D extends Deps, E extends Expose>(
+    child: SystemNode<D, E>,
+    opts: { id?: string; deps: DepBindings<D> },
   ): ProvisionedRef<E>;
 }
 

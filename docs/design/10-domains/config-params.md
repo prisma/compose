@@ -86,12 +86,12 @@ path; the structured one just exercises more of it.)
 **Deploy — build the Config.** The deploy loads the root system into the graph
 and, per service node, assembles its typed `Config`: the service's own params from
 their declared values, each dependency input's params from its producer's lowered
-outputs (the router's URL, a database's connection string). `Config` values are
+outputs (the runner's URL, a database's connection string). `Config` values are
 structurally untouched — the `Job[]` rides through as an array:
 
 ```
 Config = { service: { jobs: [ {jobId:'tick',…}, {jobId:'mrr',…} ], port: 3000 },
-           inputs:  { trigger: { url: 'https://…router…' } } }
+           inputs:  { trigger: { url: 'https://…runner…' } } }
 ```
 
 **Deploy — serialize (the target).** `@prisma/app-cloud` encodes each value into
@@ -102,7 +102,7 @@ shared project — validating structured values and passing dependency-input val
 ```
 SCHEDULER_JOBS        = '[{"jobId":"tick","every":"60s"},…]'
 SCHEDULER_PORT        = '3000'
-SCHEDULER_TRIGGER_URL = 'https://…router…'
+SCHEDULER_TRIGGER_URL = 'https://…runner…'
 ```
 
 The encoding (JSON here) is app-cloud's own; a different target would store the

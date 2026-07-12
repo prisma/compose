@@ -14,11 +14,10 @@ import widgetsService from './src/service.ts';
  * target storageHash) and `config` (the prisma-next.config.ts PATH the deploy
  * migration step loads to find migrations/ — never imported by the app build).
  */
-export default system('pn-widgets', {}, ({ provision }) => {
+export default system('pn-widgets', ({ provision }) => {
   const db = provision(
-    'database',
     pnPostgres({ name: 'database', contract: widgetContract, config: './prisma-next.config.ts' }),
+    { id: 'database' },
   );
-  provision('widgets', widgetsService, { db });
-  return {};
+  provision(widgetsService, { id: 'widgets', deps: { db } });
 });

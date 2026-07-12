@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { number, string } from '../config.ts';
 import type { Contract } from '../contract.ts';
+import { Load } from '../graph.ts';
 import { dependency, isNode, resource, service, system } from '../node.ts';
 import { conn, providerContract } from './helpers.ts';
 
@@ -320,14 +321,14 @@ describe('system()', () => {
       expect(ctx.provision).toBeInstanceOf(Function);
     });
 
+    // Inert at construction; empty boundary on both sides.
     expect(ran).toBe(false);
     expect(node.deps).toEqual({});
     expect(node.expose).toEqual({});
-    expect(node.body(unusedCtx())).toEqual({});
+
+    // Load runs the body against a real ctx; the wrapper returns no ports.
+    const graph = Load(node);
     expect(ran).toBe(true);
+    expect(graph.nodes.map((n) => n.id)).toEqual(['root']);
   });
 });
-
-function unusedCtx() {
-  return { inputs: {}, provision: () => ({ id: 'x' }) } as never;
-}

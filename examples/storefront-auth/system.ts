@@ -11,5 +11,5 @@ import storefrontService from '@storefront-auth/storefront';
  */
 export default system('storefront-auth', ({ provision }) => {
   const auth = provision(authSystem);
-  provision(storefrontService, { auth: auth.rpc });
+  provision(storefrontService, { deps: { auth: auth.rpc } });
 });

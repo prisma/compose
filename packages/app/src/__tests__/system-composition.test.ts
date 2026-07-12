@@ -49,50 +49,17 @@ const noOpService = () =>
     build,
   });
 
-describe('provision without an explicit id — the node name becomes the id', () => {
-  const apiService = () =>
-    service({
-      name: 'api',
-      extension: 'test/pack',
-      type: 'fake/compute',
-      inputs: { in: untypedEnd() },
-      params: {},
-      build,
-    });
-
-  test('the name becomes the address, and wiring by the returned ref still resolves', () => {
-    const root = system('shop', ({ provision }) => {
-      const db = provision(noOpService()); // id defaults to "noop"
-      provision(apiService(), { in: db }); // id defaults to "api"
-    });
-
-    const ids = Load(root).nodes.map((n) => n.id);
-    expect(ids).toContain('noop');
-    expect(ids).toContain('api');
-  });
-
-  test('two nodes of the same name collide, exactly as two identical explicit ids would', () => {
-    const root = system('shop', ({ provision }) => {
-      provision(noOpService());
-      provision(noOpService());
-    });
-
-    expect(() => Load(root)).toThrow(LoadError);
-    expect(() => Load(root)).toThrow('Duplicate provision id "noop"');
-  });
-});
-
 describe('a system with a declared dep that is never forwarded (Load error a)', () => {
   test('names the system and the input, and points at the fix', () => {
     const brokenAuthSystem = () =>
       system('auth', { deps: { db: untypedEnd() } }, ({ provision }) => {
-        provision('api', noOpService()); // never uses ctx.inputs.db
+        provision(noOpService(), { id: 'api' }); // never uses ctx.inputs.db
         return {};
       });
 
     const root = system('shop', {}, ({ provision }) => {
-      const dbRef = provision('dbProvider', noOpService());
-      provision('auth', brokenAuthSystem(), { db: dbRef });
+      const dbRef = provision(noOpService(), { id: 'dbProvider' });
+      provision(brokenAuthSystem(), { id: 'auth', deps: { db: dbRef } });
       return {};
     });
 
@@ -115,15 +82,15 @@ describe('a system with a declared dep that is never forwarded (Load error a)', 
 
     const aliasedSystem = () =>
       system('aliased', { deps: { a: untypedEnd(), b: untypedEnd() } }, ({ inputs, provision }) => {
-        provision('c', consumer(), { in: inputs.a }); // only "a" forwarded; "b" ignored
+        provision(consumer(), { id: 'c', deps: { in: inputs.a } }); // only "a" forwarded; "b" ignored
         return {};
       });
 
     const root = system('shop', {}, ({ provision }) => {
-      const p = provision('p', noOpService());
+      const p = provision(noOpService(), { id: 'p' });
       // The SAME ref wired into both inputs — without per-key ctx.inputs
       // identities, the two entries alias and forwarding "a" falsely marks "b".
-      provision('x', aliasedSystem(), { a: p, b: p });
+      provision(aliasedSystem(), { id: 'x', deps: { a: p, b: p } });
       return {};
     });
 
@@ -146,14 +113,14 @@ describe('a system with a declared dep that is never forwarded (Load error a)', 
 
     const wiredSystem = () =>
       system('wired', { deps: { a: untypedEnd(), b: untypedEnd() } }, ({ inputs, provision }) => {
-        provision('c', consumer(), { one: inputs.a, two: inputs.b });
+        provision(consumer(), { id: 'c', deps: { one: inputs.a, two: inputs.b } });
         return {};
       });
 
     const root = system('shop', {}, ({ provision }) => {
-      const p1 = provision('p1', noOpService());
-      const p2 = provision('p2', noOpService());
-      provision('x', wiredSystem(), { a: p1, b: p2 });
+      const p1 = provision(noOpService(), { id: 'p1' });
+      const p2 = provision(noOpService(), { id: 'p2' });
+      provision(wiredSystem(), { id: 'x', deps: { a: p1, b: p2 } });
       return {};
     });
 
@@ -184,7 +151,7 @@ describe('a system expose key missing from the body return or failing satisfies 
       'auth',
       { expose: { verify: authContract } },
       ({ provision }) => {
-        provision('api', contractProvider(authContract));
+        provision(contractProvider(authContract), { id: 'api' });
         return {} as never; // the declared "verify" key is never returned
       },
     );
@@ -201,7 +168,7 @@ describe('a system expose key missing from the body return or failing satisfies 
       { expose: { verify: authContract } },
       ({ provision }) => {
         const ref = contractProvider(wrongContract);
-        const provided = provision('api', ref);
+        const provided = provision(ref, { id: 'api' });
         // TypeScript already rejects this at the return-type check; this
         // exercises the runtime backstop, as if that check were bypassed.
         return { verify: provided.rpc as never };
@@ -218,7 +185,7 @@ describe('a system expose key missing from the body return or failing satisfies 
 describe('a system with non-empty deps Loaded as root (Load error c)', () => {
   test('names the system and the input(s), pointing at the composing system', () => {
     const rootWithDeps = system('auth', { deps: { db: untypedEnd() } }, ({ provision }) => {
-      provision('api', noOpService());
+      provision(noOpService(), { id: 'api' });
       return {};
     });
 
@@ -234,7 +201,7 @@ describe('a system with non-empty deps Loaded as root (Load error c)', () => {
       'auth',
       { deps: { db: untypedEnd(), cache: untypedEnd() } },
       ({ provision }) => {
-        provision('api', noOpService());
+        provision(noOpService(), { id: 'api' });
         return {};
       },
     );
@@ -259,7 +226,7 @@ describe('a forwarding cycle through a system boundary (Load error d)', () => {
     // ("inner") — an ordinary down-forward, no forging needed for that half.
     const subSystem = () =>
       system('sub', { deps: { peer: untypedEnd() } }, ({ inputs, provision }) => {
-        provision('inner', peerService(), { peer: inputs.peer });
+        provision(peerService(), { id: 'inner', deps: { peer: inputs.peer } });
         return {};
       });
 
@@ -269,8 +236,8 @@ describe('a forwarding cycle through a system boundary (Load error d)', () => {
       // honest body cannot express this forward reference (refs are only
       // returned after provision()); the DAG check is what catches it.
       const forged = { id: 'sub.inner' } as ProvisionedRef;
-      const aRef = provision('a', peerService(), { peer: forged });
-      provision('sub', subSystem(), { peer: aRef }); // a → sub.inner (honest forward)
+      const aRef = provision(peerService(), { id: 'a', deps: { peer: forged } });
+      provision(subSystem(), { id: 'sub', deps: { peer: aRef } }); // a → sub.inner (honest forward)
       return {};
     });
 
@@ -344,7 +311,7 @@ describe('3-level nesting: addresses, and forwarding down + up round trip', () =
       'inner',
       { deps: { cfg: cfgEnd() }, expose: { out: outContract } },
       ({ inputs, provision }) => {
-        const leaf = provision('leaf', leafService(), { cfg: inputs.cfg });
+        const leaf = provision(leafService(), { id: 'leaf', deps: { cfg: inputs.cfg } });
         return { out: leaf.out };
       },
     );
@@ -356,16 +323,16 @@ describe('3-level nesting: addresses, and forwarding down + up round trip', () =
       'mid',
       { deps: { cfg: cfgEnd() }, expose: { out: outContract } },
       ({ inputs, provision }) => {
-        const inner = provision('inner', innerSystem(), { cfg: inputs.cfg });
+        const inner = provision(innerSystem(), { id: 'inner', deps: { cfg: inputs.cfg } });
         return { out: inner.out };
       },
     );
 
   const rootSystem = () =>
     system('app', {}, ({ provision }) => {
-      const cfg = provision('config', configService());
-      const mid = provision('mid', midSystem(), { cfg: cfg.cfg });
-      provision('sink', sinkService(), { out: mid.out });
+      const cfg = provision(configService(), { id: 'config' });
+      const mid = provision(midSystem(), { id: 'mid', deps: { cfg: cfg.cfg } });
+      provision(sinkService(), { id: 'sink', deps: { out: mid.out } });
       return {};
     });
 
@@ -412,7 +379,7 @@ describe('3-level nesting: addresses, and forwarding down + up round trip', () =
 
   test('a single-level system keeps bare, unprefixed ids — nesting changes nothing about the flat case', () => {
     const flat = system('shop', {}, ({ provision }) => {
-      provision('config', configService());
+      provision(configService(), { id: 'config' });
       return {};
     });
 
@@ -462,9 +429,9 @@ describe('pass-through: an expose may return a boundary input directly', () => {
 
   test('Loads clean — returning an input as an output counts as using it', () => {
     const root = system('shop', {}, ({ provision }) => {
-      const origin = provision('origin', rpcProvider());
-      const pass = provision('pass', passSystem(), { svc: origin.rpc });
-      provision('sink', rpcConsumer(), { svc: pass.svc });
+      const origin = provision(rpcProvider(), { id: 'origin' });
+      const pass = provision(passSystem(), { id: 'pass', deps: { svc: origin.rpc } });
+      provision(rpcConsumer(), { id: 'sink', deps: { svc: pass.svc } });
       return {};
     });
 
@@ -473,9 +440,9 @@ describe('pass-through: an expose may return a boundary input directly', () => {
 
   test("a consumer wired to the pass-through output resolves to the ORIGINAL producer's real address", () => {
     const root = system('shop', {}, ({ provision }) => {
-      const origin = provision('origin', rpcProvider());
-      const pass = provision('pass', passSystem(), { svc: origin.rpc });
-      provision('sink', rpcConsumer(), { svc: pass.svc });
+      const origin = provision(rpcProvider(), { id: 'origin' });
+      const pass = provision(passSystem(), { id: 'pass', deps: { svc: origin.rpc } });
+      provision(rpcConsumer(), { id: 'sink', deps: { svc: pass.svc } });
       return {};
     });
 
@@ -525,19 +492,19 @@ describe('untyped inputs (http() escape hatch) forward with no compile-time chec
     // required contract is only enforced by Load.
     const relaySystem = () =>
       system('relay', { deps: { anything: untypedEnd() } }, ({ inputs, provision }) => {
-        provision('sink', typedConsumer, { svc: inputs.anything });
+        provision(typedConsumer, { id: 'sink', deps: { svc: inputs.anything } });
         return {};
       });
 
     const root = system('shop', {}, ({ provision }) => {
-      const p = provision('p', provider);
-      provision('relay', relaySystem(), { anything: p.port }); // wrong contract flows in
+      const p = provision(provider, { id: 'p' });
+      provision(relaySystem(), { id: 'relay', deps: { anything: p.port } }); // wrong contract flows in
       return {};
     });
 
     expect(() => Load(root)).toThrow(LoadError);
     expect(() => Load(root)).toThrow(
-      'Wiring for "relay.sink.svc" does not satisfy its required contract.',
+      'The deps for "relay.sink.svc" do not satisfy the slot\'s required contract.',
     );
   });
 });
@@ -571,17 +538,16 @@ describe('a resource-backed input now forwards across a system boundary (unified
 
   const dbSystem = () =>
     system('db-system', { deps: { db: dbDep() } }, ({ inputs, provision }) => {
-      provision('consumer', dbConsumer(), { db: inputs.db });
+      provision(dbConsumer(), { id: 'consumer', deps: { db: inputs.db } });
       return {};
     });
 
   const rootWithResource = () =>
     system('shop', {}, ({ provision }) => {
-      const db = provision(
-        'db',
-        resource({ name: 'db', extension: 'test/pack', provides: dbContract }),
-      );
-      provision('wrapped', dbSystem(), { db });
+      const db = provision(resource({ name: 'db', extension: 'test/pack', provides: dbContract }), {
+        id: 'db',
+      });
+      provision(dbSystem(), { id: 'wrapped', deps: { db } });
       return {};
     });
 
@@ -604,7 +570,7 @@ describe('a resource-backed input now forwards across a system boundary (unified
 describe('provision ids may not contain "." (the address separator)', () => {
   test('a dotted id is a LoadError naming the reserved characters', () => {
     const root = system('shop', {}, ({ provision }) => {
-      provision('a.b', noOpService());
+      provision(noOpService(), { id: 'a.b' });
       return {};
     });
 
@@ -613,5 +579,116 @@ describe('provision ids may not contain "." (the address separator)', () => {
       'provision() id "a.b" (system "shop") may not contain "_" or "." — "_" is the config-key ' +
         'separator and "." the node-id path separator',
     );
+  });
+});
+
+describe('provision() with an inferred id (the id-less overloads)', () => {
+  const rpcContract = providerContract('fake/rpc', { work: true });
+
+  const producer = () =>
+    service({
+      name: 'worker',
+      extension: 'test/pack',
+      type: 'fake/compute',
+      inputs: {},
+      params: {},
+      build,
+      expose: { rpc: rpcContract },
+    });
+
+  const consumer = () =>
+    service({
+      name: 'consumer',
+      extension: 'test/pack',
+      type: 'fake/compute',
+      inputs: {
+        dep: dependency({
+          name: 'dep',
+          type: 'fake/rpc',
+          connection: conn({ url: string() }, (v) => ({ url: v.url })),
+          required: rpcContract,
+        }),
+      },
+      params: {},
+      build,
+    });
+
+  test('provision(node) infers the id from node.name and Loads the same graph as provision(node.name, node)', () => {
+    const inferred = system('shop', {}, ({ provision }) => {
+      provision(producer());
+      return {};
+    });
+    const explicit = system('shop', {}, ({ provision }) => {
+      provision(producer(), { id: 'worker' });
+      return {};
+    });
+
+    const inferredIds = Load(inferred)
+      .nodes.map((n) => n.id)
+      .sort();
+    const explicitIds = Load(explicit)
+      .nodes.map((n) => n.id)
+      .sort();
+
+    expect(inferredIds).toEqual(explicitIds);
+    expect(inferredIds).toContain('worker');
+  });
+
+  test('provision(node, wiring) infers the id and wires each producer ref', () => {
+    const root = system('shop', {}, ({ provision }) => {
+      const w = provision(producer());
+      provision(consumer(), { deps: { dep: w.rpc } });
+      return {};
+    });
+
+    const graph = Load(root);
+
+    expect(graph.nodes.map((n) => n.id)).toContain('consumer');
+    expect(graph.edges).toContainEqual({
+      from: 'worker',
+      to: 'consumer',
+      input: 'dep',
+      kind: 'dependency',
+    });
+  });
+
+  test('two same-named nodes provisioned by inference raise the existing Duplicate provision id error', () => {
+    const root = system('shop', {}, ({ provision }) => {
+      provision(producer());
+      provision(producer());
+      return {};
+    });
+
+    expect(() => Load(root)).toThrow(LoadError);
+    expect(() => Load(root)).toThrow('Duplicate provision id "worker" in system "shop".');
+  });
+
+  test('provision(resource) infers the id from the resource name', () => {
+    const dbResource = resource({
+      name: 'db',
+      extension: 'test/pack',
+      provides: providerContract('fake/db', { url: '' }),
+    });
+    const root = system('shop', {}, ({ provision }) => {
+      provision(dbResource);
+      return {};
+    });
+
+    expect(Load(root).nodes.map((n) => n.id)).toContain('db');
+  });
+
+  test('provision(childSystem) infers the id and still flattens nested addresses', () => {
+    const child = system('child', {}, ({ provision }) => {
+      provision(producer());
+      return {};
+    });
+    const root = system('shop', {}, ({ provision }) => {
+      provision(child);
+      return {};
+    });
+
+    const ids = Load(root).nodes.map((n) => n.id);
+    expect(ids).toContain('child');
+    expect(ids).toContain('child.worker');
   });
 });
