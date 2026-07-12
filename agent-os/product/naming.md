@@ -7,7 +7,7 @@ document covers the product family, how Prisma App fits into it, the vocabulary 
 introduces, and how its building blocks (Modules) are distributed.
 
 The framework name and its unit are settled: **Prisma App** (← MakerKit), recorded in
-[ADR-0014](../../docs/design/90-decisions/ADR-0014-name-the-framework-prisma-app-and-its-unit-system.md),
+[ADR-0014](../../docs/design/90-decisions/ADR-0014-name-the-framework-prisma-app.md),
 and **Module** (← System ← Hex), recorded in
 [ADR-0025](../../docs/design/90-decisions/ADR-0025-name-the-unit-of-composition-module.md).
 **Prisma Data** (← Prisma Next) is still proposed. The **registry** name is deferred
