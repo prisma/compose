@@ -62,7 +62,7 @@ normalized.
 
 ## Destroy requires an explicit target
 
-This one changes an old habit: a bare `prisma-app destroy` is an error.
+A bare `prisma-app destroy` is an error.
 
 ```sh
 prisma-app destroy system.ts
