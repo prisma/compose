@@ -7,10 +7,19 @@
 import type * as Prisma from '@prisma/alchemy';
 import { blindCast } from '@prisma/app/casts';
 
-/** The factory's resolved options each node control closes over. */
+/**
+ * The factory's resolved options each node control closes over. `projectId`
+ * and `branchId` come from the CLI via `PRISMA_PROJECT_ID`/`PRISMA_BRANCH_ID`
+ * (stage-as-branch): a named stage sets `branchId`, so every branch-scoped
+ * resource (Database, ComputeService, EnvironmentVariable) lands on that
+ * Branch and env vars use the `preview` class; `--production` (no branchId)
+ * keeps the `production` class.
+ */
 export interface ResolvedCloudOptions {
   readonly workspaceId: string;
   readonly region?: Prisma.ComputeRegion;
+  readonly projectId: string | undefined;
+  readonly branchId: string | undefined;
 }
 
 /** Where a resource lands when the deploy names no region. */

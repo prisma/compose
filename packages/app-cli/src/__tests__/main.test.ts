@@ -9,6 +9,7 @@ describe('parseArgs() (clipanion-backed)', () => {
       entry: 'src/service.ts',
       name: undefined,
       stage: undefined,
+      production: false,
     });
   });
 
@@ -19,6 +20,7 @@ describe('parseArgs() (clipanion-backed)', () => {
         entry: 'src/service.ts',
         name: 'ci-run',
         stage: 'prod',
+        production: false,
       },
     );
     expect(parseArgs(['deploy', '--stage', 'prod', 'src/service.ts', '--name', 'ci-run'])).toEqual({
@@ -26,6 +28,17 @@ describe('parseArgs() (clipanion-backed)', () => {
       entry: 'src/service.ts',
       name: 'ci-run',
       stage: 'prod',
+      production: false,
+    });
+  });
+
+  test('parses --production', () => {
+    expect(parseArgs(['destroy', 'src/service.ts', '--production'])).toEqual({
+      command: 'destroy',
+      entry: 'src/service.ts',
+      name: undefined,
+      stage: undefined,
+      production: true,
     });
   });
 
@@ -63,6 +76,7 @@ describe('parseArgs() (clipanion-backed)', () => {
       entry: 'src/service.ts',
       name: '',
       stage: undefined,
+      production: false,
     });
   });
 });

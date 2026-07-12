@@ -73,3 +73,38 @@
   the missing `@prisma/app-rpc` entry-map row were fixed at close-out; absorbing
   the full mechanism into the sketches is a docs slice of its own
   (connection-contracts.md is the accurate record meanwhile).
+
+# Stage-as-branch — deferred (2026-07-12)
+
+- **Route container resolution through the extension, not the CLI.** Today
+  `@prisma/app-cli` hard-codes the Prisma Cloud specifics of stage resolution:
+  it imports `@prisma/alchemy`'s `resolveContainer`/`deleteBranch` directly and
+  sets the target-specific `PRISMA_PROJECT_ID`/`PRISMA_BRANCH_ID` env vars on
+  the alchemy child (`run-alchemy.ts`). That is Prisma Cloud config leaking
+  into the otherwise target-agnostic CLI — accepted for the first
+  stage-as-branch slice (ADR-0024 pins that the CLI ensures containers), but
+  the durable shape is a deploy-plane hook on the extension descriptor
+  (ADR-0017's config already loads extensions): the extension resolves its own
+  containers and supplies the env for the child; the CLI stays generic. Origin:
+  operator review of PR #42 (`run-alchemy.ts` comment).
+
+# Auth — deferred (2026-07-12)
+
+- **Adopt the `@prisma/cli` credential mechanism; stop rolling our own auth.**
+  `@prisma/app` authenticates the Management API with a static
+  `PRISMA_SERVICE_TOKEN` read from the env and sent as a raw `Bearer` header
+  (`@prisma/alchemy` `credentials.ts` `fromEnv()` → `client.ts`
+  `createManagementApiClient({ token })`) — no login, no refresh, no stored
+  credential; a long-lived plaintext token in `.env`. `@prisma/cli` already
+  solves this: interactive `prisma auth login` (PKCE OAuth against
+  `auth.prisma.io`), a persisted + auto-refreshed credential, with
+  `PRISMA_SERVICE_TOKEN` as the CI/non-interactive fallback. The same SDK ships
+  the machinery we're not using (`@prisma/management-api-sdk`:
+  `createManagementApiSdk` + `createTokenRefreshingFetch`). Ask: reuse the
+  prisma CLI's credential resolution in `@prisma/app` — ideally its own loader,
+  so we don't reimplement the store/refresh — so `prisma-app deploy`
+  authenticates exactly like the rest of the CLI and we maintain no auth of our
+  own. Touches `credentials.ts`, `client.ts`, `app-cli/ensure-containers.ts`,
+  and the token-based state-store bootstrap (`state/bootstrap.ts`). Origin: auth
+  review 2026-07-12 (during stage-as-branch); operator directive not to roll our
+  own auth.

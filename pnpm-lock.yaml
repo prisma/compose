@@ -279,6 +279,9 @@ importers:
 
   packages/app-cli:
     dependencies:
+      '@prisma/alchemy':
+        specifier: workspace:0.2.0
+        version: link:../alchemy
       '@prisma/app':
         specifier: workspace:0.2.0
         version: link:../app

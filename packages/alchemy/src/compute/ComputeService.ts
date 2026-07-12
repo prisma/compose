@@ -43,6 +43,8 @@ export interface ComputeServiceProps {
   projectId: string;
   name: string;
   region?: ComputeRegion;
+  /** When set, the Branch this compute service is attached to (named-stage deploys). */
+  branchId?: string;
 }
 
 export interface ComputeServiceAttributes {
@@ -86,11 +88,18 @@ export const ComputeServiceProvider = () =>
             };
           }
 
-          // Ensure — create it in the target project.
+          // Create on the target Branch via the create body — NOT a later PATCH.
+          // Compute-service names are unique per Branch, so a project-scoped create
+          // lands on the default Branch and collides with the same-named production
+          // service there (a live-deploy find).
           const created = yield* call(() =>
             client.POST('/v1/projects/{projectId}/compute-services', {
               params: { path: { projectId: news.projectId } },
-              body: { displayName: news.name, ...(news.region && { regionId: news.region }) },
+              body: {
+                displayName: news.name,
+                ...(news.region && { regionId: news.region }),
+                ...(news.branchId !== undefined && { branchId: news.branchId }),
+              },
             }),
           );
           return {

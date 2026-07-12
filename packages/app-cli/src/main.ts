@@ -5,11 +5,17 @@
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import type { ResolvedContainer } from '@prisma/alchemy';
 import { Load } from '@prisma/app';
 import type { PrismaAppConfig } from '@prisma/app/config';
 import { assembleServices, type RunAssembler } from '@prisma/app-assemble';
 import { Cli, Command, Option, UsageError } from 'clipanion';
 import { CliError } from './cli-error.ts';
+import {
+  deleteStageBranch,
+  type EnsureContainersInput,
+  ensureContainers,
+} from './ensure-containers.ts';
 import { GENERATED_STACK_RELATIVE_PATH, writeStackFile } from './generate-stack.ts';
 import { findConfigPathForEntry, loadAppConfig, missingConfigError } from './load-config.ts';
 import { loadEntry } from './load-entry.ts';
@@ -28,6 +34,11 @@ abstract class DeployCliCommand extends Command {
 
   stage = Option.String('--stage', {
     description: 'Alchemy stage to target.',
+  });
+
+  production = Option.Boolean('--production', false, {
+    description:
+      'destroy: tear down the project-level production environment (required to destroy production).',
   });
 
   abstract readonly action: 'deploy' | 'destroy';
@@ -78,6 +89,7 @@ export interface ParsedArgs {
   readonly entry: string;
   readonly name: string | undefined;
   readonly stage: string | undefined;
+  readonly production: boolean;
 }
 
 /** Exported for direct testing (main.test.ts) — not part of the package's public barrel (see index.ts). */
@@ -103,6 +115,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       entry: command.entry,
       name: command.name,
       stage: command.stage,
+      production: command.production,
     };
   }
 
@@ -120,9 +133,33 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
 export interface RunDeps {
   /** Substituted into assembleServices — see @prisma/app-assemble's RunAssembler. */
   readonly runAssembler?: RunAssembler;
+  readonly ensureContainers?: (input: EnsureContainersInput) => Promise<ResolvedContainer>;
   readonly alchemy?: (input: RunAlchemyInput) => number;
+  readonly deleteBranch?: (input: { branchId: string }) => Promise<void>;
   /** Substituted for the c12 evaluation of the discovered config file (discovery itself still runs — the generated stack file needs the real path). */
   readonly config?: PrismaAppConfig;
+}
+
+/** Destroy must name its target explicitly — no silent default to production (spec §10). */
+function effectiveStage(args: ParsedArgs): string | undefined {
+  if (args.command === 'deploy') {
+    if (args.production) {
+      throw new CliError(
+        '--production is only valid with `destroy`; `deploy` targets production by default (omit --stage).',
+      );
+    }
+    return args.stage;
+  }
+  if (args.stage !== undefined && args.production) {
+    throw new CliError('Pass either --stage <name> or --production to `destroy`, not both.');
+  }
+  if (args.stage === undefined && !args.production) {
+    throw new CliError(
+      '`destroy` requires an explicit target: --stage <name> to tear down a branch ' +
+        'environment, or --production to tear down the production environment.',
+    );
+  }
+  return args.production ? undefined : args.stage;
 }
 
 const ALCHEMY_STATE_DIR = '.alchemy';
@@ -151,6 +188,7 @@ export async function run(argv: readonly string[], deps: RunDeps = {}): Promise<
     }
     throw error;
   }
+  const stage = effectiveStage(args);
   const cwd = process.cwd();
 
   // 0. destroy-only guardrail — first, ahead of every other step, so it
@@ -204,7 +242,17 @@ export async function run(argv: readonly string[], deps: RunDeps = {}): Promise<
     throw error;
   }
 
-  // 7. Generate .prisma-app/alchemy.run.ts (tool state lives where you run the tool).
+  // 7. Resolve the app's Project + (named stage) Branch via the Management
+  // API — deploy creates-if-absent, destroy finds only — after assembly
+  // succeeds, so a deploy that cannot assemble never creates anything in
+  // Prisma Cloud.
+  const { projectId, branchId } = await (deps.ensureContainers ?? ensureContainers)({
+    command: args.command,
+    appName: name,
+    stage,
+  });
+
+  // 8. Generate .prisma-app/alchemy.run.ts (tool state lives where you run the tool).
   const stackPath = writeStackFile({
     entryPath: entryModule.path,
     cwd,
@@ -213,13 +261,15 @@ export async function run(argv: readonly string[], deps: RunDeps = {}): Promise<
     assembled,
   });
 
-  // 8. Shell out to alchemy against the generated file.
+  // 9. Shell out to alchemy against the generated file.
   try {
     const status = (deps.alchemy ?? runAlchemy)({
       command: args.command,
       stackFileRelativePath: GENERATED_STACK_RELATIVE_PATH,
       cwd,
-      stage: args.stage,
+      stage,
+      projectId,
+      ...(branchId !== undefined ? { branchId } : {}),
     });
     if (status !== 0) {
       console.error(`\nGenerated stack file: ${stackPath}`);
@@ -227,6 +277,10 @@ export async function run(argv: readonly string[], deps: RunDeps = {}): Promise<
         `Run \`alchemy ${args.command} ${GENERATED_STACK_RELATIVE_PATH} --yes\` from ` +
           `${cwd} to reproduce this directly.`,
       );
+      return status;
+    }
+    if (args.command === 'destroy' && branchId !== undefined) {
+      await (deps.deleteBranch ?? ((input) => deleteStageBranch(input)))({ branchId });
     }
     return status;
   } catch (error) {

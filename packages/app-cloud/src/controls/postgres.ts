@@ -29,6 +29,7 @@ export function postgresControl(o: ResolvedCloudOptions): NodeControl {
         projectId: projectIdOf(application),
         name: id,
         region: o.region ?? DEFAULT_REGION,
+        ...(o.branchId !== undefined ? { branchId: o.branchId } : {}),
       });
       const conn = yield* Prisma.Connection(`${id}-conn`, { databaseId: db.id, name: id });
       const url = Output.map(conn.connectionString, (value) => Redacted.value(value));

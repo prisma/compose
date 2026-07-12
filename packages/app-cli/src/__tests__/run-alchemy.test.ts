@@ -68,6 +68,8 @@ describe('runAlchemy()', () => {
       stackFileRelativePath: '.prisma-app/alchemy.run.ts',
       cwd: dir,
       stage: 'ci-42',
+      projectId: 'proj-1',
+      branchId: 'br-1',
       env: { ...process.env, CAPTURE_FILE: captureFile },
     });
 
@@ -103,10 +105,55 @@ describe('runAlchemy()', () => {
       stackFileRelativePath: '.prisma-app/alchemy.run.ts',
       cwd: dir,
       stage: undefined,
+      projectId: 'proj-1',
       env: { ...process.env, CAPTURE_FILE: captureFile },
     });
 
     const captured = JSON.parse(fs.readFileSync(captureFile, 'utf8'));
     expect(captured.argv).toEqual(['destroy', '.prisma-app/alchemy.run.ts', '--yes']);
+  });
+
+  test('sets PRISMA_PROJECT_ID on the child env, and PRISMA_BRANCH_ID only for a named branch', () => {
+    const dir = makeTmpDir();
+    const binDir = path.join(dir, 'node_modules', '.bin');
+    fs.mkdirSync(binDir, { recursive: true });
+    const captureFile = path.join(dir, 'capture.json');
+    fs.writeFileSync(
+      path.join(binDir, 'alchemy'),
+      [
+        '#!/usr/bin/env node',
+        'const fs = require("node:fs");',
+        'fs.writeFileSync(process.env.CAPTURE_FILE, JSON.stringify({',
+        '  PRISMA_PROJECT_ID: process.env.PRISMA_PROJECT_ID ?? null,',
+        '  PRISMA_BRANCH_ID: process.env.PRISMA_BRANCH_ID ?? null,',
+        '}));',
+      ].join('\n'),
+      { mode: 0o755 },
+    );
+
+    runAlchemy({
+      command: 'deploy',
+      stackFileRelativePath: '.prisma-app/alchemy.run.ts',
+      cwd: dir,
+      stage: 'staging',
+      projectId: 'proj-1',
+      branchId: 'br-1',
+      env: { ...process.env, CAPTURE_FILE: captureFile },
+    });
+
+    const named = JSON.parse(fs.readFileSync(captureFile, 'utf8'));
+    expect(named).toEqual({ PRISMA_PROJECT_ID: 'proj-1', PRISMA_BRANCH_ID: 'br-1' });
+
+    runAlchemy({
+      command: 'deploy',
+      stackFileRelativePath: '.prisma-app/alchemy.run.ts',
+      cwd: dir,
+      stage: undefined,
+      projectId: 'proj-1',
+      env: { ...process.env, CAPTURE_FILE: captureFile },
+    });
+
+    const defaultStage = JSON.parse(fs.readFileSync(captureFile, 'utf8'));
+    expect(defaultStage).toEqual({ PRISMA_PROJECT_ID: 'proj-1', PRISMA_BRANCH_ID: null });
   });
 });

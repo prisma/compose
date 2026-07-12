@@ -24,6 +24,7 @@ export function computeControl(o: ResolvedCloudOptions): NodeControl {
           projectId: projectIdOf(application),
           name: id,
           region: o.region ?? DEFAULT_REGION,
+          ...(o.branchId !== undefined ? { branchId: o.branchId } : {}),
         });
         return {
           outputs: { serviceId: svc.id, projectId: application.outputs['projectId'] },
@@ -48,7 +49,8 @@ export function computeControl(o: ResolvedCloudOptions): NodeControl {
               projectId: projectIdOf(provisioned),
               key,
               value: encode(d.owner, value),
-              class: 'production',
+              class: o.branchId ? 'preview' : 'production',
+              ...(o.branchId !== undefined ? { branchId: o.branchId } : {}),
             }),
           );
         }
