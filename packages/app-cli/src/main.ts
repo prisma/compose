@@ -228,16 +228,7 @@ export async function run(argv: readonly string[], deps: RunDeps = {}): Promise<
     throw new CliError('The root node has no name — name it at authoring, or pass --name.');
   }
 
-  // 6. Resolve the app's Project + (named stage) Branch via the Management
-  // API — deploy creates-if-absent, destroy finds only — before assembling
-  // or running anything against them.
-  const { projectId, branchId } = await (deps.ensureContainers ?? ensureContainers)({
-    command: args.command,
-    appName: name,
-    stage,
-  });
-
-  // 7. Assemble each service through the config's registries.
+  // 6. Assemble each service through the config's registries.
   let assembled: Awaited<ReturnType<typeof assembleServices>>;
   try {
     assembled = await assembleServices(graph, config, deps.runAssembler);
@@ -250,6 +241,16 @@ export async function run(argv: readonly string[], deps: RunDeps = {}): Promise<
     }
     throw error;
   }
+
+  // 7. Resolve the app's Project + (named stage) Branch via the Management
+  // API — deploy creates-if-absent, destroy finds only — after assembly
+  // succeeds, so a deploy that cannot assemble never creates anything in
+  // Prisma Cloud.
+  const { projectId, branchId } = await (deps.ensureContainers ?? ensureContainers)({
+    command: args.command,
+    appName: name,
+    stage,
+  });
 
   // 8. Generate .prisma-app/alchemy.run.ts (tool state lives where you run the tool).
   const stackPath = writeStackFile({

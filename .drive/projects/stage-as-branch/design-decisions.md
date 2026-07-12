@@ -76,3 +76,25 @@ trigger, what was learned, the decision, and the affected artefacts (Drive I12).
   `packages/alchemy/src/compute/ComputeService.ts` (`reconcile`, drops the PATCH branch);
   `packages/alchemy/src/__tests__/ComputeService.test.ts` (reconcile tests rewritten for
   create-body `branchId`, no PATCH).
+
+## 4. Container resolution must run after assembly, not before
+
+- **Trigger:** the integration test (CI) falsified the ensure-before-assemble order
+  set by D2. `prisma-app deploy — real extension-config resolution of prisma-cloud +
+  node > resolves both /control entries for real and fails at the missing built
+  entry, not at resolution` deploys an unbuilt fixture and expects the pipeline to
+  fail with the "no built entry at" assembly error. It instead failed earlier, on
+  the missing `PRISMA_SERVICE_TOKEN`, because `ensureContainers` ran before
+  `assembleServices`.
+- **Learned:** running container resolution before assembly lets a deploy that
+  cannot assemble mutate Prisma Cloud first — creating a Project and/or Branch for
+  a service that then fails to build. That regresses the established "no built
+  entry at" error contract this test pins, and it means a broken local build can
+  still leave a container behind in the cloud.
+- **Decision:** assemble first (local validation, no cloud calls), then resolve
+  containers (the first cloud mutation), then generate and run the stack. A deploy
+  that cannot assemble now fails before anything is created in Prisma Cloud.
+- **Affected:** `packages/app-cli/src/main.ts` (`run()`, steps renumbered — assemble
+  is now step 6, container resolution step 7); `docs/design/10-domains/deploy-cli.md`
+  (pipeline steps 5/6 swapped and renumbered to match); the integration test is
+  unchanged and now passes.

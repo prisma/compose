@@ -64,23 +64,25 @@ loading the graph imports that module — the app's choice, not a CLI limit.
 4. **Resolve the name.** The root node's name (every node is named — ADR-0006),
    unless `--name` overrides it — CI's per-run ephemeral deploys use this so a
    name never collides with a standing demo.
-5. **Resolve the app's containers.** Before assembling or running anything,
-   the CLI resolves two Prisma Cloud containers via the Management API: the
-   app's **Project** — found by app name, oldest match adopted, created if
-   none exist — and, for a named stage, that stage's **Branch** — found by
-   `gitName` (the stage name), created if absent. The stage name must pass
-   `git check-ref-format`; an invalid name fails outright, never silently
-   normalized. The default stage (no `--stage`) resolves the Project only —
-   no Branch, zero change to production. `destroy` resolves **find-only**: an
-   absent Project or Branch fails with "nothing deployed for `<app>`[`/<stage>`]"
-   rather than creating one. See § Stages and containers.
-6. **Assemble each service.** Look up the service's build descriptor in the
+5. **Assemble each service.** Look up the service's build descriptor in the
    registries — `extensions[build.extension].nodes[build.type].assemble` — and
    run it. The assembler resolves its `entry` (and any other path field)
    relative to `dirname(build.module)` — the authoring module the descriptor
    carries (ADR-0004) — no directory discovery of any kind. Assembly validates
    the user's built output exists (missing → "run your build" error; staleness
    is not detected) and produces a normalized bundle `{ dir, entry }`.
+6. **Resolve the app's containers.** Resolved after assembly succeeds and
+   before the stack is generated, so a deploy that cannot assemble never
+   creates anything in Prisma Cloud. The CLI resolves two Prisma Cloud
+   containers via the Management API: the app's **Project** — found by app
+   name, oldest match adopted, created if none exist — and, for a named
+   stage, that stage's **Branch** — found by `gitName` (the stage name),
+   created if absent. The stage name must pass `git check-ref-format`; an
+   invalid name fails outright, never silently normalized. The default stage
+   (no `--stage`) resolves the Project only — no Branch, zero change to
+   production. `destroy` resolves **find-only**: an absent Project or Branch
+   fails with "nothing deployed for `<app>`[`/<stage>`]" rather than creating
+   one. See § Stages and containers.
 7. **Lower and drive.** Write the pipeline's results as a runnable stack
    module at `.prisma-app/alchemy.run.ts` and drive the `alchemy` CLI against
    it (ADR-0007), setting `PRISMA_PROJECT_ID` (always) and `PRISMA_BRANCH_ID`
@@ -103,7 +105,7 @@ targets **production**, at the Project level; `--stage <name>` targets a
 **named stage**, resolved to a Branch of the app's Project (ADR-0023).
 
 - **Containers.** The app's **Project** and the stage's **Branch** are
-  resolved before Alchemy runs (pipeline step 5) — Alchemy provisions only
+  resolved before Alchemy runs (pipeline step 6) — Alchemy provisions only
   the resources *within* them; it never creates or destroys a container.
 - **Id threading.** The resolved `projectId` (and, for a named stage,
   `branchId`) are set as `PRISMA_PROJECT_ID`/`PRISMA_BRANCH_ID` on the
