@@ -1,0 +1,253 @@
+#!/usr/bin/env node
+
+/**
+ * Dependency Cruiser configuration for Prisma Compose (ADR-0028).
+ *
+ * Derives module groups from architecture.config.json and encodes the
+ * same-layer/downward-only semantics for domains and layers, plus the
+ * control/execution plane split (ADR-0017). Copied from Prisma Next's
+ * implementation (its Package-Layering doc and ADR 140), with two additions:
+ * 9-public is a sink (no internal package imports it), and examples plus the
+ * integration tests may import only the 9-public packages.
+ *
+ * Package specifiers are aliased to workspace sources via
+ * tsconfig.depcruise.json's `paths`, so the cruiser analyses source-to-source
+ * edges (the packages' exports maps point at built dist, which is excluded).
+ */
+
+import config from './architecture.config.json' with { type: 'json' };
+
+const {
+  packages: packageConfigs,
+  layerOrder,
+  planeRules,
+  crossDomainExceptions,
+  crossDomainRules,
+} = config;
+
+const normalizeGlob = (glob) => {
+  const DOUBLE_WILDCARD = '__DOUBLE_WILDCARD__';
+  const SINGLE_WILDCARD = '__SINGLE_WILDCARD__';
+  const hasWildcard = glob.includes('*');
+  const lastPathSegment = glob.split('/').pop() ?? '';
+  const isFileLikePattern = !hasWildcard && lastPathSegment.includes('.');
+
+  let pattern = glob
+    .replace(/\*\*/g, DOUBLE_WILDCARD)
+    .replace(/\*/g, SINGLE_WILDCARD)
+    .replaceAll(DOUBLE_WILDCARD, '.*')
+    .replaceAll(SINGLE_WILDCARD, '[^/]*');
+
+  if (isFileLikePattern) {
+    return `^${pattern}$`;
+  }
+  if (!hasWildcard && !pattern.endsWith('/')) {
+    pattern += '/.*';
+  }
+  return `^${pattern}`;
+};
+
+const moduleGroupMap = new Map();
+
+for (const pkgConfig of packageConfigs) {
+  const key = `${pkgConfig.domain}-${pkgConfig.layer}-${pkgConfig.plane}`;
+  if (!moduleGroupMap.has(key)) {
+    moduleGroupMap.set(key, {
+      key,
+      domain: pkgConfig.domain,
+      layer: pkgConfig.layer,
+      plane: pkgConfig.plane,
+      globs: [],
+      patterns: [],
+    });
+  }
+  const group = moduleGroupMap.get(key);
+  group.globs.push(pkgConfig.glob);
+  group.patterns.push(normalizeGlob(pkgConfig.glob));
+}
+
+const moduleGroups = Array.from(moduleGroupMap.values());
+
+const getLayerIndex = (domain, layer) => {
+  const order = layerOrder[domain];
+  if (!order) return -1;
+  return order.indexOf(layer);
+};
+
+const describeGroup = (group) => `${group.domain}/${group.layer}/${group.plane}`;
+const groupPattern = (group) => group.patterns.join('|');
+
+const matchesGlobPattern = (group, pattern) => {
+  return group.globs.some((glob) => {
+    if (glob === pattern) return true;
+    const normalizedExceptionPattern = normalizeGlob(pattern);
+    const normalizedGroupPattern = normalizeGlob(glob);
+    if (normalizedExceptionPattern === normalizedGroupPattern) return true;
+    const exceptionBase = pattern.replace(/\/\*\*$/, '').replace(/\*$/, '');
+    const groupBase = glob.replace(/\/\*\*$/, '').replace(/\*$/, '');
+    if (groupBase.startsWith(exceptionBase) || exceptionBase.startsWith(groupBase)) return true;
+    return false;
+  });
+};
+
+const isCrossDomainException = (sourceGroup, targetGroup) =>
+  crossDomainExceptions?.some(
+    (exception) =>
+      matchesGlobPattern(sourceGroup, exception.from) &&
+      matchesGlobPattern(targetGroup, exception.to),
+  );
+
+const forbidden = [];
+
+const pushRule = (name, comment, sourceGroup, targetGroup) => {
+  forbidden.push({
+    name,
+    comment,
+    severity: 'error',
+    from: { path: groupPattern(sourceGroup) },
+    to: { path: groupPattern(targetGroup) },
+  });
+};
+
+const createUpwardRules = () => {
+  for (const sourceGroup of moduleGroups) {
+    for (const targetGroup of moduleGroups) {
+      if (sourceGroup.domain !== targetGroup.domain) continue;
+
+      const sourceIndex = getLayerIndex(sourceGroup.domain, sourceGroup.layer);
+      const targetIndex = getLayerIndex(targetGroup.domain, targetGroup.layer);
+      if (sourceIndex === -1 || targetIndex === -1 || targetIndex <= sourceIndex) continue;
+
+      pushRule(
+        `upward-${sourceGroup.key}-to-${targetGroup.layer}`,
+        `Upward import: ${describeGroup(sourceGroup)} cannot import from ${describeGroup(targetGroup)} (away from core)`,
+        sourceGroup,
+        targetGroup,
+      );
+    }
+  }
+};
+
+const createCrossDomainRules = () => {
+  for (const sourceGroup of moduleGroups) {
+    for (const targetGroup of moduleGroups) {
+      if (sourceGroup.domain === targetGroup.domain) continue;
+
+      const sourceDomainRule = crossDomainRules[sourceGroup.domain];
+      const mayImportFrom = sourceDomainRule?.mayImportFrom ?? [];
+      if (mayImportFrom.includes(targetGroup.domain)) continue;
+      if (isCrossDomainException(sourceGroup, targetGroup)) continue;
+
+      pushRule(
+        `cross-domain-${sourceGroup.domain}-to-${targetGroup.domain}`,
+        `Cross-domain import: ${sourceGroup.domain} cannot import from ${targetGroup.domain}. ${sourceDomainRule?.reason ?? 'Domain rule violation'}`,
+        sourceGroup,
+        targetGroup,
+      );
+    }
+  }
+};
+
+const createPlaneRules = () => {
+  for (const [sourcePlaneName, planeRule] of Object.entries(planeRules)) {
+    if (!planeRule.forbid || planeRule.forbid.length === 0) continue;
+
+    for (const sourceGroup of moduleGroups) {
+      if (sourceGroup.plane !== sourcePlaneName) continue;
+
+      for (const forbiddenPlaneName of planeRule.forbid) {
+        for (const targetGroup of moduleGroups) {
+          if (targetGroup.plane !== forbiddenPlaneName) continue;
+
+          const isException = planeRule.exceptions?.some(
+            (exception) =>
+              matchesGlobPattern(sourceGroup, exception.from) &&
+              matchesGlobPattern(targetGroup, exception.to),
+          );
+          if (isException) continue;
+
+          pushRule(
+            `plane-${sourcePlaneName}-to-${forbiddenPlaneName}-${sourceGroup.key}-to-${targetGroup.key}`,
+            `Plane violation: ${describeGroup(sourceGroup)} cannot import from ${describeGroup(targetGroup)} (${sourcePlaneName} → ${forbiddenPlaneName})`,
+            sourceGroup,
+            targetGroup,
+          );
+        }
+      }
+    }
+  }
+};
+
+const createSinkAndConsumerRules = () => {
+  forbidden.push({
+    name: 'public-is-a-sink',
+    comment: '9-public is a sink (ADR-0028): no internal package imports the published packages',
+    severity: 'error',
+    from: { path: '^packages/(0-framework|1-prisma-cloud)/' },
+    to: { path: '^packages/9-public/' },
+  });
+  forbidden.push({
+    name: 'examples-import-public-only',
+    comment:
+      'Examples and integration tests import only the 9-public packages (ADR-0028), so every example is an honest demo of what a user can write',
+    severity: 'error',
+    from: { path: '^(examples|test)/' },
+    to: { path: '^packages/(0-framework|1-prisma-cloud)/' },
+  });
+  forbidden.push({
+    name: 'packages-cannot-import-examples',
+    comment: 'packages/** cannot import from examples/** or test/**',
+    severity: 'error',
+    from: { path: '^packages/' },
+    to: { path: '^(examples|test)/' },
+  });
+};
+
+createUpwardRules();
+createCrossDomainRules();
+createPlaneRules();
+createSinkAndConsumerRules();
+
+export default {
+  forbidden,
+  options: {
+    doNotFollow: {
+      path: 'node_modules',
+    },
+    tsPreCompilationDeps: true,
+    tsConfig: {
+      fileName: 'tsconfig.depcruise.json',
+    },
+    enhancedResolveOptions: {
+      exportsFields: ['exports'],
+      conditionNames: ['import', 'require', 'node', 'default'],
+    },
+    includeOnly: '^(packages|examples|test)/',
+    exclude: {
+      path: [
+        'node_modules',
+        '\\.test\\.',
+        '\\.test-d\\.',
+        '\\.spec\\.',
+        '__tests__',
+        '/testing/fake',
+        '\\.config\\.',
+        'vitest\\.config',
+        'tsdown\\.config',
+        '\\.d\\.ts$',
+        '\\.d\\.mts$',
+        'dist',
+        'coverage',
+        '/scripts/',
+      ],
+    },
+    reporterOptions: {
+      dot: {
+        collapsePattern: '^packages/[^/]+/[^/]+/[^/]+',
+      },
+      text: {
+        highlightFocused: true,
+      },
+    },
+  },
+};

@@ -25,6 +25,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Lint (Biome check — formatting + lint)
         run: pnpm lint
+      - name: Lint (dependency-cruiser — domain/layer/plane boundaries, ADR-0028)
+        run: pnpm lint:deps
 
   typecheck:
     name: Type Check
