@@ -2,17 +2,19 @@
  * The reusable scheduler node and its firing logic. `cronScheduler` builds a
  * `compute()` whose `jobs` param default is the app's schedule and whose only
  * dependency is `trigger(jobId)`; nothing else about it varies per app.
- * `runScheduler` is the pure, injectable firing loop the entry (and its
+ * `runScheduler` is the pure, injectable firing loop the entrypoint (and its
  * tests) drive.
  */
 import { param } from '@prisma/app';
 import node from '@prisma/app-node';
 import { rpc } from '@prisma/app-rpc';
+import { type } from 'arktype';
 import { compute } from '../compute.ts';
 import { triggerContract } from './contract.ts';
 import type { Schedule } from './schedule.ts';
 import { parseEvery } from './schedule.ts';
-import { jobsSchema } from './standard-schema.ts';
+
+const scheduleSchema = type({ jobId: 'string', every: 'string' }).array();
 
 /**
  * The always-on scheduler service. `schedule` sets only the `jobs` param's
@@ -23,10 +25,10 @@ export function cronScheduler<Ids extends string>(schedule: Schedule<Ids>) {
   return compute({
     name: 'scheduler',
     deps: { trigger: rpc(triggerContract) },
-    params: { jobs: param(jobsSchema, { default: [...schedule.jobs] }) },
+    params: { jobs: param(scheduleSchema, { default: [...schedule.jobs] }) },
     build: node({
       module: new URL('./scheduler-service.mjs', import.meta.url).href,
-      entry: './scheduler-entry.mjs',
+      entry: './scheduler-entrypoint.mjs',
     }),
   });
 }

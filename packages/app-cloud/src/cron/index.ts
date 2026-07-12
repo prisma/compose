@@ -1,9 +1,9 @@
 /**
  * Cron as a driver: an always-on scheduler that depends on a single
- * `trigger(jobId)` endpoint and calls it on a timer (ADR-0020). This entry is
+ * `trigger(jobId)` endpoint and calls it on a timer (ADR-0020). This module is
  * the authoring API — `defineSchedule` + `cronScheduler` + `serveSchedule` +
  * `cron` (the system helper) + the trigger contract. `runScheduler` (the
- * injectable firing loop `cronScheduler`'s entry drives) is exported for
+ * injectable firing loop `cronScheduler`'s entrypoint drives) is exported for
  * tests that need to drive it directly against a real trigger client — see
  * examples/cron's end-to-end firing integration test.
  */

@@ -23,7 +23,7 @@ function shippedSources(): { file: string; text: string }[] {
 }
 
 describe('entry map: authoring + control + prisma-next + testing + cron, no other runtime entry', () => {
-  test("package.json exports '.', './control', './cron', './cron/scheduler-entry', './prisma-next', and './testing'", () => {
+  test("package.json exports '.', './control', './cron', './cron/scheduler-entrypoint', './prisma-next', and './testing'", () => {
     const pkg = JSON.parse(fs.readFileSync(path.join(pkgDir, 'package.json'), 'utf8'));
     // `./package.json` is a conventional manifest export, not a code entry.
     const codeEntries = Object.keys(pkg.exports).filter((k) => k !== './package.json');
@@ -31,7 +31,7 @@ describe('entry map: authoring + control + prisma-next + testing + cron, no othe
       '.',
       './control',
       './cron',
-      './cron/scheduler-entry',
+      './cron/scheduler-entrypoint',
       './prisma-next',
       './testing',
     ]);

@@ -2,10 +2,10 @@
 /**
  * Proof of firing (testing.md § Integration): the real pipeline end to end —
  * defineSchedule -> runScheduler -> the trigger contract over real HTTP ->
- * serveSchedule's jobId dispatch -> the worker. Boots the REAL router entry
- * (`dist/router/server.mjs`, unmodified) via `bootstrapService` against a fake
+ * serveSchedule's jobId dispatch -> the worker. Boots the REAL runner entry
+ * (`dist/runner/server.mjs`, unmodified) via `bootstrapService` against a fake
  * worker on a loopback `Bun.serve`, then drives `runScheduler` with a fake
- * timer over a real trigger client pointed at the booted router. Timers are
+ * timer over a real trigger client pointed at the booted runner. Timers are
  * deterministic — a fake `setTimer` plus awaiting each `call`'s returned
  * promise — never real wall-clock `setInterval`. Run via `bun test`.
  */
@@ -13,22 +13,22 @@ import { describe, expect, test } from 'bun:test';
 import { runScheduler, triggerContract } from '@prisma/app-cloud/cron';
 import { bootstrapService } from '@prisma/app-cloud/testing';
 import { makeClient } from '@prisma/app-rpc';
-import routerService, { schedule } from '../src/router/service.ts';
+import runnerService, { schedule } from '../src/runner/service.ts';
 import { createFakeWorker } from '../testing/fake.ts';
 
-const ROUTER_PORT = 4502;
+const RUNNER_PORT = 4502;
 
 describe('cron pipeline: schedule -> runScheduler -> trigger over HTTP -> serveSchedule -> worker', () => {
-  test('firing each job reaches the matching worker method through the real router entry', async () => {
+  test('firing each job reaches the matching worker method through the real runner entry', async () => {
     const fakeWorker = createFakeWorker();
     const worker = Bun.serve({ port: 0, fetch: fakeWorker.fetch });
 
-    const router = await bootstrapService(routerService, {
-      service: { port: ROUTER_PORT },
+    const runner = await bootstrapService(runnerService, {
+      service: { port: RUNNER_PORT },
       inputs: { worker: { url: worker.url.href } },
     });
 
-    const client = makeClient(triggerContract, router.url);
+    const client = makeClient(triggerContract, runner.url);
 
     const timers: Array<{ fn: () => void; ms: number }> = [];
     let pending: Promise<{ ok: boolean }> = Promise.resolve({ ok: true });

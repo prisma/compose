@@ -20,12 +20,17 @@ compute({
   build:  node({ module: import.meta.url, entry: '../dist/scheduler.js' }),
 });
 
-// The app composes it with a router it writes, inside a Cron system:
-const router = provision('router', myRouter, { ingest: inputs.ingest });
-provision('scheduler', cronScheduler(schedule), { trigger: router.trigger });
+// cron() composes a runner the app writes with the scheduler, under stable ids
+// so the addresses stay cron.runner / cron.scheduler whatever runner is passed:
+const runner = provision('runner', myRunner, { ingest: inputs.ingest });
+provision('scheduler', cronScheduler(schedule), { trigger: runner.trigger });
+
+// The app provisions the whole Cron system; provision() infers the id from the
+// node's name ('cron'), so the id never has to be spelled out:
+provision(cron({ schedule, runner: myRunner }), { ingest: ingest.rpc });
 ```
 
-The user's `router` implements `trigger(jobId)` and dispatches each job id to
+The user's `runner` implements `trigger(jobId)` and dispatches each job id to
 real work; the scheduler stays generic. Its deployment keeps one instance
 always running — it is the clock.
 
@@ -43,8 +48,8 @@ the callee's exposed endpoint — the same shape as a storefront depending on an
 auth service's RPC port. The scheduler is a plain service whose declared
 dependency is a `trigger(jobId)` endpoint; at runtime it `load()`s a typed
 client for it and calls it when a job is due. The scheduler depends on the
-router; the router does not depend on the scheduler. No cycle, no
-"reverse-edge" primitive, and every call path — scheduler to router to target —
+runner; the runner does not depend on the scheduler. No cycle, no
+"reverse-edge" primitive, and every call path — scheduler to runner to target —
 is a declared dependency, visible in the static graph the framework derives
 from source.
 
@@ -63,7 +68,7 @@ schema-typed param exists for
 
 **One clock serves every job.** The job id travels as *data* through the single
 fixed `trigger(jobId)` dependency, so adding a job never adds a service or a
-port — the router's dispatch grows by one case and the `jobs` param by one
+port — the runner's dispatch grows by one case and the `jobs` param by one
 entry. That matters because the scheduler must run always-on: the platform has
 no timer primitive and idle services scale to zero, so the emulated realization
 pays for exactly one warm instance per app — never per job. A native platform
@@ -78,7 +83,7 @@ definition, and a `serve()`-analog that is exhaustive over it:
 ```ts
 export const schedule = defineSchedule({ tick: '60s', mrr: '24h' });
 
-// The router's entry — omitting a job id is a type error, like a missing serve() method:
+// The runner's entry — omitting a job id is a type error, like a missing serve() method:
 export default serveSchedule(service, schedule, {
   tick: () => ingest.tick(),
   mrr:  () => ingest.refreshMrr(),
@@ -86,19 +91,19 @@ export default serveSchedule(service, schedule, {
 ```
 
 `defineSchedule` produces the scheduler's `jobs` param; `serveSchedule` produces
-the router's `trigger` handler. The job ids have one source of truth, checked by
+the runner's `trigger` handler. The job ids have one source of truth, checked by
 the compiler.
 
-**Native later is a realization swap, not an app change.** The router only ever
+**Native later is a realization swap, not an app change.** The runner only ever
 speaks the `trigger(jobId)` interface, and the schedule is static data. A native
 scheduler realization lowers the same `jobs` table into platform triggers that
-call `router.trigger(jobId)` directly, and the always-on service disappears.
+call `runner.trigger(jobId)` directly, and the always-on service disappears.
 Nothing the app authored moves.
 
 ## Consequences
 
 - **Cron composes from existing primitives.** A service depending on a
-  sibling's exposed endpoint, wrapped with a router in a system — nothing new in
+  sibling's exposed endpoint, wrapped with a runner in a system — nothing new in
   the composition model. If an implementation reaches for a new primitive, that
   is a signal the design is being misread.
 - **The scheduler holds no state.** The schedule is config; missed ticks are
@@ -117,7 +122,7 @@ Nothing the app authored moves.
 
 - **A stateful cron server with runtime registration** (`schedule(interval,
   jobId)` RPC). Rejected: the schedule dies with each stateless instance, the
-  call edges vanish from the static graph, and the scheduler↔router dependency
+  call edges vanish from the static graph, and the scheduler↔runner dependency
   becomes cyclic (each calls the other).
 - **One scheduler service per job.** Rejected on cost: every scheduler is an
   always-on instance. Job-id-as-data fans one clock out to any number of jobs.

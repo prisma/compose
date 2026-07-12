@@ -254,6 +254,29 @@ export interface SystemBuilder {
     child: SystemNode<D, E>,
     wiring: Wiring<D>,
   ): ProvisionedRef<E>;
+  /** Provisions an owned resource with its id inferred from the node's `name`. */
+  // biome-ignore lint/suspicious/noExplicitAny: opaque per-contract Cmp — matches RefPort's own `any` bound.
+  provision<C extends Contract<any, any>>(
+    resource: ResourceNode<C>,
+  ): { readonly id: string } & RefPort<C>;
+  /** Registers an owned service with its id inferred from the node's `name`. */
+  provision<E extends Expose>(
+    // biome-ignore lint/suspicious/noExplicitAny: accepts any concrete service node; ServiceNode generics are invariant so `any` is required.
+    service: ServiceNode<any, any, E>,
+  ): ProvisionedRef<E>;
+  /** Registers an owned service (id inferred from `name`), wiring a producer ref into each dependency slot. */
+  provision<D extends Deps, E extends Expose>(
+    // biome-ignore lint/suspicious/noExplicitAny: accepts any concrete service node; ServiceNode generics are invariant so `any` is required.
+    service: ServiceNode<D, any, E>,
+    wiring: Wiring<D>,
+  ): ProvisionedRef<E>;
+  /** Registers an owned child system with its id inferred from the node's `name`. */
+  provision<D extends Deps, E extends Expose>(child: SystemNode<D, E>): ProvisionedRef<E>;
+  /** Registers an owned child system (id inferred from `name`), wiring a producer ref into each declared dep. */
+  provision<D extends Deps, E extends Expose>(
+    child: SystemNode<D, E>,
+    wiring: Wiring<D>,
+  ): ProvisionedRef<E>;
 }
 
 /**

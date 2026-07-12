@@ -2,16 +2,16 @@ import { describe, expect, test } from 'bun:test';
 import { Load, LoadError, system } from '@prisma/app';
 import node from '@prisma/app-node';
 import { contract, rpc } from '@prisma/app-rpc';
+import { type } from 'arktype';
 import { compute } from '../../compute.ts';
 import { triggerContract } from '../contract.ts';
 import { defineSchedule } from '../schedule.ts';
-import { jobIdSchema, okSchema } from '../standard-schema.ts';
 import { cron } from '../system.ts';
 
 const build = node({ module: import.meta.url, entry: '../dist/service.mjs' });
 
 const workerContract = contract({
-  work: rpc({ input: jobIdSchema, output: okSchema }),
+  work: rpc({ input: type({ jobId: 'string' }), output: type({ ok: 'boolean' }) }),
 });
 
 const worker = () =>
@@ -22,9 +22,9 @@ const worker = () =>
     expose: { work: workerContract },
   });
 
-const router = () =>
+const runner = () =>
   compute({
-    name: 'router',
+    name: 'runner',
     deps: { worker: rpc(workerContract) },
     build,
     expose: { trigger: triggerContract },
@@ -33,40 +33,40 @@ const router = () =>
 const schedule = defineSchedule({ tick: '2s' });
 
 describe('cron()', () => {
-  test('Loads a graph with the provisioned router and scheduler, wired to each other and to the worker', () => {
+  test('Loads a graph with the provisioned runner and scheduler, wired to each other and to the worker', () => {
     const root = system('root', {}, ({ provision }) => {
       const w = provision('worker', worker());
-      provision('cron', cron('cron', { schedule, router: router() }), { worker: w.work });
+      provision('cron', cron({ schedule, runner: runner() }), { worker: w.work });
       return {};
     });
 
     const graph = Load(root);
     const ids = graph.nodes.map((n) => n.id);
 
-    expect(ids).toContain('cron.router');
+    expect(ids).toContain('cron.runner');
     expect(ids).toContain('cron.scheduler');
     expect(graph.edges).toContainEqual({
       from: 'worker',
-      to: 'cron.router',
+      to: 'cron.runner',
       input: 'worker',
       kind: 'dependency',
     });
     expect(graph.edges).toContainEqual({
-      from: 'cron.router',
+      from: 'cron.runner',
       to: 'cron.scheduler',
       input: 'trigger',
       kind: 'dependency',
     });
   });
 
-  test("an invalid wiring — the router's own dep left unwired into the cron system — throws at Load", () => {
+  test("an invalid wiring — the runner's own dep left unwired into the cron system — throws at Load", () => {
     const root = system('root', {}, ({ provision }) => {
       provision('worker', worker());
-      // The cron system's boundary dep ("worker", mirroring the router's own
+      // The cron system's boundary dep ("worker", mirroring the runner's own
       // dep) is never wired — bypasses the compile-time check the same way
       // system-composition.test.ts's own error-case tests do, to exercise
       // Load's runtime backstop.
-      provision('cron', cron('cron', { schedule, router: router() }), {} as never);
+      provision('cron', cron({ schedule, runner: runner() }), {} as never);
       return {};
     });
 

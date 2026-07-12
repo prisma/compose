@@ -12,8 +12,8 @@ import { workerContract } from '../worker/contract.ts';
 export const schedule = defineSchedule({ tick: '2s', mrr: '5s' });
 
 export default compute({
-  name: 'router',
+  name: 'runner',
   deps: { worker: rpc(workerContract) },
-  build: node({ module: import.meta.url, entry: '../../dist/router/server.mjs' }),
+  build: node({ module: import.meta.url, entry: '../../dist/runner/server.mjs' }),
   expose: { trigger: triggerContract },
 });

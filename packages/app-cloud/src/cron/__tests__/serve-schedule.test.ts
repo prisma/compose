@@ -11,20 +11,20 @@ interface FakeDeps {
 
 /**
  * A fake RunnableServiceNode exposing triggerContract — stands in for
- * cronScheduler-callable's router node. `target` hydrates through a real
+ * cronScheduler-callable's runner node. `target` hydrates through a real
  * DependencyEnd (not an override cast), so `load()`'s return is a genuine
  * `Loaded<D, P>`, matching production shape.
  */
-function fakeRouterService(load: () => FakeDeps) {
+function fakeRunnerService(load: () => FakeDeps) {
   const target: DependencyEnd<FakeDeps> = dependency({
     name: 'target',
     type: 'fake/target',
     connection: { params: {}, hydrate: load },
   });
   const node = service({
-    name: 'router',
+    name: 'runner',
     extension: 'test/pack',
-    type: 'fake/router-test',
+    type: 'fake/runner-test',
     inputs: { target },
     params: {},
     build: {
@@ -59,10 +59,10 @@ function triggerRequest(jobId: string): Request {
 
 describe('serveSchedule()', () => {
   test('POST /rpc/trigger with a scheduled jobId reaches only that handler, with the loaded deps', async () => {
-    const routerService = fakeRouterService(() => ({ calls: [] }));
+    const runnerService = fakeRunnerService(() => ({ calls: [] }));
     const tickCalls: FakeDeps[] = [];
     const mrrCalls: FakeDeps[] = [];
-    const handler = serveSchedule(routerService, schedule, {
+    const handler = serveSchedule(runnerService, schedule, {
       tick: async (deps) => {
         tickCalls.push(deps.target);
       },
@@ -81,11 +81,11 @@ describe('serveSchedule()', () => {
 
   test('calls service.load() exactly once, regardless of request count', async () => {
     let loadCalls = 0;
-    const routerService = fakeRouterService(() => {
+    const runnerService = fakeRunnerService(() => {
       loadCalls += 1;
       return { calls: [] };
     });
-    const handler = serveSchedule(routerService, schedule, {
+    const handler = serveSchedule(runnerService, schedule, {
       tick: async () => undefined,
       mrr: async () => undefined,
     });
@@ -97,8 +97,8 @@ describe('serveSchedule()', () => {
   });
 
   test('an unknown jobId gets the same error-status contract serve() gives a failing handler', async () => {
-    const routerService = fakeRouterService(() => ({ calls: [] }));
-    const handler = serveSchedule(routerService, schedule, {
+    const runnerService = fakeRunnerService(() => ({ calls: [] }));
+    const handler = serveSchedule(runnerService, schedule, {
       tick: async () => undefined,
       mrr: async () => undefined,
     });

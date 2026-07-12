@@ -218,11 +218,30 @@ function flatten(
   };
 
   const provision = (
-    id: string,
-    child: ServiceNode | ResourceNode | SystemNode,
-    provisionWiring?: Record<string, unknown>,
+    arg0: string | ServiceNode | ResourceNode | SystemNode,
+    arg1?: ServiceNode | ResourceNode | SystemNode | Record<string, unknown>,
+    arg2?: Record<string, unknown>,
     // biome-ignore lint/suspicious/noExplicitAny: SystemBuilder's real overload set is checked at the call site; the collector implementation is untyped by design (see the existing service overloads).
   ): any => {
+    // Two call shapes: an explicit id string in arg0, or an id-less form where
+    // arg0 is the node and its id is inferred from `node.name`. Everything
+    // after this (the "_"/"." and duplicate-id checks, brand-check, address
+    // join) is identical — an inferred id gets validated exactly as a written one.
+    const id = typeof arg0 === 'string' ? arg0 : arg0.name;
+    const child =
+      typeof arg0 === 'string'
+        ? blindCast<
+            ServiceNode | ResourceNode | SystemNode,
+            'explicit-id form: arg1 is the node — the brand-check below rejects a non-node'
+          >(arg1)
+        : arg0;
+    const provisionWiring =
+      typeof arg0 === 'string'
+        ? arg2
+        : blindCast<
+            Record<string, unknown> | undefined,
+            'inferred-id form: arg1 is the optional wiring, not the node'
+          >(arg1);
     if (typeof id !== 'string' || id.length === 0) {
       throw new LoadError(`provision() requires a non-empty id (system "${systemNode.name}").`);
     }

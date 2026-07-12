@@ -186,3 +186,23 @@ system('root-bad', {}, ({ provision }) => {
   provision('consumerX', chargeConsumer, { pay: mid.verify });
   return {};
 });
+
+// ---- id-less provision(): id inferred from node.name, ref type unchanged ----
+
+// MUST compile: the inferred form returns the same ProvisionedRef as the
+// explicit form — the exposed port survives, and both the service+wiring and
+// system+wiring id-less overloads contract-check their wiring.
+system('inferred-ok', {}, ({ provision }) => {
+  const provider = provision(verifyProvider());
+  const mid = provision(midSystem, { verify: provider.verify });
+  provision(verifyConsumer(), { verify: mid.verify });
+  return {};
+});
+
+// MUST be rejected: the id-less form still contract-checks the wiring.
+system('inferred-bad', {}, ({ provision }) => {
+  const provider = provision(verifyProvider());
+  // @ts-expect-error provider.verify carries verifyContract; chargeConsumer's "pay" requires chargeContract
+  provision(chargeConsumer, { pay: provider.verify });
+  return {};
+});

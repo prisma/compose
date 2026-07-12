@@ -77,7 +77,7 @@ resolved from `pack` (`${build.pack}/assemble`) the same entry-anchored way a
 target pack's `/target` is. The descriptor rides into every bundle that
 imports `service.ts`; the assembler never does.
 
-`@prisma/app-cloud/cron` is a **subpath**, not its own package: Prisma Cloud's common Systems each get one entry point under `@prisma/app-cloud` (`/cron` today, more later), so an app that never imports `/cron` never bundles it (tree-shakable by subpath). A System's runnable entries (`scheduler-service.mjs`, `scheduler-entry.mjs`) ship as self-contained dist files that only its own build descriptors reference by path — never imported by the subpath's own authoring barrel.
+`@prisma/app-cloud/cron` is a **subpath**, not its own package: Prisma Cloud's common Systems each get one entry point under `@prisma/app-cloud` (`/cron` today, more later), so an app that never imports `/cron` never bundles it (tree-shakable by subpath). A System's runnable entries (`scheduler-service.mjs`, `scheduler-entrypoint.mjs`) ship as self-contained dist files that only its own build descriptors reference by path — never imported by the subpath's own authoring barrel.
 
 Per the [runtime-agnostic
 principle](../01-principles/architectural-principles.md), no execution-plane entry

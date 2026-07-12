@@ -18,11 +18,11 @@ import { defineConfig } from 'tsdown';
 //    (which may be a shared chunk, not index.mjs itself), so that code's own
 //    directory must be dist/cron/ too.
 //
-// 3. `scheduler-entry` gets its own self-contained pass (mirrors the deleted
-//    `@prisma/app-cron`'s own split): `assemble()` copies a built `entry` out
-//    of its directory by itself, with no sibling chunk file, so a
+// 3. `scheduler-entrypoint` gets its own self-contained pass (mirrors the
+//    deleted `@prisma/app-cron`'s own split): `assemble()` copies a built
+//    `entry` out of its directory by itself, with no sibling chunk file, so a
 //    multi-entry build sharing code across entries would leave that chunk
-//    behind — `scheduler-entry.mjs` must stand alone.
+//    behind — `scheduler-entrypoint.mjs` must stand alone.
 export default defineConfig([
   {
     ...baseConfig,
@@ -42,7 +42,7 @@ export default defineConfig([
   },
   {
     ...baseConfig,
-    entry: { 'scheduler-entry': 'src/cron/scheduler-entry.ts' },
+    entry: { 'scheduler-entrypoint': 'src/cron/scheduler-entrypoint.ts' },
     outDir: 'dist/cron',
     exports: false,
     clean: false,
@@ -52,6 +52,6 @@ export default defineConfig([
     // overrides the base config's `skipNodeModulesBundle` instead of
     // composing with it.
     skipNodeModulesBundle: false,
-    noExternal: [/^@prisma\//],
+    noExternal: [/^@prisma\//, /^arktype/],
   },
 ]);

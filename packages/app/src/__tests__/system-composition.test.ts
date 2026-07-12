@@ -582,3 +582,114 @@ describe('provision ids may not contain "." (the address separator)', () => {
     );
   });
 });
+
+describe('provision() with an inferred id (the id-less overloads)', () => {
+  const rpcContract = providerContract('fake/rpc', { work: true });
+
+  const producer = () =>
+    service({
+      name: 'worker',
+      extension: 'test/pack',
+      type: 'fake/compute',
+      inputs: {},
+      params: {},
+      build,
+      expose: { rpc: rpcContract },
+    });
+
+  const consumer = () =>
+    service({
+      name: 'consumer',
+      extension: 'test/pack',
+      type: 'fake/compute',
+      inputs: {
+        dep: dependency({
+          name: 'dep',
+          type: 'fake/rpc',
+          connection: conn({ url: string() }, (v) => ({ url: v.url })),
+          required: rpcContract,
+        }),
+      },
+      params: {},
+      build,
+    });
+
+  test('provision(node) infers the id from node.name and Loads the same graph as provision(node.name, node)', () => {
+    const inferred = system('shop', {}, ({ provision }) => {
+      provision(producer());
+      return {};
+    });
+    const explicit = system('shop', {}, ({ provision }) => {
+      provision('worker', producer());
+      return {};
+    });
+
+    const inferredIds = Load(inferred)
+      .nodes.map((n) => n.id)
+      .sort();
+    const explicitIds = Load(explicit)
+      .nodes.map((n) => n.id)
+      .sort();
+
+    expect(inferredIds).toEqual(explicitIds);
+    expect(inferredIds).toContain('worker');
+  });
+
+  test('provision(node, wiring) infers the id and wires each producer ref', () => {
+    const root = system('shop', {}, ({ provision }) => {
+      const w = provision(producer());
+      provision(consumer(), { dep: w.rpc });
+      return {};
+    });
+
+    const graph = Load(root);
+
+    expect(graph.nodes.map((n) => n.id)).toContain('consumer');
+    expect(graph.edges).toContainEqual({
+      from: 'worker',
+      to: 'consumer',
+      input: 'dep',
+      kind: 'dependency',
+    });
+  });
+
+  test('two same-named nodes provisioned by inference raise the existing Duplicate provision id error', () => {
+    const root = system('shop', {}, ({ provision }) => {
+      provision(producer());
+      provision(producer());
+      return {};
+    });
+
+    expect(() => Load(root)).toThrow(LoadError);
+    expect(() => Load(root)).toThrow('Duplicate provision id "worker" in system "shop".');
+  });
+
+  test('provision(resource) infers the id from the resource name', () => {
+    const dbResource = resource({
+      name: 'db',
+      extension: 'test/pack',
+      provides: providerContract('fake/db', { url: '' }),
+    });
+    const root = system('shop', {}, ({ provision }) => {
+      provision(dbResource);
+      return {};
+    });
+
+    expect(Load(root).nodes.map((n) => n.id)).toContain('db');
+  });
+
+  test('provision(childSystem) infers the id and still flattens nested addresses', () => {
+    const child = system('child', {}, ({ provision }) => {
+      provision(producer());
+      return {};
+    });
+    const root = system('shop', {}, ({ provision }) => {
+      provision(child);
+      return {};
+    });
+
+    const ids = Load(root).nodes.map((n) => n.id);
+    expect(ids).toContain('child');
+    expect(ids).toContain('child.worker');
+  });
+});

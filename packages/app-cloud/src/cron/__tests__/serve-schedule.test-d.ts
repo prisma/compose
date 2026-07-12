@@ -1,7 +1,7 @@
 /**
  * serveSchedule(service, schedule, handlers) forces an exhaustive handler map
  * keyed by the schedule's own job ids — a missing job id, or a handler for a
- * job id outside the schedule, must not compile. A router service exposing
+ * job id outside the schedule, must not compile. A runner service exposing
  * extra ports beyond `trigger` still type-checks as the `service` argument.
  *
  * Type-only (vitest `--typecheck`, never executed) — mirrors
@@ -24,9 +24,9 @@ const target: DependencyEnd<FakeDeps> = dependency({
   connection: { params: {}, hydrate: () => ({ calls: [] }) },
 });
 const node = service({
-  name: 'router',
+  name: 'runner',
   extension: 'test/pack',
-  type: 'fake/router-test',
+  type: 'fake/runner-test',
   inputs: { target },
   params: {},
   build: {
@@ -38,13 +38,13 @@ const node = service({
   expose: { trigger: triggerContract },
 });
 
-declare const routerService: RunnableServiceNode<
+declare const runnerService: RunnableServiceNode<
   typeof node.inputs,
   typeof node.params,
   { trigger: typeof triggerContract }
 >;
 
-declare const routerServiceWithExtraPort: RunnableServiceNode<
+declare const runnerServiceWithExtraPort: RunnableServiceNode<
   typeof node.inputs,
   typeof node.params,
   { trigger: typeof triggerContract; extra: typeof triggerContract }
@@ -53,7 +53,7 @@ declare const routerServiceWithExtraPort: RunnableServiceNode<
 const schedule = defineSchedule({ tick: '2s', mrr: '5s' });
 
 test('a complete handler map for every schedule job id compiles', () => {
-  serveSchedule(routerService, schedule, {
+  serveSchedule(runnerService, schedule, {
     tick: async (deps) => {
       deps.target.calls.length;
     },
@@ -63,8 +63,8 @@ test('a complete handler map for every schedule job id compiles', () => {
   });
 });
 
-test('a router service exposing an extra port beyond trigger still compiles', () => {
-  serveSchedule(routerServiceWithExtraPort, schedule, {
+test('a runner service exposing an extra port beyond trigger still compiles', () => {
+  serveSchedule(runnerServiceWithExtraPort, schedule, {
     tick: async () => undefined,
     mrr: async () => undefined,
   });
@@ -72,13 +72,13 @@ test('a router service exposing an extra port beyond trigger still compiles', ()
 
 test('a missing handler for a scheduled job id does not compile', () => {
   // @ts-expect-error missing the required "mrr" handler
-  serveSchedule(routerService, schedule, {
+  serveSchedule(runnerService, schedule, {
     tick: async () => undefined,
   });
 });
 
 test('a handler for a job id outside the schedule does not compile', () => {
-  serveSchedule(routerService, schedule, {
+  serveSchedule(runnerService, schedule, {
     tick: async () => undefined,
     mrr: async () => undefined,
     // @ts-expect-error "nope" is not a scheduled job id
@@ -87,7 +87,7 @@ test('a handler for a job id outside the schedule does not compile', () => {
 });
 
 test('a handler that is not a function does not compile', () => {
-  serveSchedule(routerService, schedule, {
+  serveSchedule(runnerService, schedule, {
     // @ts-expect-error "tick" must be a function, not a string
     tick: 'not-a-function',
     mrr: async () => undefined,

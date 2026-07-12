@@ -1,6 +1,6 @@
 /**
  * A fake worker for TESTING a system that depends on it — injected in place
- * of the real one so the router's integration test needs no deployed worker.
+ * of the real one so the runner's integration test needs no deployed worker.
  * Serves the real `workerContract` (so its handler map is type-checked
  * against the same contract the real worker exposes) and records which
  * methods were called, so the test can assert the cron pipeline actually

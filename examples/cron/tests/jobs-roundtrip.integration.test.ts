@@ -10,7 +10,7 @@
 import { describe, expect, test } from 'bun:test';
 import { cronScheduler } from '@prisma/app-cloud/cron';
 import { bootstrapService } from '@prisma/app-cloud/testing';
-import { schedule } from '../src/router/service.ts';
+import { schedule } from '../src/runner/service.ts';
 
 const PORT = 4501;
 
@@ -26,8 +26,8 @@ describe('cronScheduler jobs param: deploy-encode -> boot-decode -> config()', (
         inputs: { trigger: { url: 'http://localhost:1/' } },
       },
       async () => {
-        // Read through an EMPTY-default scheduler, exactly as the real entry
-        // does (scheduler-entry.ts). A full-default node would return
+        // Read through an EMPTY-default scheduler, exactly as the real
+        // entrypoint does (scheduler-entrypoint.ts). A full-default node would return
         // schedule.jobs whether or not the env was stashed, so the assertion
         // would pass even if the roundtrip were broken.
         const freshScheduler = cronScheduler<string>({ jobs: [] });
