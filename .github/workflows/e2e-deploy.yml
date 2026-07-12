@@ -87,6 +87,18 @@ jobs:
         if: always() && steps.deploy.outcome != 'skipped'
         working-directory: examples/storefront-auth
         run: bash ../scripts/destroy-guard.sh "" system.ts "$STOREFRONT_STACK_NAME"
+      - name: Sweep leaked per-run projects
+        # Under stage-as-branch the CLI resolves the per-run Project OUTSIDE
+        # the Alchemy stack, so `destroy --production` doesn't delete it —
+        # each run would leak a project + its auto-default database until the
+        # workspace hits its plan's database cap. This sweep is the
+        # guaranteed teardown (strict `<app>-ci-<run_id>` name pattern only;
+        # prisma-app-state is hard-denied). Plain `always()`: it must run
+        # even when Deploy was skipped or failed early, and each job sweeps
+        # the full pattern set so the first run also clears the backlog.
+        if: always()
+        working-directory: examples/storefront-auth
+        run: bun ../scripts/ci-cleanup.ts storefront-auth pn-widgets
 
   deploy-pn-widgets:
     name: Deploy, verify, destroy (pn-widgets)
@@ -152,3 +164,15 @@ jobs:
         if: always() && steps.deploy.outcome != 'skipped'
         working-directory: examples/pn-widgets
         run: bash ../scripts/destroy-guard.sh "pn-widgets " system.ts "$PN_WIDGETS_STACK_NAME"
+      - name: Sweep leaked per-run projects
+        # Under stage-as-branch the CLI resolves the per-run Project OUTSIDE
+        # the Alchemy stack, so `destroy --production` doesn't delete it —
+        # each run would leak a project + its auto-default database until the
+        # workspace hits its plan's database cap. This sweep is the
+        # guaranteed teardown (strict `<app>-ci-<run_id>` name pattern only;
+        # prisma-app-state is hard-denied). Plain `always()`: it must run
+        # even when Deploy was skipped or failed early, and each job sweeps
+        # the full pattern set so the first run also clears the backlog.
+        if: always()
+        working-directory: examples/pn-widgets
+        run: bun ../scripts/ci-cleanup.ts storefront-auth pn-widgets
