@@ -68,6 +68,10 @@ Four questions decide a name:
 4. **Does it keep the family legible?** Components named for their role read as the
    parts-list of one app — worth more than any single clever standalone name.
 
+These four decide **product names** only. The words for constructs and units — the
+vocabulary a user composes with — need a different rubric of spoken-sentence tests:
+see [vocabulary-tests.md](vocabulary-tests.md).
+
 The payoff of taking the value word for the brand: the precise words stay **free to
 mean exactly what they mean one level down**. The same shape repeats at every layer —
 the user names the left column, writes the middle, and the system consumes the
