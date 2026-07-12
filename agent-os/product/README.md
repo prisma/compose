@@ -3,6 +3,7 @@
 This directory contains artifacts produced by the **Agent OS product planning workflow** (mission, roadmap, tech stack, naming).
 
 - [naming.md](naming.md) — how we name by user value; the piece names (System, Prisma App, Prisma Data) and the compose-from-blocks distribution model.
+- [vocabulary-tests.md](vocabulary-tests.md) — the spoken-sentence rubric for naming units of composition, and the "System" failure record that produced it.
 
 ## Source of truth for design/architecture
 
