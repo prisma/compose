@@ -110,6 +110,11 @@ targets **production**, at the Project level; `--stage <name>` targets a
 - **Id threading.** The resolved `projectId` (and, for a named stage,
   `branchId`) are set as `PRISMA_PROJECT_ID`/`PRISMA_BRANCH_ID` on the
   `alchemy` child process, for both `deploy` and `destroy`.
+- **Targets read the ids at lowering time, not construction.** An extension is
+  constructed twice: once when the CLI loads `prisma-app.config.ts` in the
+  parent — *before* the ids exist — and again in the alchemy child, where they
+  are set. So an extension's constructor must tolerate the ids being absent;
+  only its lowering hooks (which run in the child) may require them.
 - **Destroy is explicit.** `prisma-app destroy` requires `--stage <name>` or
   `--production`; a bare `destroy` is an error, so an omitted or mistyped
   stage can never silently tear down production. `destroy` resolves
