@@ -1,4 +1,4 @@
-import { envSecret } from '@prisma/compose';
+import { secret } from '@prisma/compose';
 import node from '@prisma/compose/node';
 import { compute, postgres } from '@prisma/compose-prisma-cloud';
 import { authContract } from './contract.ts';
@@ -11,11 +11,11 @@ export default compute({
   deps: {
     db: postgres(),
   },
-  // A secret bound to the platform env var `AUTH_SIGNING_SECRET` (ADR-0029):
-  // the framework carries only the NAME; the value is provisioned out-of-band
-  // (in CI, preflight fill-missing provisions it from the runner env).
-  params: {
-    signingSecret: envSecret('AUTH_SIGNING_SECRET'),
+  // A secret NEED (ADR-0029) — nameless here. The root binds it to a platform
+  // env-var name via `envSecret`, and the auth module forwards it in; this
+  // service never knows the name. Read via `secrets().signingKey.expose()`.
+  secrets: {
+    signingKey: secret(),
   },
   build: node({ module: import.meta.url, entry: '../dist/server.mjs' }),
   expose: { rpc: authContract },

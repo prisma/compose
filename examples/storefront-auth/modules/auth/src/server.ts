@@ -8,15 +8,16 @@ import { SQL } from 'bun';
 import service from './service.ts';
 
 const { db } = service.load(); // db: PostgresConfig — the app owns its client
-const { port, signingSecret } = service.config(); // config params are read separately from deps (ADR-0021)
+const { port } = service.config(); // config params are read separately from deps (ADR-0021)
+const { signingKey } = service.secrets(); // signingKey: SecretBox<string> — redacts everywhere but expose()
 
-// The E2E's KNOWN test marker for AUTH_SIGNING_SECRET (matched by the value the
-// deploy provisions — see .github/workflows/e2e-deploy.yml and
-// scripts/e2e-verify.sh). `secretCheck` below proves the secret round-tripped
-// through the platform (pointer row -> boot double-lookup -> injected value) by
-// comparing it to this marker and returning ONLY a boolean — the raw secret
-// value is never exposed. This constant is a non-sensitive demonstration
-// marker, not a real credential.
+// The E2E's KNOWN test marker for the secret the root binds to AUTH_SIGNING_SECRET
+// (matched by the value the deploy provisions — see .github/workflows/e2e-deploy.yml
+// and scripts/e2e-verify.sh). `secretCheck` below proves the secret round-tripped
+// (root envSecret -> pointer row -> boot double-lookup -> SecretBox) by comparing
+// `signingKey.expose()` to this marker and returning ONLY a boolean. `.expose()` is
+// the sole reader; the value is never rendered or logged (SecretBox redacts). This
+// constant is a non-sensitive demonstration marker, not a real credential.
 const EXPECTED_SIGNING_SECRET = 'sk_test_ci_storefront_auth';
 
 // The app constructs its own client from the binding (ADR-0015). Module-scoped,
@@ -47,7 +48,7 @@ const handler = serve(service, {
     },
     // True iff the injected secret matches the expected marker — proof it was
     // provisioned and double-looked-up, without ever returning the value.
-    secretCheck: async () => ({ ok: signingSecret === EXPECTED_SIGNING_SECRET }),
+    secretCheck: async () => ({ ok: signingKey.expose() === EXPECTED_SIGNING_SECRET }),
   },
 });
 export default handler;
