@@ -8,7 +8,16 @@ import { SQL } from 'bun';
 import service from './service.ts';
 
 const { db } = service.load(); // db: PostgresConfig — the app owns its client
-const { port } = service.config(); // config params are read separately from deps (ADR-0021)
+const { port, signingSecret } = service.config(); // config params are read separately from deps (ADR-0021)
+
+// The E2E's KNOWN test marker for AUTH_SIGNING_SECRET (matched by the value the
+// deploy provisions — see .github/workflows/e2e-deploy.yml and
+// scripts/e2e-verify.sh). `secretCheck` below proves the secret round-tripped
+// through the platform (pointer row -> boot double-lookup -> injected value) by
+// comparing it to this marker and returning ONLY a boolean — the raw secret
+// value is never exposed. This constant is a non-sensitive demonstration
+// marker, not a real credential.
+const EXPECTED_SIGNING_SECRET = 'sk_test_ci_storefront_auth';
 
 // The app constructs its own client from the binding (ADR-0015). Module-scoped,
 // so it is one pool per process. idleTimeout closes the pooled connection
@@ -36,6 +45,9 @@ const handler = serve(service, {
         return { ok: false };
       }
     },
+    // True iff the injected secret matches the expected marker — proof it was
+    // provisioned and double-looked-up, without ever returning the value.
+    secretCheck: async () => ({ ok: signingSecret === EXPECTED_SIGNING_SECRET }),
   },
 });
 export default handler;
