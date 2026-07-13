@@ -148,7 +148,10 @@ function isPnPostgresContract(value: unknown): value is PnPostgresContract {
 function buildClient<C extends PnPostgresContract>(contract: C, url: string): Client<C> {
   return pnPostgresRuntime<PnContractOf<C>>({
     contractJson: contract.__cmp.contractJson,
-    pg: resilientPool(url),
+    // Explicit binding, NOT `pg: pool`: the bare form sniffs the pool with
+    // `instanceof`, which breaks whenever a bundle carries two copies of pg
+    // (the pool from one, the runtime's Pool class from the other).
+    binding: { kind: 'pgPool', pool: resilientPool(url) },
   });
 }
 
