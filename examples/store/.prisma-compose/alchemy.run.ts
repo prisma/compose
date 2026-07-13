@@ -23,5 +23,13 @@ export default lower(app, config, {
       dir: '/Users/will/Projects/prisma/compose/.claude/worktrees/prisma-compose-demo-app-07178e/examples/store/modules/storefront/.next/standalone/examples/store/modules/storefront',
       entry: 'server.js',
     },
+    'cron.runner': {
+      dir: '/Users/will/Projects/prisma/compose/.claude/worktrees/prisma-compose-demo-app-07178e/examples/store/modules/promotions/dist/bundle',
+      entry: 'server.mjs',
+    },
+    'cron.scheduler': {
+      dir: '/Users/will/Projects/prisma/compose/.claude/worktrees/prisma-compose-demo-app-07178e/packages/9-public/compose-prisma-cloud/dist/cron/bundle',
+      entry: 'scheduler-entrypoint.mjs',
+    },
   },
 });

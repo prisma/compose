@@ -24,7 +24,9 @@ import storefrontService from '@store/storefront';
 export default module('store', ({ provision }) => {
   const catalog = provision(catalogModule);
   const orders = provision(ordersModule, { deps: { catalog: catalog.rpc } });
+
   provision(storefrontService, { deps: { catalog: catalog.rpc, orders: orders.rpc } });
+
   provision(cron({ schedule, runner: promotionsService }), {
     deps: { catalog: catalog.rpc },
   });

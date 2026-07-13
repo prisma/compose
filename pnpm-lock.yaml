@@ -143,9 +143,15 @@ importers:
 
   examples/store/modules/catalog:
     dependencies:
+      '@prisma-next/postgres':
+        specifier: 0.14.0
+        version: 0.14.0(typanion@3.14.0)(typescript@6.0.3)
       arktype:
         specifier: ^2.2.3
         version: 2.2.3
+      pg:
+        specifier: 8.21.0
+        version: 8.21.0
     devDependencies:
       '@prisma/compose':
         specifier: workspace:0.1.0
@@ -165,12 +171,18 @@ importers:
 
   examples/store/modules/orders:
     dependencies:
+      '@prisma-next/postgres':
+        specifier: 0.14.0
+        version: 0.14.0(typanion@3.14.0)(typescript@6.0.3)
       '@store/catalog':
         specifier: workspace:0.1.0
         version: link:../catalog
       arktype:
         specifier: ^2.2.3
         version: 2.2.3
+      pg:
+        specifier: 8.21.0
+        version: 8.21.0
     devDependencies:
       '@prisma/compose':
         specifier: workspace:0.1.0

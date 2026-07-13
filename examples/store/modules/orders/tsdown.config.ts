@@ -8,7 +8,7 @@ export default defineConfig({
   format: 'esm',
   platform: 'node',
   external: ['bun'],
-  noExternal: [/^@prisma\//, /^@store\//, /^arktype/],
+  noExternal: [/^@prisma\//, /^@prisma-next\//, /^@store\//, /^arktype/, /^pg$/, /^pg-/, /^pathe$/],
   dts: false,
   sourcemap: false,
   clean: true,

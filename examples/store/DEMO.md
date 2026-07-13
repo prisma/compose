@@ -16,10 +16,19 @@ runtime.
 
 ## 3. A module — [modules/catalog/src/module.ts](modules/catalog/src/module.ts)
 
-catalog owns its own Postgres. The consumer never sees it — the module
-exposes only the `rpc` port. Then [src/service.ts](modules/catalog/src/service.ts):
-the service declares `deps: { db: postgres() }` and what it exposes; that's
-the whole declaration.
+catalog owns its own Postgres — a **Prisma Next-typed** one. Three pieces:
+
+- [contract.prisma](modules/catalog/contract.prisma): the data schema. Emit
+  turns it into a typed contract; `migration plan` authors
+  [migrations/](modules/catalog/migrations), which the deploy applies before
+  the service ever starts — no `create table if not exists` in app code.
+- [src/service.ts](modules/catalog/src/service.ts): the service declares
+  `deps: { db: pnPostgres(catalogData) }` and what it exposes; that's the
+  whole declaration.
+- [src/server.ts](modules/catalog/src/server.ts): `load()` hands it the typed
+  client — `db.orm.public.Product.where({ id }).first()`. No SQL strings, no
+  row mappers, and the same contract types the resource end (the deploy
+  refuses to wire a service against a database with a different contract).
 
 ## 4. The interesting edge — [modules/orders/src/module.ts](modules/orders/src/module.ts)
 

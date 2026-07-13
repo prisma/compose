@@ -40,12 +40,17 @@ typed RPC contracts. The whole composition is [module.ts](module.ts).
 ## What each piece shows
 
 - [modules/catalog](modules/catalog) — a self-contained Module: a contract
-  (`listProducts`/`getProduct`), a compute service, and a Postgres it owns and
-  seeds. Consumers wire only the exposed `rpc` port.
+  (`listProducts`/`getProduct`), a compute service, and a **Prisma
+  Next-typed Postgres** it owns. The data schema is
+  [contract.prisma](modules/catalog/contract.prisma); the deploy applies
+  [migrations/](modules/catalog/migrations) before the service starts, and
+  `load()` hands the server a typed client — queries like
+  `db.orm.public.Product.where({ id }).first()`, no SQL, no row mapping.
+  Consumers wire only the exposed `rpc` port.
 - [modules/orders](modules/orders) — a Module with a **boundary input**: it
-  owns its Postgres but declares `deps: { catalog }`, so whoever provisions it
-  supplies a producer of `catalogContract`. `placeOrder` calls catalog to
-  price the order at placement time.
+  owns its (also Prisma Next-typed) Postgres but declares `deps: { catalog }`,
+  so whoever provisions it supplies a producer of `catalogContract`.
+  `placeOrder` calls catalog to price the order at placement time.
 - [modules/storefront](modules/storefront) — a real Next.js app. The page
   calls both typed clients; the Buy button is a server action that places an
   order.

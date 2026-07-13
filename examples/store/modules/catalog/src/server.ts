@@ -1,19 +1,15 @@
 import { serve } from '@prisma/compose/rpc';
-import { SQL } from 'bun';
 import type { Product } from './contract.ts';
 import service from './service.ts';
 
-const { db } = service.load(); // db: PostgresConfig — the app owns its client
+// load() hydrates `db` into the typed Prisma Next client (ADR-0022) — no SQL,
+// no row mapping; queries are typed by contract.prisma's emitted contract.
+const { db } = service.load();
 const { port } = service.config();
 
-// One pool per process. idleTimeout closes the pooled connection before
-// Compute's scale-to-zero drops it, so the next request reconnects instead of
-// erroring (FT-5219).
-const sql = new SQL({ url: db.url, max: 1, idleTimeout: 10 });
-
-// A Prisma Postgres direct connection is closed when it goes idle. Bun.SQL
-// surfaces that as an async error with no awaiter, which would otherwise
-// crash the process into a restart loop.
+// A Prisma Postgres direct connection is dropped when it idles / the service
+// scales to zero; the lazy pool reconnects on the next query. Surface those
+// as logs, not an uncaught crash into a 502 restart loop.
 process.on('uncaughtException', (err) => console.error('uncaughtException', err));
 process.on('unhandledRejection', (err) => console.error('unhandledRejection', err));
 
@@ -39,71 +35,38 @@ const SEED: Product[] = [
   { id: 'croissant', name: 'Croissant', description: 'Baked every morning.', priceCents: 400 },
 ];
 
-await sql`
-  create table if not exists products (
-    id text primary key,
-    name text not null,
-    description text not null,
-    price_cents integer not null
-  )
-`;
-// Single-row table holding the current special of the day; the promotions
-// cron job advances it via rotateSpecial.
-await sql`
-  create table if not exists special (
-    singleton boolean primary key default true,
-    product_id text not null
-  )
-`;
+// Idempotent boot seed. The schema itself is NOT created here — the deploy's
+// migration step applied migrations/ before this service ever started.
 for (const p of SEED) {
-  await sql`
-    insert into products (id, name, description, price_cents)
-    values (${p.id}, ${p.name}, ${p.description}, ${p.priceCents})
-    on conflict (id) do nothing
-  `;
+  await db.orm.public.Product.upsert({ create: p, update: {} });
 }
-await sql`
-  insert into special (singleton, product_id)
-  values (true, ${SEED[0].id})
-  on conflict (singleton) do nothing
-`;
-
-const toProduct = (row: Record<string, unknown>): Product => ({
-  id: String(row.id),
-  name: String(row.name),
-  description: String(row.description),
-  priceCents: Number(row.price_cents),
-});
+await db.orm.public.Special.upsert({ create: { id: 1, productId: SEED[0].id }, update: {} });
 
 const handler = serve(service, {
   rpc: {
-    listProducts: async () => {
-      const rows = await sql`select * from products order by name`;
-      return { products: rows.map(toProduct) };
-    },
-    getProduct: async ({ id }) => {
-      const rows = await sql`select * from products where id = ${id}`;
-      return { product: rows.length > 0 ? toProduct(rows[0]) : null };
-    },
+    listProducts: async () => ({
+      products: await db.orm.public.Product.orderBy((p) => p.name.asc()).all(),
+    }),
+    getProduct: async ({ id }) => ({
+      product: (await db.orm.public.Product.where({ id }).first()) ?? null,
+    }),
     getSpecial: async () => {
-      const rows = await sql`
-        select p.* from special s join products p on p.id = s.product_id
-      `;
-      return { product: rows.length > 0 ? toProduct(rows[0]) : null };
+      const special = await db.orm.public.Special.where({ id: 1 }).first();
+      if (!special) return { product: null };
+      const product = await db.orm.public.Product.where({ id: special.productId }).first();
+      return { product: product ?? null };
     },
     rotateSpecial: async () => {
-      const products = await sql`select * from products order by name`;
+      const products = await db.orm.public.Product.orderBy((p) => p.name.asc()).all();
       if (products.length === 0) return { product: null };
 
-      const current = await sql`select product_id from special`;
-      const currentIdx = products.findIndex(
-        (p: Record<string, unknown>) => p.id === current[0]?.product_id,
-      );
-      const next = toProduct(products[(currentIdx + 1) % products.length]);
-      await sql`
-        insert into special (singleton, product_id) values (true, ${next.id})
-        on conflict (singleton) do update set product_id = ${next.id}
-      `;
+      const special = await db.orm.public.Special.where({ id: 1 }).first();
+      const currentIdx = products.findIndex((p) => p.id === special?.productId);
+      const next = products[(currentIdx + 1) % products.length];
+      await db.orm.public.Special.upsert({
+        create: { id: 1, productId: next.id },
+        update: { productId: next.id },
+      });
       return { product: next };
     },
   },
