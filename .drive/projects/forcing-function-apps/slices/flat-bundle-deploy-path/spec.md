@@ -10,29 +10,37 @@ configuration. This slice makes `assemble()` and `package()` honor
 validates it and adds its boot wrapper. Evidence + per-bug detail:
 [`../../bugs-deploy-assembly.md`](../../bugs-deploy-assembly.md).
 
-## Amendment (2026-07-13, post-review) — one generic adapter, no Next special-casing
+## Amendment (2026-07-13, post-review) — nextjs() does the documented copy
 
-Will's PR review (CHANGES_REQUESTED) rejected the over-built assembly. Superseding
-design, all on this PR:
+Will's PR review (CHANGES_REQUESTED) rejected the over-built assembly. After a
+long design discussion (research into the canonical Next standalone deploy;
+empirical spikes on `outputFileTracingIncludes` and a flat-boot test), the
+settled design, all on this PR:
 
-- **One build adapter, no node/nextjs split.** Generalize `node()` to
-  `{ module, entry, dir? }`: `dir` is the compiled-output root shipped under
-  `bundle/`, defaulting to `dirname(entry)`. Every existing `node()` caller is
-  unchanged (dir defaults); Next just passes an explicit `dir` (its standalone
-  root). `BuildAdapter` gains an optional `dir`. **Delete the nextjs adapter.**
-- **No adapter-side tree logic.** No static/public copy, no reserved-`main`
-  check (user code lives under `bundle/`, our `main.mjs` at the root — they can't
-  collide), no `bunfig`.
-- **`bunfig.toml` moves to the Compute packager** as a default artifact file
-  (disabling bun auto-install is universal for Compute, not a build concern).
-- **Ship the Next flatten as a framework utility**, not a hand-maintained app
-  script: `prisma-compose next-standalone` copies `.next/static` + `public/`
-  into the standalone app dir (located by finding server.js). The storefront
-  example calls it in one line (`next build && prisma-compose next-standalone`);
-  delete `flatten-standalone.mjs`.
+- **Two adapters, each earns its place.** `node({ module, entry })` — plain
+  service, ships the built entry under `bundle/`. `nextjs({ module, appDir })` —
+  Next app: `assemble()` performs the *documented* Next standalone deploy
+  (Next docs: `cp -r public .next/standalone/ && cp -r .next/static
+  .next/standalone/.next/`), run at deploy so the app's build is just
+  `next build`. `node()` drops the `dir` param it briefly grew.
+- **No guessing, no laundering.** The app's deep location in the standalone tree
+  (from `outputFileTracingRoot`) is *found* by locating `server.js`, never the
+  old `../../../..`. node_modules ships as `next build` produced it; a symlinked
+  (non-hoisted) install is the packager's hard error — the same misconfig
+  crashes the standalone server at boot, so it must be a flat install (the repo
+  already sets `node-linker=hoisted`).
+- **`bunfig.toml` moves to the Compute packager** — a universal Compute default,
+  not build-adapter logic.
 - **`import.meta.url` stays** — the wrapper *is* the service module bundled
-  (core-model.md:106); removing it is a separate boot-protocol ADR.
-- Rewrite the `deploy.ts` `address` doc comment in plain English.
+  (core-model.md:106).
+- Rewrite the `deploy.ts` `address`/`cwd` doc comments in plain English.
+- Rejected on the way here: a generic `node({dir})` (deletes the nextjs adapter —
+  Will wanted it kept); a `prisma-compose next-standalone` CLI subcommand (wrong
+  altitude on the deploy CLI); a hand-maintained flatten script (a smell); a
+  flat-bundle restructure (a novel invention off the trodden path).
+
+Verified: full typecheck + tests; the real storefront tree assembles, packages,
+and the assembled `server.js` boots and serves a static chunk (HTTP 200).
 
 The sections below are the pre-review design; where they conflict, this
 amendment wins.

@@ -18,14 +18,12 @@ export type AnyContract = Contract<any, any>;
 export interface BuildAdapter {
   /** The extension package that provides the build descriptor, e.g. "@prisma/compose/node". */
   readonly extension: string;
-  /** The build descriptor's node ID within its extension, e.g. "node". */
+  /** The build descriptor's node ID within its extension, e.g. "node" · "nextjs". */
   readonly type: string;
   /** The authoring module's `import.meta.url` — every other path on this descriptor resolves relative to `dirname(module)`. */
   readonly module: string;
-  /** The app's built entry point, resolved relative to `dirname(module)` — a path within `dir`. */
+  /** The app's built runnable, resolved relative to `dirname(module)` and interpreted by the type's build descriptor (e.g. "node": a server file; "nextjs": located in the standalone tree). */
   readonly entry: string;
-  /** The compiled-output directory shipped as the deploy bundle, resolved relative to `dirname(module)`. Defaults to `entry`'s own directory when omitted. */
-  readonly dir?: string;
 }
 
 /**
