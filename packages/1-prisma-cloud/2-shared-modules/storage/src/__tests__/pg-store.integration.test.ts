@@ -165,6 +165,15 @@ suite('pg-store integration (local Postgres)', () => {
     expect(page2.IsTruncated).toBe(false);
   });
 
+  test('LIST treats the prefix literally — an underscore is not a wildcard (F3)', async () => {
+    // Under LIKE, prefix "a_" would match "axb"; starts_with must not.
+    for (const key of ['a_b', 'a_c', 'axb']) {
+      await client.send(new PutObjectCommand({ Bucket: BUCKET, Key: key, Body: TEXT.encode(key) }));
+    }
+    const res = await client.send(new ListObjectsV2Command({ Bucket: BUCKET, Prefix: 'a_' }));
+    expect((res.Contents ?? []).map((c) => c.Key)).toEqual(['a_b', 'a_c']);
+  });
+
   test('presigned PUT then presigned GET round-trip', async () => {
     const putUrl = await getSignedUrl(
       client,

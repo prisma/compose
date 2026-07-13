@@ -25,9 +25,10 @@ function etagOf(bytes: Uint8Array): string {
   return `"${createHash('sha256').update(bytes).digest('hex')}"`;
 }
 
-/** bytea comes back as a Node Buffer (a Uint8Array); normalise the type. */
+/** bytea comes back as a Node Buffer (a Uint8Array). Fail closed on anything else rather than returning wrong bytes. */
 function toBytes(value: unknown): Uint8Array {
-  return value instanceof Uint8Array ? value : new Uint8Array(0);
+  if (value instanceof Uint8Array) return value;
+  throw new TypeError(`expected bytea to decode as Uint8Array, got ${typeof value}`);
 }
 
 const TRANSIENT_FRAGMENTS = [
@@ -145,13 +146,15 @@ class PgObjectStore implements ObjectStore {
     const maxKeys = opts.maxKeys ?? DEFAULT_MAX_KEYS;
     const token = opts.continuationToken;
     const limit = maxKeys + 1; // one extra row tells us whether more remain
+    // starts_with is a literal prefix match — unlike LIKE, `_`/`%` in the prefix
+    // are not wildcards, matching S3's literal-prefix semantics.
     const rows =
       token === undefined
         ? await this.sql`select key from objects
-                         where bucket = ${bucket} and key like ${prefix} || '%'
+                         where bucket = ${bucket} and starts_with(key, ${prefix})
                          order by key limit ${limit}`
         : await this.sql`select key from objects
-                         where bucket = ${bucket} and key like ${prefix} || '%' and key > ${token}
+                         where bucket = ${bucket} and starts_with(key, ${prefix}) and key > ${token}
                          order by key limit ${limit}`;
     const keys: string[] = rows.map((r: { key: string }) => r.key);
     const isTruncated = keys.length > maxKeys;
