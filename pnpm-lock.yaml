@@ -106,9 +106,6 @@ importers:
       '@aws-sdk/client-s3':
         specifier: ^3.1085.0
         version: 3.1085.0
-      '@aws-sdk/s3-request-presigner':
-        specifier: ^3.1085.0
-        version: 3.1085.0
       '@prisma/compose':
         specifier: workspace:0.1.0
         version: link:../../packages/9-public/compose

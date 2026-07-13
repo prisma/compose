@@ -1,18 +1,17 @@
 import { module } from '@prisma/compose';
 import { storage } from '@prisma/compose-prisma-cloud/storage';
-import smokeService from './src/smoke/service.ts';
+import blobsService from './src/blobs/service.ts';
 
 /**
- * The storage example deploy root: the `storage()` module (its own Postgres,
- * minted credentials, and the s3-store service) plus an in-deployment `smoke`
- * consumer whose `blob` slot is wired to the module's `store` port. The smoke
- * service reaches the store over its deployed HTTPS endpoint and runs the
- * aws-sdk op suite internally — the minted creds arrive via the binding and
- * never leave the deployment (design-notes decision 10).
+ * The storage example: a small blob store/serve app backed by the `storage()`
+ * module. The module owns its Postgres, its minted S3 credentials, and the
+ * s3-store service; the `blobs` app wires the module's `store` port into its
+ * own `s3()` slot, so it talks to the store over the store's HTTP endpoint with
+ * credentials that arrive through the binding.
  *
  * A closed root: no boundary argument, no return — it only provisions.
  */
 export default module('storage-example', ({ provision }) => {
   const store = provision(storage());
-  provision(smokeService, { deps: { blob: store.store } });
+  provision(blobsService, { deps: { store: store.store } });
 });
