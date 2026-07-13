@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { ConfigDeclaration, Contract } from '@internal/core';
-import { configOf, hydrateSync, isNode, number, param, string } from '@internal/core';
+import { configOf, envSecret, hydrateSync, isNode, number, param, string } from '@internal/core';
 import { type } from 'arktype';
 import { compute, postgres, postgresContract } from '../index.ts';
 import { configKey, deserialize, encode } from '../serializer.ts';
@@ -9,13 +9,14 @@ import { bootstrapService } from '../testing.ts';
 function scalarDeclaration(
   owner: ConfigDeclaration['owner'],
   name: string,
-  opts: { secret?: boolean; optional?: boolean; default?: unknown } = {},
+  opts: { secret?: boolean; optional?: boolean; default?: unknown; external?: string } = {},
 ): ConfigDeclaration {
   return {
     owner,
     name,
     schema: { vendor: '@prisma/compose' },
     secret: opts.secret ?? false,
+    ...(opts.external !== undefined ? { external: opts.external } : {}),
     optional: opts.optional ?? false,
     default: opts.default,
   };
@@ -158,7 +159,7 @@ describe('compute({ expose })', () => {
 });
 
 describe("the config serializer (shared by run() and /control's serialize)", () => {
-  test("configKey: lone-service root (address '') is unprefixed — owner ▸ name", () => {
+  test("configKey: lone-service root (address '') has no address segment — COMPOSE_ ▸ owner ▸ name", () => {
     const app = compute({
       name: 'test-service',
       deps: {
@@ -169,8 +170,8 @@ describe("the config serializer (shared by run() and /control's serialize)", () 
     const [dbUrl, port] = configOf(app);
     if (dbUrl === undefined || port === undefined) throw new Error('expected config declarations');
 
-    expect(configKey('', dbUrl)).toBe('DB_URL');
-    expect(configKey('', port)).toBe('PORT');
+    expect(configKey('', dbUrl)).toBe('COMPOSE_DB_URL');
+    expect(configKey('', port)).toBe('COMPOSE_PORT');
   });
 
   test('configKey: a module-addressed service prefixes with its address segment', () => {
@@ -184,7 +185,7 @@ describe("the config serializer (shared by run() and /control's serialize)", () 
     const [dbUrl] = configOf(app);
     if (dbUrl === undefined) throw new Error('expected a config declaration');
 
-    expect(configKey('auth', dbUrl)).toBe('AUTH_DB_URL');
+    expect(configKey('auth', dbUrl)).toBe('COMPOSE_AUTH_DB_URL');
   });
 
   test('configKey: a connection-end input keys the same way as a resource input', () => {
@@ -204,7 +205,7 @@ describe("the config serializer (shared by run() and /control's serialize)", () 
       default: undefined,
     };
 
-    expect(configKey('storefront', decl)).toBe('STOREFRONT_AUTH_URL');
+    expect(configKey('storefront', decl)).toBe('COMPOSE_STOREFRONT_AUTH_URL');
     void app;
   });
 
@@ -217,7 +218,7 @@ describe("the config serializer (shared by run() and /control's serialize)", () 
       build,
     });
 
-    await withEnv({ DB_URL: 'postgres://x', PORT: '4001' }, () => {
+    await withEnv({ COMPOSE_DB_URL: 'postgres://x', COMPOSE_PORT: '4001' }, () => {
       const config = deserialize(app, '');
       expect(config).toEqual({ service: { port: 4001 }, inputs: { db: { url: 'postgres://x' } } });
     });
@@ -256,7 +257,7 @@ describe("the config serializer (shared by run() and /control's serialize)", () 
       build,
     });
 
-    await withEnv({ PORT: 'not-a-number' }, () => {
+    await withEnv({ COMPOSE_PORT: 'not-a-number' }, () => {
       expect(() => deserialize(app, '')).toThrow(/port/);
     });
   });
@@ -300,17 +301,24 @@ describe('compute().run(address, boot) → load() — the round trip', () => {
     });
 
     let loaded: unknown;
-    await withEnv({ AUTH_DB_URL: 'postgres://x', AUTH_PORT: '4001', DB_URL: '', PORT: '' }, () =>
-      app.run('auth', async () => {
-        loaded = app.load();
-      }),
+    await withEnv(
+      {
+        COMPOSE_AUTH_DB_URL: 'postgres://x',
+        COMPOSE_AUTH_PORT: '4001',
+        COMPOSE_DB_URL: '',
+        COMPOSE_PORT: '',
+      },
+      () =>
+        app.run('auth', async () => {
+          loaded = app.load();
+        }),
     );
 
     expect(loaded).toEqual({ db: { url: 'postgres://x' } });
     expect(app.config()).toEqual({ port: 4001 });
   });
 
-  test("a lone-service deploy (address '') reads and re-stashes the same unprefixed keys", async () => {
+  test("a lone-service deploy (address '') reads and re-stashes the same COMPOSE_-prefixed keys", async () => {
     const app = compute({
       name: 'test-service',
       deps: {
@@ -320,7 +328,7 @@ describe('compute().run(address, boot) → load() — the round trip', () => {
     });
 
     let loaded: unknown;
-    await withEnv({ DB_URL: 'postgres://y', PORT: '' }, () =>
+    await withEnv({ COMPOSE_DB_URL: 'postgres://y', COMPOSE_PORT: '' }, () =>
       app.run('', async () => {
         loaded = app.load();
       }),
@@ -335,7 +343,7 @@ describe('compute().run(address, boot) → load() — the round trip', () => {
     const app = compute({ name: 'test-service', deps: { db }, build });
 
     let loaded: unknown;
-    await withEnv({ DB_URL: 'postgres://dual', PORT: '' }, () =>
+    await withEnv({ COMPOSE_DB_URL: 'postgres://dual', COMPOSE_PORT: '' }, () =>
       app.run('', async () => {
         loaded = app.load();
       }),
@@ -367,7 +375,7 @@ describe('bootstrapService(service, config, boot) — the in-process integration
 
     let deps: unknown;
     let cfg: unknown;
-    await withEnv({ DB_URL: '', PORT: '' }, () =>
+    await withEnv({ COMPOSE_DB_URL: '', COMPOSE_PORT: '' }, () =>
       bootstrapService(
         app,
         { service: { port: 4321 }, inputs: { db: { url: 'postgres://bootstrap' } } },
@@ -387,7 +395,7 @@ describe('bootstrapService(service, config, boot) — the in-process integration
 
     let deps: unknown;
     let cfg: unknown;
-    await withEnv({ DB_URL: 'stale', PORT: 'stale' }, () =>
+    await withEnv({ COMPOSE_DB_URL: 'stale', COMPOSE_PORT: 'stale' }, () =>
       bootstrapService(
         app,
         { service: { port: 5555 }, inputs: { db: { url: 'postgres://fresh' } } },
@@ -432,7 +440,7 @@ describe('compute().load()', () => {
       build,
     });
 
-    await withEnv({ DB_URL: 'postgres://z', PORT: '' }, () => {
+    await withEnv({ COMPOSE_DB_URL: 'postgres://z', COMPOSE_PORT: '' }, () => {
       const first = app.load();
       const second = app.load();
 
@@ -480,7 +488,7 @@ describe('importing a service module', () => {
     // top-level does nothing but construct nodes (pure).
     expect(fixture.imported).toBe(true);
 
-    const loaded = await withEnv({ DB_URL: 'postgres://fixture', PORT: '' }, () =>
+    const loaded = await withEnv({ COMPOSE_DB_URL: 'postgres://fixture', COMPOSE_PORT: '' }, () =>
       fixture.default.load(),
     );
 
@@ -526,5 +534,105 @@ describe('structured params + target-owned serialization (ADR-0018/0019)', () =>
     // a service-own literal, by contrast, is JSON-encoded
     expect(encode('service', 3000)).toBe('3000');
     expect(encode('service', [{ jobId: 'tick' }])).toBe('[{"jobId":"tick"}]');
+  });
+});
+
+describe('secret pointer rows + double-lookup (ADR-0029)', () => {
+  const secretApp = (opts?: { optional?: boolean }) =>
+    compute({
+      name: 'ingest',
+      deps: {},
+      params: {
+        stripeKey:
+          opts?.optional === true
+            ? envSecret('STRIPE_SECRET_KEY', { optional: true })
+            : envSecret('STRIPE_SECRET_KEY'),
+      },
+      build,
+    });
+
+  const stripeKeyDecl = () => {
+    const decl = configOf(secretApp()).find((d) => d.name === 'stripeKey');
+    if (decl === undefined) throw new Error('expected a stripeKey declaration');
+    return decl;
+  };
+
+  test('configOf reports the external platform name; the generated key is COMPOSE_-prefixed', () => {
+    expect(configOf(secretApp())).toContainEqual(
+      scalarDeclaration('service', 'stripeKey', { secret: true, external: 'STRIPE_SECRET_KEY' }),
+    );
+    expect(configKey('', stripeKeyDecl())).toBe('COMPOSE_STRIPEKEY');
+  });
+
+  test('the COMPOSE_ key holds the external NAME; the value lives only in that platform var', async () => {
+    const app = secretApp();
+    await withEnv(
+      {
+        [configKey('', stripeKeyDecl())]: 'STRIPE_SECRET_KEY',
+        STRIPE_SECRET_KEY: 'sk_live_abc',
+        COMPOSE_PORT: '',
+      },
+      () => {
+        expect(deserialize(app, '').service['stripeKey']).toBe('sk_live_abc');
+      },
+    );
+  });
+
+  test('a required secret whose platform var is unset fails loudly, naming both keys', async () => {
+    const app = secretApp();
+    await withEnv(
+      { [configKey('', stripeKeyDecl())]: 'STRIPE_SECRET_KEY', COMPOSE_PORT: '' },
+      () => {
+        expect(() => deserialize(app, '')).toThrow(/COMPOSE_STRIPEKEY.*STRIPE_SECRET_KEY/);
+      },
+    );
+  });
+
+  test('a required secret whose platform var is empty ("") fails loudly — empty is unresolved', async () => {
+    const app = secretApp();
+    await withEnv(
+      {
+        [configKey('', stripeKeyDecl())]: 'STRIPE_SECRET_KEY',
+        STRIPE_SECRET_KEY: '',
+        COMPOSE_PORT: '',
+      },
+      () => {
+        expect(() => deserialize(app, '')).toThrow(/STRIPE_SECRET_KEY/);
+      },
+    );
+  });
+
+  test('an optional secret whose platform var is unset resolves to undefined', async () => {
+    const app = secretApp({ optional: true });
+    await withEnv(
+      { [configKey('', stripeKeyDecl())]: 'STRIPE_SECRET_KEY', COMPOSE_PORT: '' },
+      () => {
+        expect(deserialize(app, '').service['stripeKey']).toBeUndefined();
+      },
+    );
+  });
+
+  test('a secret survives run() → stash → config(): the address-free re-read double-looks-up identically (the stash trap)', async () => {
+    const app = secretApp();
+    let cfg: unknown;
+    await withEnv(
+      {
+        // address-keyed pointer row + the user-provisioned external var:
+        COMPOSE_INGEST_STRIPEKEY: 'STRIPE_SECRET_KEY',
+        STRIPE_SECRET_KEY: 'sk_live_trap',
+        COMPOSE_INGEST_PORT: '',
+        // address-free keys stash (over)writes — tracked so withEnv restores them:
+        COMPOSE_STRIPEKEY: '',
+        COMPOSE_PORT: '',
+      },
+      () =>
+        app.run('ingest', async () => {
+          cfg = app.config();
+        }),
+    );
+    // If stash re-emitted the resolved VALUE instead of the pointer, the
+    // address-free deserialize would read it as a pointer to a non-existent var
+    // and config() would have thrown — this asserts the pointer survives.
+    expect(cfg).toEqual({ port: 3000, stripeKey: 'sk_live_trap' });
   });
 });

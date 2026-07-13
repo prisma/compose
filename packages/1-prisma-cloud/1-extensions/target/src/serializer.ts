@@ -69,8 +69,35 @@ export const configKey = (
 ): string => {
   const segments = address.split('.').filter((s) => s.length > 0);
   const owner = d.owner === 'service' ? [] : [d.owner.input];
-  return [...segments, ...owner, d.name].join('_').toUpperCase();
+  // Every generated key lives in the framework's reserved COMPOSE_ namespace
+  // (ADR-0029), so it can never collide with — and silently overwrite — a
+  // user-provisioned platform var (e.g. a secret's external name). The poison
+  // keys DATABASE_URL(_POOLED) are written directly in control.ts, not here, so
+  // they stay unprefixed (they are the platform's own names).
+  return ['COMPOSE', ...segments, ...owner, d.name].join('_').toUpperCase();
 };
+
+/**
+ * A secret bound to a platform env-var NAME (ADR-0029): its config row holds
+ * that name as a pointer, and the value lives ONLY in the external platform var.
+ * A `secret` param WITHOUT `external` — e.g. a database url valued by its
+ * producer — is not a pointer; it carries its value the ordinary way.
+ */
+function isPointerParam(param: ConfigParam): boolean {
+  return param.secret === true && param.external !== undefined;
+}
+
+/**
+ * The string stored in a param's config row — shared by deploy `serialize` and
+ * boot `stash` so writer and reader cannot drift. A pointer secret stores its
+ * external platform-var NAME (never a value); every other param encodes its
+ * value.
+ */
+export function storedForm(d: ParamEntry, value: unknown): string {
+  const external = d.param.external;
+  if (d.param.secret === true && external !== undefined) return external;
+  return encode(d.owner, value);
+}
 
 /**
  * Typed value → its stored string. Service-own literals are JSON-encoded; a
@@ -104,11 +131,31 @@ function coerce(raw: string | undefined, d: ParamEntry, key: string): unknown {
     throw new Error(`missing required config param "${d.name}" (env ${key})`);
   }
   try {
-    return standardValidateSync(d.param.schema, decode(d.owner, raw));
+    // A pointer secret's raw value is the plain platform string (already the
+    // value, not JSON) — validate it directly; everything else decodes by owner.
+    const decoded = isPointerParam(d.param) ? raw : decode(d.owner, raw);
+    return standardValidateSync(d.param.schema, decoded);
   } catch (cause) {
     const message = cause instanceof Error ? cause.message : String(cause);
     throw new Error(`invalid value for config param "${d.name}" (env ${key}): ${message}`);
   }
+}
+
+/**
+ * Reads a param's stored form from the environment. A non-secret (or a secret
+ * with no platform binding) reads its key directly. A pointer secret
+ * double-looks-up (ADR-0029): the COMPOSE_ key holds the external platform-var
+ * NAME, and the value lives ONLY in the external platform var. The label names both
+ * keys so a missing required secret fails loudly and unambiguously.
+ */
+function readParam(d: ParamEntry, key: string): { raw: string | undefined; label: string } {
+  const external = d.param.external;
+  if (d.param.secret === true && external !== undefined) {
+    const stored = process.env[key];
+    const name = stored !== undefined && stored !== '' ? stored : external;
+    return { raw: process.env[name], label: `${key} → ${name}` };
+  }
+  return { raw: process.env[key], label: key };
 }
 
 /**
@@ -121,8 +168,8 @@ export const deserialize = (node: ServiceNode, address: string): Config => {
   const inputs: Record<string, Record<string, unknown>> = {};
 
   for (const d of paramEntries(node)) {
-    const key = configKey(address, d);
-    const value = coerce(process.env[key], d, key);
+    const { raw, label } = readParam(d, configKey(address, d));
+    const value = coerce(raw, d, label);
     if (d.owner === 'service') {
       service[d.name] = value;
     } else {
@@ -150,7 +197,10 @@ export const stash = (node: ServiceNode, config: Config): void => {
     const value =
       d.owner === 'service' ? config.service[d.name] : config.inputs[d.owner.input]?.[d.name];
     if (value === undefined) continue;
-    process.env[configKey('', d)] = encode(d.owner, value);
+    // A pointer secret re-emits its external-name POINTER (never the resolved
+    // value), so the address-free deserialize double-looks-up identically — the
+    // value stays only in the external platform var. storedForm holds this rule.
+    process.env[configKey('', d)] = storedForm(d, value);
   }
 };
 

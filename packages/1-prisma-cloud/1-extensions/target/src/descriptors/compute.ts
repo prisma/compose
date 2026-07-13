@@ -4,7 +4,7 @@ import type { ServiceNode } from '@internal/core';
 import type { NodeDescriptor } from '@internal/core/config';
 import * as Prisma from '@internal/lowering';
 import * as Effect from 'effect/Effect';
-import { configKey, encode, paramEntries } from '../serializer.ts';
+import { configKey, paramEntries, storedForm } from '../serializer.ts';
 import { DEFAULT_REGION, projectIdOf, type ResolvedCloudOptions, validateName } from './shared.ts';
 
 export function computeDescriptor(o: ResolvedCloudOptions): NodeDescriptor {
@@ -26,9 +26,10 @@ export function computeDescriptor(o: ResolvedCloudOptions): NodeDescriptor {
         };
       }),
 
-    // A dependency-input value may be a provisioning ref, not a literal
-    // string — `encode` passes it through untouched so it keeps carrying the
-    // ordering edge; only service-own literals are actually stringified.
+    // storedForm keys each row: a service-own literal is JSON-stringified, a
+    // dependency-input provisioning ref passes through untouched (keeping its
+    // ordering edge), and a secret bound to a platform name writes only that
+    // name (a pointer), never a value (ADR-0029).
     serialize: ({ address, node }, provisioned, config) =>
       Effect.gen(function* () {
         const records = [];
@@ -40,7 +41,9 @@ export function computeDescriptor(o: ResolvedCloudOptions): NodeDescriptor {
             yield* Prisma.EnvironmentVariable(`${key}-var`, {
               projectId: projectIdOf(provisioned),
               key,
-              value: encode(d.owner, value),
+              // A secret bound to a platform name writes only that NAME (a
+              // pointer), never a value (ADR-0029); storedForm holds the rule.
+              value: storedForm(d, value),
               class: o.branchId ? 'preview' : 'production',
               ...(o.branchId !== undefined ? { branchId: o.branchId } : {}),
             }),
