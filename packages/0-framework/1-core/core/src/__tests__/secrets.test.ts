@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { blindCast } from '@internal/foundation/casts';
 import { Load } from '../graph.ts';
-import type { Secrets } from '../node.ts';
-import { envSecret, isSecretSource, module, secret, service } from '../node.ts';
+import type { SecretSource, Secrets } from '../node.ts';
+import { envSecret, isSecretSource, module, resource, secret, service } from '../node.ts';
+import { providerContract } from './helpers.ts';
 
 const build = {
   extension: '@prisma/compose/node',
@@ -102,8 +103,12 @@ describe('Load validates secret wiring', () => {
     expect(() => Load(root)).toThrow(/deployed as the root/);
   });
 
-  test('a resource may not receive secrets', () => {
-    // A non-secret value wired into a secret slot is rejected.
+  test('a lone service that declares secret slots is rejected at Load', () => {
+    const auth = svc('auth', { signingKey: secret() });
+    expect(() => Load(auth)).toThrow(/no enclosing scope to bind them/);
+  });
+
+  test('a non-secret value wired into a secret slot is rejected', () => {
     const auth = svc('auth', { signingKey: secret() });
     expect(() =>
       Load(
@@ -113,5 +118,81 @@ describe('Load validates secret wiring', () => {
         }),
       ),
     ).toThrow(/non-secret value/);
+  });
+
+  test('a resource may not receive secrets', () => {
+    const db = resource({
+      name: 'db',
+      extension: 'test/pack',
+      provides: providerContract('fake/db', { url: '' }),
+    });
+    expect(() =>
+      Load(
+        module('root', ({ provision }) => {
+          // The resource provision overload takes no `secrets`; inject it to
+          // exercise the runtime rejection (load-module.ts).
+          provision(
+            db,
+            blindCast<
+              { id: string },
+              'a resource takes no secrets — inject one to hit the runtime check'
+            >({ id: 'db', secrets: { k: envSecret('K') } }),
+          );
+        }),
+      ),
+    ).toThrow(/resource has no secret slots/);
+  });
+
+  test('a declared secret slot left unbound in a provision fails at Load', () => {
+    const auth = svc('auth', { signingKey: secret() });
+    expect(() =>
+      Load(
+        module('root', ({ provision }) => {
+          provision(
+            auth,
+            blindCast<
+              { id: string; secrets: { signingKey: SecretSource } },
+              'deliberately omit the binding to exercise the runtime not-bound check'
+            >({ id: 'auth', secrets: {} }),
+          );
+        }),
+      ),
+    ).toThrow(/is not bound/);
+  });
+
+  test('an extra secrets key naming a non-slot fails at Load', () => {
+    const auth = svc('auth', { signingKey: secret() });
+    expect(() =>
+      Load(
+        module('root', ({ provision }) => {
+          provision(
+            auth,
+            blindCast<
+              { id: string; secrets: { signingKey: SecretSource } },
+              'inject an extra non-slot key to exercise the runtime extra-key check'
+            >({ id: 'auth', secrets: { signingKey: envSecret('K'), bogus: envSecret('B') } }),
+          );
+        }),
+      ),
+    ).toThrow(/"bogus", which is not a secret slot/);
+  });
+
+  test('branded copies keep used-tracking per-slot — the SAME source bound to two slots, forwarding only one, flags the other unused', () => {
+    const inner = svc('inner', { key: secret() });
+    const m = module('m', { secrets: { a: secret(), b: secret() } }, ({ secrets, provision }) => {
+      // Forward only `a`; `b` is never forwarded.
+      provision(inner, { id: 'inner', secrets: { key: secrets.a } });
+    });
+    // The SAME source object is bound to BOTH a and b. Without the per-slot
+    // branded copies, forwarding secrets.a would alias-mark b used too; with
+    // them, b is correctly flagged as never forwarded.
+    const src = envSecret('SHARED');
+    expect(() =>
+      Load(
+        module('root', ({ provision }) => {
+          provision(m, { id: 'm', secrets: { a: src, b: src } });
+        }),
+      ),
+    ).toThrow(/declares secret "b" but never forwards/);
   });
 });
