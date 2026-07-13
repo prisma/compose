@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { configOf, envSecret, number, param, string } from '../config.ts';
-import { dependency, service } from '../node.ts';
+import { configOf, envSecret, number, param, provisionManifest, string } from '../config.ts';
+import { Load } from '../graph.ts';
+import { dependency, module, service } from '../node.ts';
 import { conn, scalarDeclaration } from './helpers.ts';
 
 const build = {
@@ -231,5 +232,69 @@ describe('configOf reports external', () => {
         external: 'BILLING_KEY',
       }),
     ]);
+  });
+});
+
+describe('provisionManifest', () => {
+  test('aggregates pointer secrets across services; excludes non-secret and secret-without-external', () => {
+    const ingest = service({
+      name: 'ingest',
+      extension: 'test/pack',
+      type: 'fake/app',
+      inputs: {},
+      params: {
+        stripeKey: envSecret('STRIPE_SECRET_KEY'), // pointer secret → manifest
+        rawSecret: string({ secret: true }), // secret, no binding → excluded
+        port: number({ default: 3000 }), // non-secret → excluded
+      },
+      build,
+    });
+    const web = service({
+      name: 'web',
+      extension: 'test/pack',
+      type: 'fake/app',
+      inputs: {},
+      params: { sendgrid: envSecret('SENDGRID_API_KEY', { optional: true }) },
+      build,
+    });
+    const graph = Load(
+      module('app', {}, (h) => {
+        h.provision(ingest, { id: 'ingest' });
+        h.provision(web, { id: 'web' });
+        return {};
+      }),
+    );
+
+    const manifest = provisionManifest(graph);
+    expect(manifest).toHaveLength(2);
+    expect(manifest).toContainEqual({
+      external: 'STRIPE_SECRET_KEY',
+      optional: false,
+      serviceAddress: 'ingest',
+    });
+    expect(manifest).toContainEqual({
+      external: 'SENDGRID_API_KEY',
+      optional: true,
+      serviceAddress: 'web',
+    });
+  });
+
+  test('is empty when no service binds a pointer secret', () => {
+    const svc = service({
+      name: 'x',
+      extension: 'test/pack',
+      type: 'fake/app',
+      inputs: {},
+      params: { port: number({ default: 3000 }), raw: string({ secret: true }) },
+      build,
+    });
+    const graph = Load(
+      module('app', {}, (h) => {
+        h.provision(svc, { id: 'x' });
+        return {};
+      }),
+    );
+
+    expect(provisionManifest(graph)).toEqual([]);
   });
 });

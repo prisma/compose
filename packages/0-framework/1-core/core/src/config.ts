@@ -8,6 +8,7 @@
  * never touches an environment.
  */
 import type { StandardSchemaV1 } from '@standard-schema/spec';
+import type { Graph } from './graph-types.ts';
 import type { ServiceNode } from './node.ts';
 
 /**
@@ -138,6 +139,37 @@ export function configOf(root: ServiceNode): readonly ConfigDeclaration[] {
     });
   }
 
+  return entries;
+}
+
+/** One pointer secret in the app's provision manifest — a platform env-var NAME that must exist before deploy (ADR-0029). */
+export interface ManifestEntry {
+  /** The platform env-var name the secret is bound to (its `external` facet). */
+  readonly external: string;
+  /** Whether the binding is optional — an absent optional secret is not a deploy failure. */
+  readonly optional: boolean;
+  /** The graph address of the service that declares the binding (for diagnostics). */
+  readonly serviceAddress: string;
+}
+
+/**
+ * The app's provision manifest: every pointer secret (a secret param bound to a
+ * platform env-var NAME via `envSecret`) across the graph's services. Pure graph
+ * introspection over `configOf`, so it is TARGET-AGNOSTIC — a deploy target's
+ * preflight consumes it to verify each name exists on the platform (ADR-0029).
+ * Non-secret params and secrets with no binding (e.g. a producer-valued database
+ * url) are excluded — only external-bearing secret declarations are manifest.
+ */
+export function provisionManifest(graph: Graph): readonly ManifestEntry[] {
+  const entries: ManifestEntry[] = [];
+  for (const { id, node } of graph.nodes) {
+    if (node.kind !== 'service') continue;
+    for (const decl of configOf(node)) {
+      if (decl.secret && decl.external !== undefined) {
+        entries.push({ external: decl.external, optional: decl.optional, serviceAddress: id });
+      }
+    }
+  }
   return entries;
 }
 

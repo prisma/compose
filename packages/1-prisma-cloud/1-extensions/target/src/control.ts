@@ -15,6 +15,7 @@ import { prismaNextDescriptor } from './descriptors/prisma-next.ts';
 import type { ResolvedCloudOptions } from './descriptors/shared.ts';
 import { PgWarmProvider } from './pg-warm-resource.ts';
 import { PnMigrationProvider } from './pn-migration-resource.ts';
+import { runPreflight } from './preflight.ts';
 
 export { prismaState };
 
@@ -77,6 +78,11 @@ export const prismaCloud = (opts: PrismaCloudOptions = {}): ExtensionDescriptor 
 
     providers: () =>
       asProvidersLayer(Layer.mergeAll(Prisma.providers(), PgWarmProvider(), PnMigrationProvider())),
+
+    // Deploy-time prerequisite check (ADR-0029): verify every pointer secret in
+    // the provision manifest exists for the resolved stage, filling absent-but-
+    // in-shell names via a direct API POST — before any stack file or Alchemy.
+    preflight: (input) => runPreflight(input),
 
     // Runs once per lowering, before any service: references the CLI-ensured
     // Project, with the poison DATABASE_URL variables written immediately so
