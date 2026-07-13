@@ -209,6 +209,11 @@ function withFacets<S extends StandardSchemaV1>(
     );
   }
   if (opts.external !== undefined) {
+    if (opts.external.length === 0) {
+      throw new Error(
+        "envSecret name must be a non-empty string, e.g. envSecret('STRIPE_SECRET_KEY').",
+      );
+    }
     if (opts.external.startsWith(COMPOSE_PREFIX)) {
       throw new Error(
         `envSecret name "${opts.external}" may not start with "${COMPOSE_PREFIX}" — that prefix is ` +
@@ -264,11 +269,6 @@ export function envSecret(
   name: string,
   opts: { readonly optional?: boolean } = {},
 ): ConfigParam<StandardSchemaV1<string, string>> {
-  if (typeof name !== 'string' || name.length === 0) {
-    throw new Error(
-      "envSecret() requires a non-empty platform env-var name, e.g. envSecret('STRIPE_SECRET_KEY').",
-    );
-  }
   return withFacets(stringSchema, {
     secret: true,
     external: name,

@@ -148,7 +148,7 @@ describe('envSecret', () => {
   });
 
   test('rejects an empty name at construction', () => {
-    expect(() => envSecret('')).toThrow(/non-empty platform env-var name/);
+    expect(() => envSecret('')).toThrow(/must be a non-empty string/);
   });
 
   test('rejects the reserved COMPOSE_ prefix', () => {
@@ -159,11 +159,21 @@ describe('envSecret', () => {
     expect(() => envSecret('DATABASE_URL')).toThrow(/reserved/);
     expect(() => envSecret('DATABASE_URL_POOLED')).toThrow(/reserved/);
   });
+
+  test('withFacets is the chokepoint — an empty external dodged in via string() is still caught', () => {
+    expect(() => string({ external: '' } as never)).toThrow(/must be a non-empty string/);
+  });
 });
 
 describe('secret forbids default (runtime guard)', () => {
   test('string({ secret: true, default }) throws', () => {
     expect(() => string({ secret: true, default: 'x' } as never)).toThrow(
+      /secret config param cannot declare a `default`/,
+    );
+  });
+
+  test('number({ secret: true, default }) throws', () => {
+    expect(() => number({ secret: true, default: 1 } as never)).toThrow(
       /secret config param cannot declare a `default`/,
     );
   });

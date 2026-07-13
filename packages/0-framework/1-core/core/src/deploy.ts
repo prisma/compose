@@ -327,12 +327,14 @@ export function lowering(
         );
       }
 
-      const unbound = firstUnboundServiceSecret(node as ServiceNode);
+      // One cast for both uses below — folded so the ratchet sees no new site.
+      const service = node as ServiceNode;
+      const unbound = firstUnboundServiceSecret(service);
       if (unbound !== undefined) {
         return yield* Effect.fail(unboundSecretError(id, unbound));
       }
       const provisioned = yield* descriptor.provision(ctx);
-      const typedConfig = buildConfig(node as ServiceNode, id, graph, lowered);
+      const typedConfig = buildConfig(service, id, graph, lowered);
       const serialized = yield* descriptor.serialize(ctx, provisioned, typedConfig);
       const bundle = opts.bundles[id];
       if (bundle === undefined) {
