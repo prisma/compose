@@ -115,10 +115,9 @@ other register.
 **MakerKit** was a standalone-mascot name that sat outside the family. **Prisma
 App** scored perfectly on the value tests — it *is* the value word — and failed
 every referential frame the first week the team lived with it: "I'm working on
-this feature in App" refers to nothing. The cause is exact: **the tool was named
-after its output.** "App" is the user's artifact word, so every mention of the
-tool parses as a mention of the artifact, and no prefix rescues it — "Prisma app"
-is already what everyone calls an app built with Prisma. The fix kept the value
+this feature in App" refers to nothing. The mechanism: "App" is the user's
+artifact word — the most common noun in every conversation around the tool — so
+the workbench and bare-token frames had nothing to grab. The fix kept the value
 word where it was always right (**Prisma App is the artifact**) and gave the tool
 a referential token.
 
