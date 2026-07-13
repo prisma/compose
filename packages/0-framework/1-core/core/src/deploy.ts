@@ -109,6 +109,10 @@ export interface AssembleInput {
   readonly build: BuildAdapter;
   /** Extra patterns to inline into the wrapper besides `@prisma/compose*` (e.g. the app's own workspace packages). */
   readonly wrapperNoExternal?: readonly RegExp[];
+  /** The node's graph address — collision-free by construction; keys deploy-owned wrapper staging (`.prisma-compose/artifacts/<address>/`). */
+  readonly address: string;
+  /** The deploy CLI's cwd — root for `.prisma-compose/`, same root the CLI writes its own generated state under. */
+  readonly cwd: string;
 }
 
 /** package()'s product. */

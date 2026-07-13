@@ -231,7 +231,7 @@ export async function run(argv: readonly string[], deps: RunDeps = {}): Promise<
   // 6. Assemble each service through the config's registries.
   let assembled: Awaited<ReturnType<typeof assembleServices>>;
   try {
-    assembled = await assembleServices(graph, config, deps.runAssembler);
+    assembled = await assembleServices(graph, config, cwd, deps.runAssembler);
   } catch (error) {
     if (args.command === 'destroy' && error instanceof Error) {
       throw new CliError(

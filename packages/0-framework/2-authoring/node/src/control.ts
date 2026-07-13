@@ -17,6 +17,12 @@
  *
  * All paths are file-relative (ADR-0004): `build.entry` resolves against
  * `dirname(build.module)`, never against a discovered package directory.
+ *
+ * The wrapper's output name is dictated, not discovered (ADR-0005): a tsdown
+ * object entry (`{ main: serviceModule }`) makes tsdown emit `main.mjs`
+ * directly — no readdir/regex/rename. Staging is deploy-owned, keyed by the
+ * node's graph address (`<cwd>/.prisma-compose/artifacts/<address>/`) —
+ * never inside `node_modules`, never inside the user's build output.
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -52,15 +58,15 @@ export async function assemble(input: AssembleInput): Promise<Bundle> {
     );
   }
 
-  // Beside the built entry — file-relative to the resolved entry, not a
-  // discovered package dir (ADR-0004).
-  const bundleDir = path.join(path.dirname(entryPath), 'bundle');
+  // Deploy-owned, address-keyed staging (ADR-0005) — never inside
+  // node_modules, never inside the user's build output.
+  const bundleDir = path.join(input.cwd, '.prisma-compose', 'artifacts', input.address);
   // The entry must survive the `rm` below to reach the `copyFile` after it —
-  // if it resolved inside the reserved output dir, the rm would delete it
+  // if it resolved inside the reserved staging dir, the rm would delete it
   // first and the copy would fail with a bare ENOENT instead of a named error.
   if (entryPath === bundleDir || entryPath.startsWith(bundleDir + path.sep)) {
     throw new Error(
-      `the build adapter's entry ("${entryPath}") resolves inside its own output dir ` +
+      `the build adapter's entry ("${entryPath}") resolves inside the deploy staging dir ` +
         `("${bundleDir}") — Prisma App reserves that directory for the assembled bundle and ` +
         'clears it before every assemble; point entry at your build output elsewhere.',
     );
@@ -69,7 +75,7 @@ export async function assemble(input: AssembleInput): Promise<Bundle> {
   await fs.promises.mkdir(bundleDir, { recursive: true });
 
   await build({
-    entry: [serviceModule],
+    entry: { main: serviceModule },
     outDir: bundleDir,
     format: 'esm',
     platform: 'node',
@@ -86,12 +92,10 @@ export async function assemble(input: AssembleInput): Promise<Bundle> {
     config: false,
   });
 
-  const built = fs.readdirSync(bundleDir).find((f) => /^service\.m?js$/.test(f));
-  if (built === undefined) {
-    throw new Error(`tsdown produced no service.js in ${bundleDir}`);
+  const wrapperPath = path.join(bundleDir, 'main.mjs');
+  if (!fs.existsSync(wrapperPath)) {
+    throw new Error(`tsdown produced no main.mjs in ${bundleDir}`);
   }
-  const wrapperFile = built.endsWith('.mjs') ? 'main.mjs' : 'main.js';
-  await fs.promises.rename(path.join(bundleDir, built), path.join(bundleDir, wrapperFile));
 
   const entryFile = path.basename(entryPath);
   await fs.promises.copyFile(entryPath, path.join(bundleDir, entryFile));
