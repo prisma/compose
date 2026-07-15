@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { blindCast } from '@internal/foundation/casts';
 import * as Effect from 'effect/Effect';
 import * as Layer from 'effect/Layer';
 import type { ExtensionDescriptor, PrismaAppConfig } from '../app-config.ts';
@@ -60,8 +61,10 @@ const defaultBuild: BuildAdapter = {
 const app = <D extends Deps, P extends Params = Record<never, never>>(
   type: string,
   inputs: D,
-  // biome-ignore lint/suspicious/noExplicitAny: test helper default; the empty map satisfies every P callers actually pass.
-  params: P = {} as any,
+  params: P = blindCast<
+    P,
+    'test helper default; the empty map satisfies every P callers actually pass'
+  >({}),
   build: BuildAdapter = defaultBuild,
 ) =>
   service({
