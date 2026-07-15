@@ -1,9 +1,5 @@
 # ADR-0005: Users build the app; the framework assembles the deploy artifact
 
-## Status
-
-Accepted
-
 ## Decision
 
 The framework never bundles or transforms the **application's code**. The user's

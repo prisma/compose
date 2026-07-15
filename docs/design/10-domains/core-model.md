@@ -64,6 +64,7 @@ The boundary is decided; only the carve is deferred.
 | `@prisma/compose-prisma-cloud` | `compute()` (declares a service; carries `run`/`load`), `postgres()` (`{ name }` identity or `{ client }` dependency, by argument shape) + `postgresContract`, `http()` | `@prisma/compose` only |
 | `@prisma/compose/rpc` | the RPC Contract kind — `contract()`, `rpc()`, `serve()`, the typed client binding (see [`connection-contracts.md`](connection-contracts.md)) | `@prisma/compose` + a Standard Schema validator |
 | `@prisma/compose-prisma-cloud/cron` | cron as a driver (see [ADR-0020](../90-decisions/ADR-0020-scheduled-work-is-a-driver-not-a-resource.md)) — `defineSchedule`, `serveSchedule`, `cronScheduler`, `cron()`, `triggerContract` | `@prisma/compose` + `app-node` + `app-rpc` |
+| `@prisma/compose-prisma-cloud/storage` | S3-compatible object storage as a module (S3 wire protocol on Compute + Postgres `bytea`; see [`README`](../../../packages/1-prisma-cloud/2-shared-modules/storage/README.md)) — `storage()`, `s3()` + `s3Contract`/`S3Config`, `storageService`; `/storage/testing` adds the `createPgStore` + `startStorageServer` local stand-in | `@prisma/compose` + `app-node` + `@prisma/compose-prisma-cloud` |
 | `@prisma/compose-prisma-cloud/target` | `prismaCloud()` | `@internal/lowering`, `alchemy`, `effect` |
 | `@prisma/compose/node` · `@prisma/compose/nextjs` (build adapters) | `node()` · `nextjs()` — the authoring **descriptor** (lean, rides in `service.ts`), stamped with the adapter's own `pack` | `@prisma/compose` only |
 | `@prisma/compose/node/assemble` · `@prisma/compose/nextjs/assemble` | the deploy-side assembler (called by `package`) | `node:fs`/framework tooling — deploy machine only |
@@ -208,10 +209,10 @@ type TypeOf<T extends ParamType> = T extends "string" ? string : number
 // A declared config param — pure data. The declaration does double duty: the
 // pack validates raw values against `type` at boot, and TypeScript derives the
 // hydrate/load input types from it — the definition object ENFORCES the final
-// param input types.
+// param input types. A param is never secret — a secret is its own forwardable
+// slot, declared with secret() and read with secrets() (ADR-0029).
 interface ConfigParam<T extends ParamType = ParamType> {
   readonly type: T
-  readonly secret?: boolean                    // redacted in any introspection output
   readonly optional?: boolean
   readonly default?: TypeOf<T>
 }
@@ -687,13 +688,13 @@ At boot, the deployed artifact runs the bootstrap, which calls the node's
 
 ```ts
 // The enumerable config surface of a service — derivable from the graph alone,
-// nothing booted, no platform keys. The introspection artifact (secrets marked,
-// values absent). Physical locations are the pack's business.
+// nothing booted, no platform keys. The introspection artifact (values absent).
+// Physical locations are the pack's business. Secrets are not here — they live
+// on their own slot (ADR-0029).
 interface ConfigDeclaration {
   readonly owner: "service" | { readonly input: string }
   readonly name: string              // "url" · "port"
   readonly type: ParamType
-  readonly secret: boolean
   readonly optional: boolean
   readonly default: string | number | undefined
 }
@@ -718,8 +719,7 @@ Core and user code contain **zero** direct environment reads: the pack's `run` a
 `load` are the single sanctioned readers for its platform (both through the one
 serializer), and a local test injects fakes and never touches an environment
 (below). The typed `Config` is core's interception point — a harness can inspect it
-or redact by the `secret` flag on the shape — and `configOf` keeps the config
-surface enumerable without booting.
+directly — and `configOf` keeps the config surface enumerable without booting.
 
 **Config validation is the pack's, because it is the pack reversing its own
 serialization.** "Is this value present and the right type" is exactly the check
@@ -765,7 +765,7 @@ export function postgres(opts?: { name: string }): unknown {
   if (opts?.name !== undefined) return resource({ name: opts.name, pack: "@prisma/compose-prisma-cloud", provides: postgresContract })
   return dependency({
     type: "postgres",
-    connection: { params: { url: { type: "string", secret: true } }, hydrate: (v) => v },
+    connection: { params: { url: { type: "string" } }, hydrate: (v) => v },
     required: postgresContract,
   })
 }

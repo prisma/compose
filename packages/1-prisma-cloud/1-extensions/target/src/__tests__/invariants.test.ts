@@ -51,11 +51,17 @@ function builtEntryGraph(entryFileName: string): string {
 }
 
 describe('entry map: authoring + control + prisma-next + testing, no other runtime entry', () => {
-  test("package.json exports '.', './control', './prisma-next', and './testing' (cron lives in @internal/cron)", () => {
+  test("package.json exports '.', './connection', './control', './prisma-next', and './testing' (cron lives in @internal/cron)", () => {
     const pkg = JSON.parse(fs.readFileSync(path.join(pkgDir, 'package.json'), 'utf8'));
     // `./package.json` is a conventional manifest export, not a code entry.
     const codeEntries = Object.keys(pkg.exports).filter((k) => k !== './package.json');
-    expect(codeEntries.sort()).toEqual(['.', './control', './prisma-next', './testing']);
+    expect(codeEntries.sort()).toEqual([
+      '.',
+      './connection',
+      './control',
+      './prisma-next',
+      './testing',
+    ]);
   });
 });
 
@@ -85,7 +91,7 @@ describe('invariant 2: authoring imports stay lean (core + pack)', () => {
 });
 
 describe('invariant 4: environment touches are confined to the config serializer and the control factory', () => {
-  test("the process-env token appears only in serializer.ts (deserialize's one read, stash's one write) and control.ts's prismaCloud() (the extension factory's env read, ADR-0017 — PRISMA_WORKSPACE_ID + optional PRISMA_REGION; ADR-0019 — PRISMA_PROJECT_ID + optional PRISMA_BRANCH_ID)", () => {
+  test("the process-env token appears only in serializer.ts (param read+stash, secret double-lookup+stash), control.ts's prismaCloud(), preflight.ts (shell token + fill-missing lookup), and compute.ts (boot exposes the resolved port as PORT) (the extension factory's env read, ADR-0017 — PRISMA_WORKSPACE_ID + optional PRISMA_REGION; ADR-0019 — PRISMA_PROJECT_ID + optional PRISMA_BRANCH_ID)", () => {
     const sources = shippedSources();
     expect(sources.length).toBeGreaterThan(0);
 
@@ -96,8 +102,10 @@ describe('invariant 4: environment touches are confined to the config serializer
     });
 
     expect(hits.sort((a, b) => a.file.localeCompare(b.file))).toEqual([
+      { file: 'compute.ts', count: 1 },
       { file: 'control.ts', count: 4 },
-      { file: 'serializer.ts', count: 2 },
+      { file: 'preflight.ts', count: 2 },
+      { file: 'serializer.ts', count: 6 },
     ]);
   });
 });
