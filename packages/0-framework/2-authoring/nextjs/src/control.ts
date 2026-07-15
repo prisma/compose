@@ -1,33 +1,29 @@
 /**
- * The extension's control entry (ADR-0017): `nextjsBuild()` returns the
- * descriptor `prisma-compose.config.ts` lists — one build control, node ID
- * "nextjs". Deploy-only (ADR-0005): assembles a Next.js `output:
- * "standalone"` build into the bundle dir packaged at deploy. Run `next
- * build` first. The heavy tsdown import lives only here, never in the
- * authoring entry.
+ * The extension's control entry (ADR-0017): `nextjsBuild()` returns the build
+ * descriptor `prisma-compose.config.ts` lists. Deploy-only (ADR-0005): the user
+ * runs `next build` (`output: "standalone"`); `assemble` then performs the
+ * *documented* Next standalone deploy — it ships the standalone tree and copies
+ * in the client assets Next deliberately omits (`.next/static`, `public/`) — and
+ * adds the framework's boot wrapper. This is the canonical `cp` step from the
+ * Next docs, run at deploy so no app needs a build-script for it.
  *
- * Next's standalone tree omits the static assets and `public/`, so this
- * copies them in. The bundle entry is NOT server.js directly: the app's
- * Prisma App wrapper (the service module — declarations only, whose node
- * carries its own run()) is bundled to `main.mjs` next to server.js, so the
- * relative import resolves inside the artifact and the Prisma App boot loop
- * runs first (bootstrap.js imports main.mjs, then dynamically imports
- * server.js — see @prisma/compose/deploy's PackageInput).
+ * It does not guess: the app's location inside the standalone tree (deep, when
+ * `outputFileTracingRoot` is the monorepo root) is *found* by locating
+ * `server.js`, never computed from a hardcoded depth. It does not launder:
+ * node_modules is shipped exactly as `next build` produced it, so a symlinked
+ * (non-hoisted) node_modules is the packager's hard error — the same
+ * misconfiguration crashes the standalone server at boot, so it must be a flat
+ * install (npm, or pnpm/bun with a hoisted node-linker).
  *
- * Prisma App ships no build step, but it does own the artifact envelope —
- * bootstrap.js + compute.manifest.json + the deterministic tar are printed
- * by the platform extension's `package()` at deploy, not here.
+ * Artifact layout: `<workDir>/main.mjs` (our wrapper) + `<workDir>/bundle/`
+ * (the standalone tree, with static/public copied in). The packager adds
+ * `bootstrap.js` + the manifest at the root; bootstrap imports main.mjs, whose
+ * run() dynamically imports `./bundle/<found server.js>`.
  *
- * Requires a hoisted node_modules (see the repo `.npmrc`): pnpm's default
- * isolated layout hides Next's peers (e.g. styled-jsx) under `.pnpm`, and the
- * flattened standalone `next` copy can't resolve them at boot.
- *
- * All paths are file-relative (ADR-0004): the build adapter's `appDir`
- * resolves against `dirname(build.module)`, never against a discovered
- * package directory.
+ * Paths are file-relative (ADR-0004): `appDir` resolves against
+ * `dirname(build.module)`.
  */
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { BuildAdapter } from '@internal/core';
@@ -45,18 +41,33 @@ function isNextjsBuild(descriptor: BuildAdapter): descriptor is NextjsBuildAdapt
   );
 }
 
-/** Where Next's standalone build places this app, given `outputFileTracingRoot` pins the monorepo root. */
-export function nextStandaloneDir(appDir: string): string {
-  const resolvedApp = path.resolve(appDir);
-  const workspaceRoot = path.resolve(resolvedApp, '../../../..');
-  const rel = path.relative(workspaceRoot, resolvedApp);
-  return path.join(resolvedApp, '.next', 'standalone', rel);
+/** The app's own server.js inside the standalone tree — the shallowest one that isn't a dependency's. Found, not computed: this is the app's deep location under `outputFileTracingRoot`. */
+function findAppServer(standaloneRoot: string): string | undefined {
+  const found: string[] = [];
+  const visit = (dir: string): void => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (entry.name === 'node_modules') continue;
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) visit(full);
+      else if (entry.name === 'server.js') found.push(full);
+    }
+  };
+  visit(standaloneRoot);
+  found.sort((a, b) => a.split(path.sep).length - b.split(path.sep).length);
+  return found[0];
 }
 
-/** The bootable standalone entry for a nextjs build — the output dir joined with the adapter's `entry`. Single-sourced so `assemble()` (deploy) and the integration-test seam can't drift. */
-export function standaloneEntryPath(build: NextjsBuildAdapter): string {
-  const resolvedApp = path.resolve(path.dirname(fileURLToPath(build.module)), build.appDir);
-  return path.join(nextStandaloneDir(resolvedApp), build.entry);
+/** The built standalone server.js for a nextjs build — `appDir`'s standalone root plus the located server. Single-sourced so `assemble()` (deploy) and the integration-test seam can't drift. */
+export function standaloneServerPath(build: NextjsBuildAdapter): string {
+  const appDir = path.resolve(path.dirname(fileURLToPath(build.module)), build.appDir);
+  const standaloneRoot = path.join(appDir, '.next', 'standalone');
+  const server = findAppServer(standaloneRoot);
+  if (server === undefined) {
+    throw new Error(
+      `no server.js under ${standaloneRoot} — run \`next build\` with output: "standalone"`,
+    );
+  }
+  return server;
 }
 
 export async function assemble(input: AssembleInput): Promise<Bundle> {
@@ -67,89 +78,71 @@ export async function assemble(input: AssembleInput): Promise<Bundle> {
   }
   const buildDescriptor = input.build;
 
-  const serviceModule = fileURLToPath(buildDescriptor.module);
-  const moduleDir = path.dirname(serviceModule);
-  const resolvedApp = path.resolve(moduleDir, buildDescriptor.appDir);
-  const appOut = nextStandaloneDir(resolvedApp);
-  const entryPath = standaloneEntryPath(buildDescriptor);
-  if (!fs.existsSync(entryPath)) {
+  const appDir = path.resolve(
+    path.dirname(fileURLToPath(buildDescriptor.module)),
+    buildDescriptor.appDir,
+  );
+  const standaloneRoot = path.join(appDir, '.next', 'standalone');
+  if (!fs.existsSync(standaloneRoot)) {
     throw new Error(
-      `no standalone ${buildDescriptor.entry} at ${appOut} — run \`next build\` with output: "standalone" first`,
+      `no ${path.join('.next', 'standalone')} under ${appDir} — run \`next build\` with output: "standalone" first.`,
     );
   }
+  const serverPath = findAppServer(standaloneRoot);
+  if (serverPath === undefined) {
+    throw new Error(`no server.js found under ${standaloneRoot} — is this a standalone build?`);
+  }
+  // The app's deep location, relative to the standalone root — found, not computed.
+  const appRel = path.relative(standaloneRoot, path.dirname(serverPath));
 
-  // Next hoists the traced node_modules to the STANDALONE ROOT, resolved from
-  // the nested server.js by walking up. But the artifact tars only this app
-  // subdir (the bundle dir), so those deps (`next`, `react`, …) are left out —
-  // the VM then can't resolve `next` from server.js. Copy the hoisted tree in
-  // so the bundle dir is self-contained.
-  const standaloneRoot = path.join(resolvedApp, '.next', 'standalone');
-  const rootModules = path.join(standaloneRoot, 'node_modules');
-  if (
-    path.resolve(rootModules) !== path.resolve(appOut, 'node_modules') &&
-    fs.existsSync(rootModules)
-  ) {
-    await fs.promises.cp(rootModules, path.join(appOut, 'node_modules'), { recursive: true });
+  const workDir = path.join(input.cwd, '.prisma-compose', 'artifacts', input.address);
+  await fs.promises.rm(workDir, { recursive: true, force: true });
+  await fs.promises.mkdir(workDir, { recursive: true });
+  const bundleDir = path.join(workDir, 'bundle');
+
+  // Ship the standalone tree as `next build` produced it (a symlinked
+  // node_modules stays symlinked → the packager rejects it, correctly).
+  await fs.promises.cp(standaloneRoot, bundleDir, { recursive: true });
+
+  // The documented copy: Next omits the client assets from standalone; place
+  // them beside the app's server.js so it serves them (docs: `cp -r public
+  // .next/standalone/ && cp -r .next/static .next/standalone/.next/`).
+  const appOut = path.join(bundleDir, appRel);
+  const staticSrc = path.join(appDir, '.next', 'static');
+  if (fs.existsSync(staticSrc)) {
+    await fs.promises.cp(staticSrc, path.join(appOut, '.next', 'static'), { recursive: true });
+  }
+  const publicSrc = path.join(appDir, 'public');
+  if (fs.existsSync(publicSrc)) {
+    await fs.promises.cp(publicSrc, path.join(appOut, 'public'), { recursive: true });
   }
 
-  // The standalone build ships server.js + traced node_modules but not the
-  // client assets; copy them where server.js serves them from.
-  await fs.promises.cp(
-    path.join(resolvedApp, '.next', 'static'),
-    path.join(appOut, '.next', 'static'),
-    { recursive: true },
-  );
-  const publicDir = path.join(resolvedApp, 'public');
-  if (fs.existsSync(publicDir)) {
-    await fs.promises.cp(publicDir, path.join(appOut, 'public'), { recursive: true });
+  // Our wrapper, bundled to main.mjs at the working-dir root (unambiguously
+  // ESM). run()'s `import("./bundle/<server>")` resolves from here.
+  const serviceModule = fileURLToPath(buildDescriptor.module);
+  await build({
+    entry: { main: serviceModule },
+    outDir: workDir,
+    format: 'esm',
+    platform: 'node',
+    external: ['bun'],
+    noExternal: [/^@prisma\//, ...(input.wrapperNoExternal ?? [])],
+    dts: false,
+    sourcemap: false,
+    clean: false,
+    // Do NOT auto-load this package's tsdown.config.ts: its `exports`
+    // management would rewrite this package's package.json to the throwaway
+    // bundle dir, corrupting resolution of @prisma/compose/nextjs afterward.
+    config: false,
+  });
+  if (!fs.existsSync(path.join(workDir, 'main.mjs'))) {
+    throw new Error(`tsdown produced no main.mjs in ${workDir}`);
   }
 
-  // Bundle the Prisma App wrapper to a temp dir, then place it next to
-  // server.js as main.mjs (unambiguously ESM — the standalone tree's
-  // package.json is CJS-default). Its run()'s `import("./server.js")`
-  // resolves relative to this file inside the artifact.
-  const bundleTmp = await fs.promises.mkdtemp(
-    path.join(os.tmpdir(), 'prisma-compose-nextjs-main-'),
-  );
-  try {
-    await build({
-      entry: [serviceModule],
-      outDir: bundleTmp,
-      format: 'esm',
-      platform: 'node',
-      external: ['bun'],
-      // Workspace packages must be inlined (this is .ts source, not requireable
-      // JS); everything Next needs is already in the standalone tree and is NOT
-      // imported by the entry. The caller adds the app's own import-time deps
-      // via wrapperNoExternal — this build is separate from Next's, so it can't
-      // rely on the standalone node_modules trace to cover them.
-      noExternal: [/^@prisma\//, ...(input.wrapperNoExternal ?? [])],
-      dts: false,
-      sourcemap: false,
-      clean: false,
-      // Do NOT auto-load this package's tsdown.config.ts: its `exports`
-      // management would rewrite this package's package.json to the throwaway
-      // bundle dir, corrupting resolution of @prisma/compose/nextjs afterward.
-      config: false,
-    });
-    const built = fs.readdirSync(bundleTmp).find((f) => /^service\.m?js$/.test(f));
-    if (built === undefined) {
-      throw new Error(`tsdown produced no service.js in ${bundleTmp}`);
-    }
-    await fs.promises.copyFile(path.join(bundleTmp, built), path.join(appOut, 'main.mjs'));
-  } finally {
-    await fs.promises.rm(bundleTmp, { recursive: true, force: true });
-  }
-
-  // Disable bun's runtime auto-install. Next's server.js references `sharp` /
-  // `@next/swc` (optional native deps this app never uses); on Compute, bun
-  // tries to fetch their linux binaries at that `require`, filling the tiny
-  // disk (ENOSPC -> reboot loop). With auto-install off, the require fails
-  // gracefully and Next boots — exactly as it does locally. bun reads bunfig
-  // from the process CWD, which is the artifact root at boot.
-  await fs.promises.writeFile(path.join(appOut, 'bunfig.toml'), '[install]\nauto = "disable"\n');
-
-  return { dir: appOut, entry: buildDescriptor.entry };
+  return {
+    dir: workDir,
+    entry: path.posix.join('bundle', appRel.split(path.sep).join('/'), 'server.js'),
+  };
 }
 
 /** The nextjs build extension descriptor — `prisma-compose.config.ts` lists it under `extensions`. */

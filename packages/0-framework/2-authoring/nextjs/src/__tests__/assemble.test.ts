@@ -3,24 +3,46 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { assemble, nextStandaloneDir } from '../control.ts';
+import { assemble, standaloneServerPath } from '../control.ts';
 import nextjs from '../index.ts';
 
 const tmpDirs: string[] = [];
 
-/** A 4-levels-deep app dir under a fresh tmp root — mirrors the monorepo
- * layout nextStandaloneDir assumes (workspaceRoot = 4 levels up). */
-function makeAppDir(): string {
+/** A fresh tmp root standing in for a Next app: src/service.ts, .next/standalone/<deep>, .next/static, public. */
+function makeAppRoot(): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'prisma-compose-nextjs-assemble-'));
   tmpDirs.push(root);
-  const appDir = path.join(root, 'a', 'b', 'c', 'app');
-  fs.mkdirSync(path.join(appDir, 'src'), { recursive: true });
-  return appDir;
+  fs.mkdirSync(path.join(root, 'src'), { recursive: true });
+  return root;
 }
 
-/** The authoring module's import.meta.url for an app dir's src/service.ts. */
-function moduleUrl(appDir: string): string {
-  return pathToFileURL(path.join(appDir, 'src', 'service.ts')).href;
+function moduleUrl(root: string): string {
+  return pathToFileURL(path.join(root, 'src', 'service.ts')).href;
+}
+
+/**
+ * Writes a `next build` standalone tree with the app nested at `apps/web` (the
+ * monorepo shape — `outputFileTracingRoot` above the app) plus the client assets
+ * Next omits: `.next/static` and `public/` live at the app root, NOT in
+ * standalone. Returns the deep app-relative path.
+ */
+function writeNextBuild(root: string): { appRel: string } {
+  const standalone = path.join(root, '.next', 'standalone');
+  const appOut = path.join(standalone, 'apps', 'web');
+  fs.mkdirSync(appOut, { recursive: true });
+  fs.writeFileSync(path.join(appOut, 'server.js'), '// standalone server\n');
+  fs.mkdirSync(path.join(standalone, 'node_modules', 'next'), { recursive: true });
+  fs.writeFileSync(path.join(standalone, 'node_modules', 'next', 'marker.txt'), 'next\n');
+  // Client assets — omitted from standalone by Next, at the app root.
+  fs.mkdirSync(path.join(root, '.next', 'static'), { recursive: true });
+  fs.writeFileSync(path.join(root, '.next', 'static', 'chunk.js'), '// static asset\n');
+  fs.mkdirSync(path.join(root, 'public'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'public', 'favicon.ico'), 'icon\n');
+  fs.writeFileSync(
+    path.join(root, 'src', 'service.ts'),
+    'export default { hello: "wrap" as const };\n',
+  );
+  return { appRel: path.join('apps', 'web') };
 }
 
 afterEach(() => {
@@ -32,75 +54,66 @@ afterEach(() => {
 
 describe('assemble()', () => {
   test('rejects a non-nextjs build adapter', async () => {
-    const appDir = makeAppDir();
+    const root = makeAppRoot();
     await expect(
       assemble({
-        // A "node" build reaching here at all would only happen through the
-        // untyped registry seam (the config routes by (extension, type)
-        // before calling in) — forced here to exercise the runtime guard.
+        address: 'web',
+        cwd: root,
         build: {
           extension: '@prisma/compose/node',
           type: 'node',
-          module: moduleUrl(appDir),
+          module: moduleUrl(root),
           entry: 'server.js',
         },
       }),
     ).rejects.toThrow(/expected a "nextjs" build adapter/);
   });
 
-  test('rejects when the standalone server.js is missing — names the expected path', async () => {
-    const appDir = makeAppDir();
+  test('rejects when there is no standalone build — says run next build', async () => {
+    const root = makeAppRoot();
     await expect(
       assemble({
-        build: nextjs({ module: moduleUrl(appDir), appDir: '..', entry: 'server.js' }),
+        address: 'web',
+        cwd: root,
+        build: nextjs({ module: moduleUrl(root), appDir: '..' }),
       }),
-    ).rejects.toThrow(/no standalone server\.js at .* run `next build`/);
+    ).rejects.toThrow(/no .*standalone under .* run `next build`/);
   });
 
-  test('copies static/public/node_modules, writes bunfig.toml, and bundles the wrapper', async () => {
-    const appDir = makeAppDir();
-    const standaloneDir = nextStandaloneDir(appDir);
-    fs.mkdirSync(standaloneDir, { recursive: true });
-    fs.writeFileSync(path.join(standaloneDir, 'server.js'), '// standalone server\n');
-
-    // Next's hoisted root node_modules, shared by every app in the standalone tree.
-    const standaloneRoot = path.join(appDir, '.next', 'standalone');
-    fs.mkdirSync(path.join(standaloneRoot, 'node_modules', 'next'), { recursive: true });
-    fs.writeFileSync(path.join(standaloneRoot, 'node_modules', 'next', 'marker.txt'), 'next\n');
-
-    fs.mkdirSync(path.join(appDir, '.next', 'static'), { recursive: true });
-    fs.writeFileSync(path.join(appDir, '.next', 'static', 'chunk.js'), '// static asset\n');
-    fs.mkdirSync(path.join(appDir, 'public'), { recursive: true });
-    fs.writeFileSync(path.join(appDir, 'public', 'favicon.ico'), 'icon\n');
-
-    fs.writeFileSync(
-      path.join(appDir, 'src', 'service.ts'),
-      'export default { hello: "wrapper" as const };\n',
-    );
+  test('ships the standalone tree, copies static/public to the located app dir, main.mjs at root', async () => {
+    const root = makeAppRoot();
+    const { appRel } = writeNextBuild(root);
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'prisma-compose-nextjs-cwd-'));
+    tmpDirs.push(cwd);
 
     const result = await assemble({
-      build: nextjs({ module: moduleUrl(appDir), appDir: '..', entry: 'server.js' }),
+      address: 'storefront.web',
+      cwd,
+      build: nextjs({ module: moduleUrl(root), appDir: '..' }),
     });
 
-    expect(result.dir).toBe(standaloneDir);
-    expect(result.entry).toBe('server.js');
-    expect(fs.existsSync(path.join(standaloneDir, 'main.mjs'))).toBe(true);
-    expect(fs.existsSync(path.join(standaloneDir, 'node_modules', 'next', 'marker.txt'))).toBe(
+    const workDir = path.join(cwd, '.prisma-compose', 'artifacts', 'storefront.web');
+    const bundleApp = path.join(workDir, 'bundle', appRel);
+    expect(result.dir).toBe(workDir);
+    // The deep server path was FOUND, not authored, and prefixed with bundle/.
+    expect(result.entry).toBe('bundle/apps/web/server.js');
+    expect(fs.existsSync(path.join(workDir, 'main.mjs'))).toBe(true);
+    // Standalone tree shipped (incl. the hoisted node_modules at its root).
+    expect(fs.existsSync(path.join(bundleApp, 'server.js'))).toBe(true);
+    expect(fs.existsSync(path.join(workDir, 'bundle', 'node_modules', 'next', 'marker.txt'))).toBe(
       true,
     );
-    expect(fs.existsSync(path.join(standaloneDir, '.next', 'static', 'chunk.js'))).toBe(true);
-    expect(fs.existsSync(path.join(standaloneDir, 'public', 'favicon.ico'))).toBe(true);
-    expect(fs.readFileSync(path.join(standaloneDir, 'bunfig.toml'), 'utf8')).toContain(
-      'auto = "disable"',
-    );
+    // The documented copy: static + public placed beside the app's server.js.
+    expect(fs.existsSync(path.join(bundleApp, '.next', 'static', 'chunk.js'))).toBe(true);
+    expect(fs.existsSync(path.join(bundleApp, 'public', 'favicon.ico'))).toBe(true);
+    // We never wrote into the user's build output.
+    expect(fs.existsSync(path.join(root, '.next', 'standalone', 'main.mjs'))).toBe(false);
   }, 20_000);
-});
 
-describe('nextStandaloneDir()', () => {
-  test('nests the app dir path under .next/standalone, pinned to the 4-levels-up workspace root', () => {
-    const appDir = makeAppDir();
-    const dir = nextStandaloneDir(appDir);
-    expect(dir.startsWith(path.join(appDir, '.next', 'standalone'))).toBe(true);
-    expect(dir.endsWith(path.join('a', 'b', 'c', 'app'))).toBe(true);
+  test('standaloneServerPath locates the app server.js (the integration-test seam)', () => {
+    const root = makeAppRoot();
+    writeNextBuild(root);
+    const server = standaloneServerPath(nextjs({ module: moduleUrl(root), appDir: '..' }));
+    expect(server).toBe(path.join(root, '.next', 'standalone', 'apps', 'web', 'server.js'));
   });
 });

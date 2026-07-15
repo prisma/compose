@@ -79,11 +79,7 @@ export interface BuildAdapter {
   readonly type: string;
   /** The authoring module's `import.meta.url` — every other path on this descriptor resolves relative to `dirname(module)`. */
   readonly module: string;
-  /**
-   * The app's built runnable, resolved relative to `dirname(module)` and
-   * interpreted by the type's build descriptor (e.g. "node": a server file path;
-   * "nextjs": a filename inside the standalone output dir).
-   */
+  /** The app's built runnable, resolved relative to `dirname(module)` and interpreted by the type's build descriptor (e.g. "node": a server file; "nextjs": located in the standalone tree). */
   readonly entry: string;
 }
 

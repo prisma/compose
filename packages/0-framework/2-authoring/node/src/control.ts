@@ -1,22 +1,20 @@
 /**
- * The extension's control entry (ADR-0017): `nodeBuild()` returns the
- * descriptor `prisma-compose.config.ts` lists — one build control, node ID
- * "node". Deploy-only (ADR-0005): the user's own build produces the app's
- * runnable; `assemble` builds Prisma App's deploy artifact from it —
- * validates the built entry exists, bundles the service module (the Prisma
- * App wrapper) to its own output, then copies the app's entry in beside it.
- * The heavy tsdown import lives only here, never in the authoring entry.
+ * The extension's control entry (ADR-0017): `nodeBuild()` returns the build
+ * descriptor `prisma-compose.config.ts` lists. Deploy-only (ADR-0005): the user
+ * builds their own runnable; `assemble` copies that built entry under `bundle/`
+ * and adds the framework's boot wrapper — it never bundles or transforms the
+ * app's code.
  *
- * Two SEPARATE builds, not one multi-entry build: a single build would
- * dedupe the shared service module into a chunk both entries import — one
- * module instance. run() (the wrapper) and load() (the app entry) must be
- * independent instances that hand off through process.env, so the wrapper
- * gets its own self-contained build and the app's already-built entry is
- * copied in untouched. @prisma/* is inlined (node_modules isn't shipped);
- * `bun` is a Compute runtime built-in.
+ * The wrapper is a SEPARATE tsdown build of the service module (declarations
+ * only, whose node carries run()/load()), emitted as `main.mjs` at the
+ * working-dir root — a dictated name (object entry `{ main }`), not a
+ * discovered one. run() and the app entry must be independent module instances
+ * that hand off through process.env, so the wrapper is its own self-contained
+ * build; `@prisma/*` is inlined, `bun` is a Compute built-in.
  *
- * All paths are file-relative (ADR-0004): `build.entry` resolves against
- * `dirname(build.module)`, never against a discovered package directory.
+ * Artifact layout: `<cwd>/.prisma-compose/artifacts/<address>/` (deploy-owned,
+ * ADR-0005) holds `main.mjs` at the root and the app's entry under `bundle/`.
+ * `entry` is file-relative to `dirname(build.module)` (ADR-0004).
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -39,42 +37,26 @@ export async function assemble(input: AssembleInput): Promise<Bundle> {
   const entryPath = path.resolve(moduleDir, input.build.entry);
   if (!fs.existsSync(entryPath)) {
     throw new Error(
-      `no built entry at ${entryPath} — run this app's own build first (the build adapter's ` +
-        `entry, "${input.build.entry}", is resolved against dirname(module)).`,
-    );
-  }
-  // "main" is the wrapper's name inside the bundle; an app entry with the same
-  // basename would silently overwrite it and run() would never execute.
-  if (/^main\.m?js$/.test(path.basename(entryPath))) {
-    throw new Error(
-      `the build adapter's entry ("${input.build.entry}") may not be named main.js/main.mjs — ` +
-        'that name is reserved for the Prisma App wrapper in the assembled bundle.',
+      `no built entry at ${entryPath} — run your build first (the build adapter's ` +
+        `entry, "${input.build.entry}", resolves against dirname(module)).`,
     );
   }
 
-  // Beside the built entry — file-relative to the resolved entry, not a
-  // discovered package dir (ADR-0004).
-  const bundleDir = path.join(path.dirname(entryPath), 'bundle');
-  // The entry must survive the `rm` below to reach the `copyFile` after it —
-  // if it resolved inside the reserved output dir, the rm would delete it
-  // first and the copy would fail with a bare ENOENT instead of a named error.
-  if (entryPath === bundleDir || entryPath.startsWith(bundleDir + path.sep)) {
+  const workDir = path.join(input.cwd, '.prisma-compose', 'artifacts', input.address);
+  // The entry must sit outside the working dir cleared on every assemble, or
+  // the rm would delete it before the copy.
+  if (entryPath === workDir || entryPath.startsWith(workDir + path.sep)) {
     throw new Error(
-      `the build adapter's entry ("${entryPath}") resolves inside its own output dir ` +
-        `("${bundleDir}") — Prisma App reserves that directory for the assembled bundle and ` +
-        'clears it before every assemble; point entry at your build output elsewhere.',
+      `the build adapter's entry ("${entryPath}") resolves inside the deploy working dir ` +
+        `("${workDir}"), which is cleared on every assemble — point entry at your build output elsewhere.`,
     );
   }
-  await fs.promises.rm(bundleDir, { recursive: true, force: true });
-  await fs.promises.mkdir(bundleDir, { recursive: true });
+  await fs.promises.rm(workDir, { recursive: true, force: true });
+  await fs.promises.mkdir(workDir, { recursive: true });
 
   await build({
-    // Named entry: tsdown derives the output filename from the entry key, so
-    // the bundle is service.mjs regardless of the module's own basename (a
-    // shared module's service file may not be named service.ts — the cron
-    // scheduler's is scheduler-service.mjs).
-    entry: { service: serviceModule },
-    outDir: bundleDir,
+    entry: { main: serviceModule },
+    outDir: workDir,
     format: 'esm',
     platform: 'node',
     external: ['bun'],
@@ -89,18 +71,16 @@ export async function assemble(input: AssembleInput): Promise<Bundle> {
     // of `@prisma/compose/node` for everything that imports it afterward.
     config: false,
   });
-
-  const built = fs.readdirSync(bundleDir).find((f) => /^service\.m?js$/.test(f));
-  if (built === undefined) {
-    throw new Error(`tsdown produced no service.js in ${bundleDir}`);
+  if (!fs.existsSync(path.join(workDir, 'main.mjs'))) {
+    throw new Error(`tsdown produced no main.mjs in ${workDir}`);
   }
-  const wrapperFile = built.endsWith('.mjs') ? 'main.mjs' : 'main.js';
-  await fs.promises.rename(path.join(bundleDir, built), path.join(bundleDir, wrapperFile));
 
   const entryFile = path.basename(entryPath);
+  const bundleDir = path.join(workDir, 'bundle');
+  await fs.promises.mkdir(bundleDir, { recursive: true });
   await fs.promises.copyFile(entryPath, path.join(bundleDir, entryFile));
 
-  return { dir: bundleDir, entry: entryFile };
+  return { dir: workDir, entry: path.posix.join('bundle', entryFile) };
 }
 
 /** The node build extension descriptor — `prisma-compose.config.ts` lists it under `extensions`. */

@@ -13,5 +13,5 @@ export default compute({
     catalog: rpc(catalogContract),
     orders: rpc(ordersContract),
   },
-  build: nextjs({ module: import.meta.url, appDir: '..', entry: 'server.js' }),
+  build: nextjs({ module: import.meta.url, appDir: '..' }),
 });

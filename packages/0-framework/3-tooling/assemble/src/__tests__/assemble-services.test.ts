@@ -5,6 +5,8 @@ import type { PrismaAppConfig } from '@internal/core/config';
 import { AssembleError } from '../assemble-error.ts';
 import { assembleServices } from '../assemble-services.ts';
 
+const CWD = '/deploy-cwd';
+
 const fakeRun = async (node: ServiceNode) => ({
   dir: `/bundles/${node.name}`,
   entry: 'server.js',
@@ -42,7 +44,7 @@ describe('assembleServices()', () => {
     });
     const graph = Load(root);
 
-    const assembled = await assembleServices(graph, emptyConfig, fakeRun);
+    const assembled = await assembleServices(graph, emptyConfig, CWD, fakeRun);
 
     expect(assembled.bundles).toEqual({
       auth: { dir: '/bundles/auth', entry: 'server.js' },
@@ -61,7 +63,7 @@ describe('assembleServices()', () => {
     });
     const graph = Load(root);
 
-    const assembled = await assembleServices(graph, emptyConfig, fakeRun);
+    const assembled = await assembleServices(graph, emptyConfig, CWD, fakeRun);
 
     expect(Object.keys(assembled.bundles)).toEqual(['auth.api']);
   });
@@ -70,14 +72,31 @@ describe('assembleServices()', () => {
     const root = module('empty-module', {}, () => ({}));
     const graph = Load(root);
 
-    await expect(assembleServices(graph, emptyConfig, fakeRun)).rejects.toThrow(AssembleError);
+    await expect(assembleServices(graph, emptyConfig, CWD, fakeRun)).rejects.toThrow(AssembleError);
   });
 
-  test("the default RunAssembler routes through the config's build control — (build.extension, build.type), any community id", async () => {
+  test('the RunAssembler seam receives each service’s graph address and the deploy cwd', async () => {
+    const seen: Array<{ address: string; cwd: string }> = [];
+    const run = async (node: ServiceNode, address: string, cwd: string) => {
+      seen.push({ address, cwd });
+      return { dir: `/bundles/${node.name}`, entry: 'server.js' };
+    };
+    const root = module('fixture-module', {}, ({ provision }) => {
+      provision(makeService('auth'), { id: 'auth' });
+      return {};
+    });
+    const graph = Load(root);
+
+    await assembleServices(graph, emptyConfig, CWD, run);
+
+    expect(seen).toEqual([{ address: 'auth', cwd: CWD }]);
+  });
+
+  test("the default RunAssembler routes through the config's build control — (build.extension, build.type), any community id — and forwards the address + cwd", async () => {
     // A made-up extension + type a community build adapter could use —
     // nothing in this package recognizes either specially; the registry the
     // config carries is the whole routing table.
-    const seen: string[] = [];
+    const seen: Array<{ type: string; address: string; cwd: string }> = [];
     const config: PrismaAppConfig = {
       extensions: [
         {
@@ -86,7 +105,7 @@ describe('assembleServices()', () => {
             cron: {
               kind: 'build',
               assemble: async (input) => {
-                seen.push(input.build.type);
+                seen.push({ type: input.build.type, address: input.address, cwd: input.cwd });
                 return { dir: '/bundles/cron', entry: input.build.entry };
               },
             },
@@ -104,9 +123,9 @@ describe('assembleServices()', () => {
     });
     const graph = Load(root);
 
-    const assembled = await assembleServices(graph, config);
+    const assembled = await assembleServices(graph, config, CWD);
 
-    expect(seen).toEqual(['cron']);
+    expect(seen).toEqual([{ type: 'cron', address: 'svc', cwd: CWD }]);
     expect(assembled.bundles['svc']).toEqual({ dir: '/bundles/cron', entry: 'x' });
   });
 
@@ -117,7 +136,7 @@ describe('assembleServices()', () => {
     });
     const graph = Load(root);
 
-    await expect(assembleServices(graph, emptyConfig)).rejects.toThrow(
+    await expect(assembleServices(graph, emptyConfig, CWD)).rejects.toThrow(
       /No extension "@fixture\/node-adapter" is configured .*prisma-compose\.config\.ts/,
     );
   });
@@ -139,7 +158,7 @@ describe('assembleServices()', () => {
     });
     const graph = Load(root);
 
-    await expect(assembleServices(graph, config)).rejects.toThrow(
+    await expect(assembleServices(graph, config, CWD)).rejects.toThrow(
       /is a "resource" control — a service build descriptor needs a "build" control/,
     );
   });

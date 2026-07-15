@@ -45,12 +45,21 @@ function resolveEntry(bundleDir: string, entry: string | undefined): string {
   return found;
 }
 
-/** All files under `dir`, as dir-relative POSIX paths, in sorted order. */
+/** All files under `dir`, as dir-relative POSIX paths, in sorted order. A
+ * symlink is a hard error: deploy bundles must be flat (ADR-0005), and the
+ * user's build owns flattening — dereferencing here would relink the tree and
+ * risk packaging files from outside it. */
 function walkFiles(dir: string): string[] {
   const out: string[] = [];
   const visit = (sub: string): void => {
     for (const entry of fs.readdirSync(path.join(dir, sub), { withFileTypes: true })) {
       const rel = sub.length > 0 ? `${sub}/${entry.name}` : entry.name;
+      if (entry.isSymbolicLink()) {
+        throw new Error(
+          `bundle contains a symlink at ${rel} — deploy bundles must be flat; ` +
+            'materialize links in your build (e.g. cp -RL) so the tree is self-contained.',
+        );
+      }
       if (entry.isDirectory()) visit(rel);
       else out.push(rel);
     }
@@ -144,6 +153,16 @@ export function packageComputeArtifact(opts: PackageComputeArtifactOptions): Com
   }));
   files.push({ relPath: 'bootstrap.js', content: Buffer.from(bootstrap, 'utf8') });
   files.push({ relPath: 'compute.manifest.json', content: Buffer.from(manifest, 'utf8') });
+  // Disable bun's runtime auto-install for every Compute artifact. App builds
+  // are self-contained (prismaTsDownConfig inlines all deps), so nothing needs
+  // fetching at boot; this guards against a stray optional `require` (e.g. a
+  // Next standalone's `sharp`/`@next/swc`) making bun fetch a linux binary at
+  // boot and fill the tiny disk (ENOSPC -> reboot loop). bun reads bunfig from
+  // the process CWD, which is the artifact root at boot.
+  files.push({
+    relPath: 'bunfig.toml',
+    content: Buffer.from('[install]\nauto = "disable"\n', 'utf8'),
+  });
 
   const gz = createDeterministicTarGz(files);
   const sha256 = crypto.createHash('sha256').update(gz).digest('hex');

@@ -198,7 +198,40 @@ describe('packageComputeArtifact', () => {
     });
     const { names } = readTar(fs.readFileSync(artifact.path));
 
-    expect(names).toEqual(['a.txt', 'b.txt', 'bootstrap.js', 'compute.manifest.json', 'main.js']);
+    expect(names).toEqual([
+      'a.txt',
+      'b.txt',
+      'bootstrap.js',
+      'bunfig.toml',
+      'compute.manifest.json',
+      'main.js',
+    ]);
+  });
+
+  test('injects bunfig.toml disabling bun auto-install into every artifact', () => {
+    const bundleDir = makeBundle({ 'main.js': 'export default {};' });
+    const artifact = packageComputeArtifact({
+      id: 'auth',
+      bundleDir,
+      appEntry: 'server.js',
+      address: 'auth',
+    });
+    const { read } = readTar(fs.readFileSync(artifact.path));
+    expect(read('bunfig.toml')).toContain('auto = "disable"');
+  });
+
+  test('a symlink in the bundle is a hard error naming the path and the fix (flat bundles only)', () => {
+    const bundleDir = makeBundle({
+      'main.js': 'export default {};',
+      'node_modules/real/index.js': '// real',
+    });
+    // A bun/pnpm-shaped relative dir-symlink, the kind a Next standalone tree
+    // is full of — the framework must reject it, not dereference it.
+    fs.symlinkSync('real', path.join(bundleDir, 'node_modules', 'link'));
+
+    expect(() =>
+      packageComputeArtifact({ id: 'auth', bundleDir, appEntry: 'server.js', address: 'auth' }),
+    ).toThrow(/symlink at node_modules\/link .* deploy bundles must be flat/);
   });
 
   test('a missing bundle dir (destroy before any build) returns a placeholder instead of throwing', () => {

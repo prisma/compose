@@ -11,7 +11,7 @@ export interface AssembledServices {
 }
 
 /** Assembles one service node — the seam tests substitute to avoid a real build. */
-export type RunAssembler = (node: ServiceNode) => Promise<Bundle>;
+export type RunAssembler = (node: ServiceNode, address: string, cwd: string) => Promise<Bundle>;
 
 /**
  * The registry route for one service's build: descriptor by
@@ -19,7 +19,12 @@ export type RunAssembler = (node: ServiceNode) => Promise<Bundle>;
  * coverage validation reports the same misses earlier with the config fix;
  * these errors are the backstop for programmatic callers.
  */
-function buildControlAssemble(config: PrismaAppConfig, node: ServiceNode): Promise<Bundle> {
+function buildControlAssemble(
+  config: PrismaAppConfig,
+  node: ServiceNode,
+  address: string,
+  cwd: string,
+): Promise<Bundle> {
   const { extension, type } = node.build;
   const descriptor = config.extensions.find((candidate) => candidate.id === extension);
   if (descriptor === undefined) {
@@ -44,15 +49,19 @@ function buildControlAssemble(config: PrismaAppConfig, node: ServiceNode): Promi
   return control.assemble({
     build: node.build,
     wrapperNoExternal: INLINE_EVERYTHING_EXCEPT_RUNTIME_BUILTINS,
+    address,
+    cwd,
   });
 }
 
 export async function assembleServices(
   graph: Graph,
   config: PrismaAppConfig,
+  cwd: string,
   run?: RunAssembler,
 ): Promise<AssembledServices> {
-  const runAssembler: RunAssembler = run ?? ((node) => buildControlAssemble(config, node));
+  const runAssembler: RunAssembler =
+    run ?? ((node, address, nodeCwd) => buildControlAssemble(config, node, address, nodeCwd));
   const serviceNodes = graph.nodes.filter(
     (n): n is GraphNode & { node: ServiceNode } => n.node.kind === 'service',
   );
@@ -62,7 +71,7 @@ export async function assembleServices(
 
   const bundles: Record<string, Bundle> = {};
   for (const { id, node } of serviceNodes) {
-    bundles[id] = await runAssembler(node);
+    bundles[id] = await runAssembler(node, id, cwd);
   }
   return { bundles };
 }

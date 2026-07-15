@@ -8,20 +8,19 @@
  * the loopback fake, and the H3 teardown decision (no `close()`) rests on
  * bun-test's per-file process isolation.
  *
- * storefront's build adapter is `nextjs()`: its `entry` is a bare filename
- * inside Next's standalone OUTPUT directory, not a path relative to
- * `build.module` — `bootstrapService`'s default derivation fits the `node`
- * adapter (see auth), not this one, so this test supplies its own boot
- * thunk, reusing the same standalone-path math
- * `@prisma/compose/nextjs/control`'s deploy assembly uses (`nextStandaloneDir`).
- * Requires `next build` to have already produced `.next/standalone` (turbo's
- * `test` task depends on `build`, so `pnpm -w test` always has it).
+ * storefront's build is `nextjs({ appDir })`: the deploy assembler locates the
+ * built `server.js` inside the standalone tree, so this test boots it via the
+ * same seam (`standaloneServerPath`) rather than re-deriving the path. The
+ * deploy chain is bootstrap.js -> main.mjs -> server.js; here
+ * `bootstrapService`'s `stash` stands in for the wrapper's env write. Requires
+ * `next build` to have produced `.next/standalone` (turbo's `test` task depends
+ * on `build`, so `pnpm -w test` always has it).
  */
 import { describe, expect, it } from 'bun:test';
 import { pathToFileURL } from 'node:url';
 import type { BuildAdapter } from '@prisma/compose';
 import type { NextjsBuildAdapter } from '@prisma/compose/nextjs';
-import { standaloneEntryPath } from '@prisma/compose/nextjs/control';
+import { standaloneServerPath } from '@prisma/compose/nextjs/control';
 import { bootstrapService } from '@prisma/compose-prisma-cloud/testing';
 import fakeAuthHandler from '@storefront-auth/auth/fake';
 import storefrontService from '../src/service.ts';
@@ -32,9 +31,9 @@ function isNextjsBuild(build: BuildAdapter): build is NextjsBuildAdapter {
   return build.type === 'nextjs' && 'appDir' in build && typeof build.appDir === 'string';
 }
 
-/** Boots the built standalone Next entry — its own `server.js`, unmodified — via the same path `assemble()` resolves for deploy (not the same bootstrap chain: deploy goes bootstrap.js -> main.mjs -> server.js; here `bootstrapService`'s `stash` stands in for the wrapper's env write). */
+/** Boots the built standalone Next entry — its own `server.js`, unmodified — via the same seam `assemble()` uses to locate it. The deploy chain is bootstrap.js -> main.mjs -> server.js; here `bootstrapService`'s `stash` stands in for the wrapper's env write. */
 function bootStandaloneNext(build: NextjsBuildAdapter, port: number): () => Promise<void> {
-  const entryPath = standaloneEntryPath(build);
+  const entryPath = standaloneServerPath(build);
   return async () => {
     // Next's standalone server binds `process.env.PORT` directly (its own
     // convention) — it does NOT read the service's config(). The framework's
