@@ -47,6 +47,26 @@ predecessor slice: streams-composed-module (merged, PR #84).
 >   which also removes the zero-consumer shape from the example.
 > - Future per-edge migration = provisioner-internal cardinality flip + the
 >   accepted-set landing, once upstream supports key sets.
+>
+> **Amendment 2 (2026-07-16, Will): compute() must be brand-blind.** The first
+> cut of this rework landed streams' provider-side key by adding a second
+> hardcoded block (and a second import) to `descriptors/compute.ts`, mirroring
+> the one #93 added for RPC. That is a per-brand accretion in the general
+> compute descriptor — the same anti-pattern ADR-0031 exists to prevent, moved
+> from core into the target. ADR-0031 already assigns the fix: *"The
+> provisioner owns mint, size, **aggregation**, stability, and rotation"* — so
+> the provider-side landing belongs with the provisioner, not in compute.
+>
+> Settled: `compute.ts`'s serialize does ONE brand-blind loop over inbound
+> provisioned edges grouped by `provision.brand`, handing each brand's refs to
+> that brand's registered landing; the two hand-written edge scanners collapse
+> into one generic `provisionedEdges(graph)`. `compute.ts` imports neither
+> `service-keys.ts` nor `streams-keys.ts`. RPC's accepted-set landing migrates
+> onto the same seam (in scope — the leak is not deleted while its first
+> instance remains). Prefer a target-local seam over changing core, per
+> ADR-0031's "landing stays the target's"; changing core's
+> `ProvisionerDescriptor` is acceptable only if the target genuinely cannot
+> own it, and must be reported.
 
 Original (superseded) design, kept for the record — mirror storage's
 minted-credential machinery end to end (`s3Credentials` + `s3StoreDescriptor`
