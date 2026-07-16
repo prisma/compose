@@ -1235,6 +1235,54 @@ describe("streams' provisioned bearer key — one value per PROVIDER, landed on 
     );
   });
 
+  test('the landing refuses two disagreeing keys for one provider (a per-edge flip would be loud)', () => {
+    // The provider landing writes ONE key, which is only correct while the
+    // provisioner mints per provider. Drive serialize directly with two
+    // inbound edges whose refs disagree — the shape a per-edge flip would
+    // produce without the paired accepted-set landing.
+    const target = prismaCloud({ workspaceId: 'ws_1' });
+    const node = compute({
+      name: 'events',
+      deps: {},
+      build,
+      expose: { streams: fakeStreamsContract },
+    });
+    const consumerNode = compute({ name: 'reader', deps: { events: streamsLikeDep() }, build });
+    const graph = {
+      nodes: [
+        { id: 'events', node },
+        { id: 'reader', node: consumerNode },
+        { id: 'writer', node: consumerNode },
+      ],
+      edges: [
+        { kind: 'dependency', from: 'events', to: 'reader', input: 'events' },
+        { kind: 'dependency', from: 'events', to: 'writer', input: 'events' },
+      ],
+      secrets: [],
+    };
+    const ctx = {
+      address: 'events',
+      node,
+      graph,
+      provisioned: new Map([
+        ['reader.events', 'key-one'],
+        ['writer.events', 'key-two'],
+      ]),
+    } as unknown as LowerContext;
+
+    expect(() =>
+      run<LoweredNode>(
+        serviceDescriptorOf(target, 'compute').serialize(
+          ctx,
+          { outputs: { projectId: 'shop-project#cloud-id' } },
+          { service: { port: 3000 }, inputs: {} } as Parameters<
+            ReturnType<typeof serviceDescriptorOf>['serialize']
+          >[2],
+        ),
+      ),
+    ).toThrow(/provisioned 2 distinct keys/);
+  });
+
   test('a streams provider with no consumers mints nothing and lands no key', async () => {
     await withEnv(
       { PRISMA_PROJECT_ID: 'shop-project#cloud-id', PRISMA_BRANCH_ID: undefined },

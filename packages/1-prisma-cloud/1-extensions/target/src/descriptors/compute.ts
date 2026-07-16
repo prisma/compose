@@ -132,27 +132,47 @@ export function computeDescriptor(o: ResolvedCloudOptions): NodeDescriptor {
           );
         }
 
-        // Provider side, streams' need (ADR-0031): its provisioner mints ONE
-        // value per provider, so every inbound edge's ref is the same key —
-        // land the first under the name the streams entrypoint reads. Unlike
-        // RPC's accepted SET, the upstream server authenticates a single
-        // API_KEY, which is exactly why the provisioner is per-provider.
+        // Provider side, streams' need (ADR-0031): the upstream server
+        // authenticates a single API_KEY, so its provisioner mints ONE value
+        // per provider and every inbound edge's ref must be that same key.
+        // This landing writes one value, which is only correct while that
+        // holds — so assert it rather than trust it: a future per-edge flip
+        // without the paired accepted-set landing would otherwise ship the
+        // wrong key silently. The refs are lazy Outputs here (not comparable
+        // at serialize time), but inside Output.map they are resolved
+        // strings, which is the same seam RPC's accepted set aggregates on.
         const inboundStreams = streamsApiKeyEdges(graph).filter(
           (e) => e.providerAddress === address,
         );
-        const streamsRef = inboundStreams
+        const streamsRefs = inboundStreams
           .map((e) => ctx.provisioned.get(e.edgeId))
-          .find((value) => value !== undefined);
-        if (streamsRef !== undefined) {
+          .filter((value) => value !== undefined)
+          .map((value) =>
+            blindCast<
+              Output.Output<string>,
+              "these refs are keyed by an edge streamsApiKeyEdges matched on STREAMS_API_KEY, and control.ts's streamsApiKeyProvisioner is the sole registrant of that brand — it returns a ServiceKey resource's `value`, an Output<string>"
+            >(value),
+          );
+        if (streamsRefs.length > 0) {
           const key = streamsApiKeyEnvName(address);
+          const oneKey = Output.map(Output.all(...streamsRefs), (vals) => {
+            const distinct = [...new Set(vals)];
+            if (distinct.length > 1) {
+              throw new Error(
+                `streams service "${address}" was provisioned ${distinct.length} distinct keys ` +
+                  `across its ${streamsRefs.length} inbound bindings, but it can only be given ` +
+                  'one (@prisma/streams-server authenticates a single API_KEY). Its provisioner ' +
+                  'must mint per provider, not per edge — or this landing must write an ' +
+                  'accepted-key set, once the server accepts one.',
+              );
+            }
+            return distinct[0] ?? '';
+          });
           records.push(
             yield* Prisma.EnvironmentVariable(`${key}-var`, {
               projectId,
               key,
-              value: blindCast<
-                Output.Output<string>,
-                "the ref is keyed by an edge streamsApiKeyEdges matched on STREAMS_API_KEY, and control.ts's streamsApiKeyProvisioner is the sole registrant of that brand — it returns a ServiceKey resource's `value`, an Output<string>"
-              >(streamsRef),
+              value: oneKey,
               class: cls,
               ...branch,
             }),
