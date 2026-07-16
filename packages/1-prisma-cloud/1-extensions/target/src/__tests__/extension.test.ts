@@ -15,6 +15,7 @@ import { type } from 'arktype';
 import { compute, postgres, postgresContract } from '../index.ts';
 import { configKey, deserialize, deserializeSecrets, encode, secretKey } from '../serializer.ts';
 import { serviceKeyEnvName } from '../service-keys.ts';
+import { STREAMS_API_KEY_ENV, streamsApiKeyEnvName } from '../streams-keys.ts';
 import { bootstrapService } from '../testing.ts';
 
 function scalarDeclaration(
@@ -39,6 +40,8 @@ const build = {
 };
 
 /** Sets env vars for the duration of `fn`, restoring whatever was there before. */
+const COMPOSER_RETRIES_KEY = configKey('', { owner: 'service', name: 'retries' });
+
 async function withEnv<T>(values: Record<string, string>, fn: () => Promise<T> | T): Promise<T> {
   const previous = new Map(Object.keys(values).map((k) => [k, process.env[k]]));
   for (const [k, v] of Object.entries(values)) process.env[k] = v;
@@ -439,6 +442,99 @@ describe('compute().run(address, boot) → load() — the round trip', () => {
       }),
     );
     expect(seenAtBoot).toBe('');
+  });
+
+  // The boot sweep (compute.ts's `restashAddressFree`) is what makes every
+  // address-free reader work — config, secrets, serve()'s accepted keys, and
+  // any landing's reserved var (the streams entrypoint's API_KEY is the second
+  // one). It cannot be replaced by writing address-free at deploy: one project
+  // is one env namespace, so two services would collide on COMPOSER_PORT.
+  // Only boot knows which address it is.
+  test("run() aliases a LANDING's var at this address address-free, with no knowledge of the brand", async () => {
+    const app = compute({ name: 'events', deps: {}, build });
+    let seenAtBoot: string | undefined;
+    await withEnv(
+      {
+        [streamsApiKeyEnvName('streams.service')]: 'minted-key-abc',
+        COMPOSER_STREAMS_SERVICE_PORT: '',
+        COMPOSER_PORT: '',
+        [STREAMS_API_KEY_ENV]: '',
+      },
+      () =>
+        app.run('streams.service', async () => {
+          seenAtBoot = process.env[STREAMS_API_KEY_ENV];
+        }),
+    );
+    // compute.ts names no brand; the sweep moved this purely by address prefix.
+    expect(seenAtBoot).toBe('minted-key-abc');
+  });
+
+  test("run() does NOT alias another service's var — only this address's namespace moves", async () => {
+    const app = compute({ name: 'a', deps: {}, build });
+    let seenAtBoot: string | undefined;
+    await withEnv(
+      {
+        // Compute injects EVERY project var into EVERY service, so a sibling's
+        // landing var is always in this process's env — the normal case.
+        [streamsApiKeyEnvName('other.service')]: 'not-mine',
+        // And the sharp one: a service nested UNDER my address, whose var
+        // therefore starts with my own sweep prefix. Stripping the prefix must
+        // still not produce MY address-free key — it lands under the nested
+        // remainder instead, which no reader of mine looks up.
+        [streamsApiKeyEnvName('a.b')]: 'nested-not-mine',
+        COMPOSER_A_PORT: '',
+        COMPOSER_PORT: '',
+        [STREAMS_API_KEY_ENV]: '',
+      },
+      () =>
+        app.run('a', async () => {
+          seenAtBoot = process.env[STREAMS_API_KEY_ENV];
+        }),
+    );
+    expect(seenAtBoot).toBe('');
+  });
+
+  test("stash() wins over the sweep's raw copy for a declared param (the sweep runs first)", async () => {
+    const app = compute({
+      name: 'web',
+      deps: {},
+      params: { retries: number({ default: 1 }) },
+      build,
+    });
+    let seenAtBoot: string | undefined;
+    // The address-scoped row is textually different from what encode() emits
+    // (JSON tolerates the padding). The sweep copies bytes; stash re-encodes
+    // the typed value. Ordering decides which one the entry reads.
+    await withEnv(
+      {
+        COMPOSER_WEB_RETRIES: '  5  ',
+        COMPOSER_RETRIES: '',
+        COMPOSER_WEB_PORT: '',
+        COMPOSER_PORT: '',
+      },
+      () =>
+        app.run('web', async () => {
+          seenAtBoot = process.env[COMPOSER_RETRIES_KEY];
+        }),
+    );
+    expect(seenAtBoot).toBe('5');
+  });
+
+  test('run() with an empty address is a no-op sweep — the address-free form is already the target', async () => {
+    const app = compute({
+      name: 'plain',
+      deps: {},
+      params: { retries: number({ default: 1 }) },
+      build,
+    });
+    let seenAtBoot: string | undefined;
+    await withEnv({ COMPOSER_RETRIES: '7', COMPOSER_PORT: '' }, () =>
+      app.run('', async () => {
+        seenAtBoot = process.env[COMPOSER_RETRIES_KEY];
+      }),
+    );
+    // Nothing to re-key onto itself; the address-free row stands.
+    expect(seenAtBoot).toBe('7');
   });
 
   test("serviceKeyEnvName('') is @internal/rpc's RPC_ACCEPTED_KEYS_ENV — writer and reader cannot drift", () => {
