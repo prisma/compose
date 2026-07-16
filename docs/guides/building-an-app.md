@@ -68,36 +68,34 @@ streaming contracts yet.
 
 ### Calls are authenticated for you
 
-A deployed service is reachable at a public HTTPS URL, so an exposed
-`/rpc/<method>` would otherwise answer anyone on the internet. It doesn't.
-At deploy the framework mints a distinct, unguessable **service key** for
-every consumer→provider edge, hands it to that consumer's client, and tells
-the provider which keys to accept. The client sends it on every call;
-`serve()` rejects anything else with `401` before your handler runs.
+You don't do anything for this. There is no key in your code, your contract,
+or your module — but it's worth two minutes, because one consequence looks
+like a broken deploy the first time you meet it.
 
-You declare nothing. There is no key in your code, your contract, or your
-module — the only reason to know it exists is that two of its consequences
-look like bugs if you don't:
+When you deploy, the framework creates an unguessable **service key** for each
+dependency you declared, gives it to the consumer's client, and tells the
+provider to accept it. Every call carries the key, and `serve()` answers
+anything else with `401` before your handler runs. So a provider answers only
+the services your app connected to it — which matters, because a deployed
+service has a public URL and would otherwise answer the whole internet.
 
-- **A provider answers only its wired peers.** `curl`ing a deployed
-  `/rpc/<method>` yourself returns `401`, because you aren't a service the app
-  wired to it. That's the feature working. To exercise a provider by hand, call
-  it through a consumer, or run it locally.
-- **Nothing is provisioned locally, so nothing is enforced.** Services you run
-  in a terminal, fakes, and `bootstrapService` all pass calls through, and you
-  never supply a key. Enforcement only exists where the deploy created it.
+The surprise: **`curl`ing your own endpoint returns `401`.** You aren't one of
+the services connected to it, so it turns you away. That's the feature, not a
+broken deploy. To exercise a provider by hand, call it through a consumer or
+run it locally.
 
-Keys are per *binding*, not per provider: two consumers of the same service
-hold different keys, so a leak from one can't impersonate the other. They're
-stable across redeploys — a redeploy is a no-op, not a rotation. To rotate,
-remove the binding (or destroy the stack) and deploy again; both ends re-wire
-from the same deploy, so they're never out of step.
+**Locally and in tests, nothing changes.** Only a deploy creates keys, so a
+service you run in a terminal, a fake, and `bootstrapService` all accept every
+call, and there's no key for you to supply.
 
-The key is a capability token, not a secret: it proves "I'm a service this app
-wired to you," nothing more. It authorizes at the *service* level, so any valid
-key reaches every method the service exposes — if you need two independently
-gated surfaces, expose two services. The reasoning is in
-[`ADR-0030`](../design/90-decisions/ADR-0030-rpc-callers-verified-with-an-auto-provisioned-service-key.md).
+Two limits worth knowing:
+
+- **A key opens the whole service, not one method.** Any valid key reaches
+  every method that service exposes. If two surfaces need separate access,
+  make them two services.
+- **Each dependency gets its own key**, so one leaking never exposes the
+  others. Keys stay the same across redeploys; to replace one, remove the
+  dependency (or destroy the stack) and deploy again.
 
 ## Databases
 
@@ -391,5 +389,7 @@ The design record explains *why* the model is shaped this way:
 - [`config-params.md`](../design/10-domains/config-params.md) — the config
   round trip, and [ADR-0029](../design/90-decisions/ADR-0029-secrets-are-a-forwardable-slot.md)
   for the secrets model.
+- [ADR-0030](../design/90-decisions/ADR-0030-rpc-callers-verified-with-an-auto-provisioned-service-key.md)
+  — why service keys work the way they do.
 - [ADR-0005](../design/90-decisions/ADR-0005-users-build-the-framework-assembles.md)
   — why you build and the framework assembles.

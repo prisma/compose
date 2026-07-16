@@ -294,14 +294,14 @@ deployed quotes service, and starts everything. Each service's public URL is
 its Compute service endpoint, shown in the Console. Open the gateway's URL:
 you get a quote, served over one typed RPC hop.
 
-Now try the *quotes* service's own URL — `curl <quotes-url>/rpc/random` — and
-you'll get `401`. That's deliberate: the deploy also minted a **service key**
-for the gateway→quotes binding and told quotes to accept only that. Your
-`curl` isn't a service the app wired to it. The gateway's call works because
-it carries the key; nothing in either service's code mentions one. It's
-covered in [Building an app](building-an-app.md#calls-are-authenticated-for-you),
-and it's why the local run above needed no key: locally nothing provisions
-one, so nothing is enforced.
+Now try the *quotes* service directly — `curl <quotes-url>/rpc/random` — and
+you'll get `401`. That's deliberate. Deploying also gave the gateway a
+**service key** for its `quotes` dependency, and told quotes to accept only
+that: quotes answers the gateway and turns away everyone else. Neither
+service's code mentions a key, and it's why the local run needed none — only
+a deploy creates them.
+[Building an app](building-an-app.md#calls-are-authenticated-for-you) has the
+details.
 
 Re-deploying is idempotent — it updates the same Project. For an isolated
 copy of the whole app (own services, own config), deploy a **stage**, and
