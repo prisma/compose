@@ -21,17 +21,32 @@ const STREAM = 'jobs';
 const COLD_START_STATUS = new Set([502, 503, 504]);
 
 /**
- * The streams service scales to zero, so the first call after an idle spell can
- * be reset mid-connect or answered 502 by the edge while the instance boots
- * (Prisma Compute, PRO-217). Retry ONLY that: a bounded backoff, and only for
- * calls that are safe to repeat — a real failure (401, a malformed append) must
- * still surface on the first try. Appends are deliberately not retried here:
- * a write that may have reached the server cannot be blindly repeated.
+ * The streams service scales to zero, so the first call after an idle spell
+ * meets an instance that is still booting: the connection can reset
+ * mid-establish, or the edge answers 502 while it comes up (Prisma Compute,
+ * PRO-217 in gotchas.md).
+ *
+ * The 30s budget is measured, not folklore: the streams entrypoint takes
+ * ~3.5s from VM start to listening on a small object store and ~8s on a
+ * larger one (Compute version logs), so this covers the observed worst case
+ * with room and still gives up rather than hanging on a dependency that is
+ * genuinely down. The framework's own cold-start retry allows 60s for the
+ * same class of problem on Postgres (FT-5226).
+ */
+const COLD_START_BUDGET_MS = 30_000;
+const FIRST_BACKOFF_MS = 250;
+const MAX_BACKOFF_MS = 8_000;
+
+/**
+ * Retries a call that is safe to repeat until the budget runs out. Only the
+ * cold-start class is retried — a real failure (401, a malformed request)
+ * must surface on the first try.
  */
 async function fetchIdempotent(url: string, init?: RequestInit): Promise<Response> {
+  const deadline = Date.now() + COLD_START_BUDGET_MS;
+  let backoff = FIRST_BACKOFF_MS;
   let lastError: unknown;
-  for (let attempt = 0; attempt < 4; attempt++) {
-    if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** (attempt - 1)));
+  for (;;) {
     try {
       const res = await fetch(url, init);
       if (!COLD_START_STATUS.has(res.status)) return res;
@@ -39,8 +54,10 @@ async function fetchIdempotent(url: string, init?: RequestInit): Promise<Respons
     } catch (error) {
       lastError = error; // the socket closed while the instance was starting
     }
+    if (Date.now() + backoff >= deadline) throw lastError;
+    await new Promise((resolve) => setTimeout(resolve, backoff));
+    backoff = Math.min(backoff * 2, MAX_BACKOFF_MS);
   }
-  throw lastError;
 }
 
 export function createJobsApp(config: StreamsConfig): (req: Request) => Promise<Response> {
