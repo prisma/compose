@@ -9,8 +9,10 @@
  * (width, same as a provider exposing more than a consumer requires).
  *
  * Per ADR-0030, every request is checked against the accepted service-key
- * set before dispatch: unset/empty is the pass-through migration state,
- * a configured non-empty set requires `Authorization: Bearer <key>`.
+ * set before dispatch: unset (never provisioned — local/test) passes
+ * through; a provisioned `"[]"` (deployed, zero wired consumers) denies
+ * every caller; a provisioned non-empty set requires membership via
+ * `Authorization: Bearer <key>`.
  */
 
 import type { Contract, Expose, RunnableServiceNode } from '@internal/core';
@@ -58,16 +60,16 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-/** The configured accepted key set, or `[]` if unset/empty/malformed — the pass-through state. */
-function acceptedKeys(): readonly string[] {
+/** The provisioned accepted key set, or undefined when the deploy never provisioned one (local/test — enforcement off). */
+function acceptedKeys(): readonly string[] | undefined {
   const raw = process.env[RPC_ACCEPTED_KEYS_ENV];
-  if (raw === undefined || raw === '') return [];
+  if (raw === undefined || raw === '') return undefined; // unprovisioned → pass through
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch {
-    return [];
+    return []; // provisioned but unreadable → deny all
   }
   return Array.isArray(parsed) && parsed.every((key): key is string => typeof key === 'string')
     ? parsed
@@ -163,7 +165,7 @@ export function serve<S extends AnyRunnable, H extends Handlers<S>>(
 
   return async (req: Request): Promise<Response> => {
     const accepted = acceptedKeys();
-    if (accepted.length > 0 && !isAcceptedKey(bearerToken(req), accepted)) {
+    if (accepted !== undefined && !isAcceptedKey(bearerToken(req), accepted)) {
       return jsonResponse({ error: 'Unauthorized: missing or invalid service key' }, 401);
     }
 

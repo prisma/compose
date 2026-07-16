@@ -982,6 +982,78 @@ describe('ADR-0030: per-binding RPC service keys — mint (control.ts) + wire (d
       },
     );
   });
+
+  test('a provider that exposes RPC with zero wired consumers still writes an accepted-set var — value "[]" (deny-all, closes the fail-open hole)', async () => {
+    await withEnv(
+      { PRISMA_PROJECT_ID: 'shop-project#cloud-id', PRISMA_BRANCH_ID: undefined },
+      () => {
+        const target = prismaCloud({ workspaceId: 'ws_1' });
+        const root = module('shop', {}, ({ provision }) => {
+          provision(
+            compute({ name: 'auth3', deps: {}, build, expose: { verify: fakeRpcContract } }),
+            { id: 'auth3' },
+          );
+          return {};
+        });
+        const before = { envVar: recorded.envVar.length, serviceKey: recorded.serviceKey.length };
+
+        run<LoweredNode>(
+          lowering(root, configFor(target), {
+            name: 'shop',
+            bundles: { auth3: { dir: 'modules/auth3/dist/bundle', entry: 'server.js' } },
+          }),
+        );
+
+        // No consumer, so no ServiceKey is minted.
+        expect(recorded.serviceKey.slice(before.serviceKey)).toEqual([]);
+
+        const writes = recorded.envVar.slice(before.envVar).map(([, props]) => props);
+        expect(writes).toContainEqual({
+          projectId: 'shop-project#cloud-id',
+          key: 'COMPOSER_AUTH3_RPC_ACCEPTED_KEYS',
+          value: '[]',
+          class: 'production',
+        });
+      },
+    );
+  });
+
+  test('a service with no `expose` never serves, so it writes no accepted-keys var', async () => {
+    await withEnv(
+      { PRISMA_PROJECT_ID: 'shop-project#cloud-id', PRISMA_BRANCH_ID: undefined },
+      () => {
+        const target = prismaCloud({ workspaceId: 'ws_1' });
+        const root = module('shop', {}, ({ provision }) => {
+          const auth = provision(
+            compute({ name: 'auth4', deps: {}, build, expose: { verify: fakeRpcContract } }),
+            { id: 'auth4' },
+          );
+          // storefront is a pure consumer — it exposes nothing of its own.
+          provision(compute({ name: 'storefront', deps: { auth: rpcLikeDep() }, build }), {
+            id: 'storefront',
+            deps: { auth: auth.verify },
+          });
+          return {};
+        });
+        const before = recorded.envVar.length;
+
+        run<LoweredNode>(
+          lowering(root, configFor(target), {
+            name: 'shop',
+            bundles: {
+              auth4: { dir: 'modules/auth4/dist/bundle', entry: 'server.js' },
+              storefront: { dir: 'modules/storefront/dist/bundle', entry: 'server.js' },
+            },
+          }),
+        );
+
+        const writtenKeys = recorded.envVar
+          .slice(before)
+          .map(([, props]) => (props as { key: string }).key);
+        expect(writtenKeys).not.toContain('COMPOSER_STOREFRONT_RPC_ACCEPTED_KEYS');
+      },
+    );
+  });
 });
 
 describe('name validation — fail fast on Prisma name constraints, before creating anything', () => {

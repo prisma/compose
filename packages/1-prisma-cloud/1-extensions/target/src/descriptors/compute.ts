@@ -79,10 +79,13 @@ export function computeDescriptor(o: ResolvedCloudOptions): NodeDescriptor {
         // fills a provisioned param like any other, so there is no
         // consumer-side special case left to write here.
 
-        // Provider side: every inbound edge's key, sourced from `ctx.provisioned`
-        // (core's provision phase — ADR-0031) and aggregated into one set.
-        const inbound = serviceKeyEdges(graph).filter((e) => e.providerAddress === address);
-        if (inbound.length > 0) {
+        // Provider side: a service that serves anything gets an accepted-keys
+        // var, even with zero wired consumers — otherwise an unprovisioned
+        // var reads as "no enforcement" (serve.ts's pass-through state) and a
+        // zero-consumer RPC provider would accept every caller. A pure
+        // consumer (no `expose`) never serves, so it gets no such var.
+        if (svc.expose !== undefined && Object.keys(svc.expose).length > 0) {
+          const inbound = serviceKeyEdges(graph).filter((e) => e.providerAddress === address);
           // `ctx.provisioned` is typed `unknown` — core forwards a provisioner's
           // ref without inspecting it. The filter only drops absent edges; the
           // shape of what survives is asserted, not checked.
@@ -95,7 +98,12 @@ export function computeDescriptor(o: ResolvedCloudOptions): NodeDescriptor {
                 "these refs are keyed by an edge serviceKeyEdges matched on RPC_PEER_KEY, and control.ts's serviceKeyProvisioner is the sole registrant of that brand — it returns a ServiceKey resource's `value`, an Output<string>"
               >(value),
             );
-          const acceptedJson = Output.map(Output.all(...keyOuts), (vals) => JSON.stringify(vals));
+          // Zero consumers: no refs to resolve, so write the literal "[]"
+          // directly rather than calling Output.all() with no arguments.
+          const acceptedJson =
+            keyOuts.length > 0
+              ? Output.map(Output.all(...keyOuts), (vals) => JSON.stringify(vals))
+              : JSON.stringify([]);
           const key = serviceKeyEnvName(address);
           records.push(
             yield* Prisma.EnvironmentVariable(`${key}-var`, {
