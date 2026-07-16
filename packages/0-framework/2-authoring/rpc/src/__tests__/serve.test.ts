@@ -227,8 +227,32 @@ describe('serve() — service-key enforcement (COMPOSER_RPC_ACCEPTED_KEYS)', () 
     expect(res.status).toBe(401);
   });
 
-  test('an empty accepted-keys array passes through unchanged', async () => {
+  test('a provisioned empty accepted-keys array ("[]") denies every caller — a provider with zero wired consumers', async () => {
     process.env[RPC_ACCEPTED_KEYS_ENV] = JSON.stringify([]);
+    let handlerCalled = false;
+    const authService = fakeAuthService(() => ({ validTokens: ['good-token'] }));
+    const handler = serve(authService, {
+      rpc: {
+        verify: async ({ token }, { db }) => {
+          handlerCalled = true;
+          return { ok: db.validTokens.includes(token) };
+        },
+      },
+    });
+
+    const res = await handler(
+      new Request('http://auth.internal/rpc/verify', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ token: 'good-token' }),
+      }),
+    );
+
+    expect(res.status).toBe(401);
+    expect(handlerCalled).toBe(false);
+  });
+
+  test('an unset accepted-keys env var passes through unchanged — the unprovisioned local/test state', async () => {
     const authService = fakeAuthService(() => ({ validTokens: ['good-token'] }));
     const handler = serve(authService, {
       rpc: { verify: async ({ token }, { db }) => ({ ok: db.validTokens.includes(token) }) },
@@ -243,5 +267,30 @@ describe('serve() — service-key enforcement (COMPOSER_RPC_ACCEPTED_KEYS)', () 
     );
 
     expect(res.status).toBe(200);
+  });
+
+  test('malformed JSON in the accepted-keys env var denies every caller — fails closed', async () => {
+    process.env[RPC_ACCEPTED_KEYS_ENV] = 'not-json{';
+    let handlerCalled = false;
+    const authService = fakeAuthService(() => ({ validTokens: ['good-token'] }));
+    const handler = serve(authService, {
+      rpc: {
+        verify: async ({ token }, { db }) => {
+          handlerCalled = true;
+          return { ok: db.validTokens.includes(token) };
+        },
+      },
+    });
+
+    const res = await handler(
+      new Request('http://auth.internal/rpc/verify', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ token: 'good-token' }),
+      }),
+    );
+
+    expect(res.status).toBe(401);
+    expect(handlerCalled).toBe(false);
   });
 });
