@@ -455,6 +455,25 @@ ships. Two things to know:
 
 Without `dir` you get the single-file form above, unchanged.
 
+**`tanstack-start` — a TanStack Start app.** Point the dedicated adapter at
+the app root, the folder where Nitro writes `.output`:
+
+```ts
+build: tanstackStart({
+  module: import.meta.url,
+  appDir: '..',
+})
+```
+
+Run `vite build` before deploy and register `tanstackStartBuild()` from
+`@prisma/composer/tanstack-start/control` in `prisma-composer.config.ts`. The
+assembler validates `.output/nitro.json`, requires Nitro's `node-server`
+preset, reads the manifest's `serverEntry`, and copies the complete `.output`
+tree verbatim. That keeps the entry's sibling chunks and client/public assets
+in their emitted layout without hardcoding the server path. The complete,
+tested shape is in
+[`examples/tanstack-start`](../../examples/tanstack-start/).
+
 **`nextjs` — a Next.js app.** `next build` with `output: 'standalone'` is the
 whole build; the adapter just needs to know where the app lives:
 
