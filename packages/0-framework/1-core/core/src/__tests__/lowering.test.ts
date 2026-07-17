@@ -19,6 +19,7 @@ import {
   type ProvisionEdge,
   type ProvisionerDescriptor,
   resolveStateLayer,
+  type ServiceLowering,
   type WiringOutputs,
 } from '../deploy.ts';
 import { Load } from '../graph.ts';
@@ -147,21 +148,18 @@ function fakeExtension(opts: { provisions?: ReadonlyMap<symbol, ProvisionerDescr
       ),
       'fake/compute': {
         kind: 'service' as const,
-        provision: (ctx: LowerContext): Effect.Effect<FakeProvisioned, unknown, unknown> => {
+        provision: (ctx) => {
           calls.push({ phase: 'provision', id: ctx.id, address: ctx.address });
-          // The fake application hook's own product shape — test-only narrow,
-          // mirroring how a real extension guards ctx.application.
+          // ctx.application is `unknown` by design — core never reads the
+          // application hook's product. A real extension narrows it with its
+          // own type guard; this fake asserts its own hook's shape.
           const application = ctx.application as { projectId: string };
           return Effect.succeed({
             serviceId: `${ctx.id}#svc`,
             projectId: application.projectId,
           });
         },
-        serialize: (
-          ctx: LowerContext,
-          _provisioned: FakeProvisioned,
-          config: Config,
-        ): Effect.Effect<FakeSerialized, unknown, unknown> => {
+        serialize: (ctx, _provisioned, config) => {
           calls.push({ phase: 'serialize', id: ctx.id, address: ctx.address, config });
           // One "record" per Config leaf — mirrors the real extension's one
           // EnvironmentVariable per leaf, keyed by input+name.
@@ -179,12 +177,7 @@ function fakeExtension(opts: { provisions?: ReadonlyMap<symbol, ProvisionerDescr
           });
           return Effect.succeed({ path: `/tmp/${ctx.id}.tar.gz`, sha256: `sha-${ctx.id}` });
         },
-        deploy: (
-          ctx: LowerContext,
-          provisioned: FakeProvisioned,
-          artifact: Artifact,
-          serialized: FakeSerialized,
-        ): Effect.Effect<WiringOutputs, unknown, unknown> => {
+        deploy: (ctx, provisioned, artifact, serialized) => {
           calls.push({
             phase: 'deploy',
             id: ctx.id,
@@ -196,7 +189,7 @@ function fakeExtension(opts: { provisions?: ReadonlyMap<symbol, ProvisionerDescr
             projectId: provisioned.projectId,
           });
         },
-      },
+      } satisfies { readonly kind: 'service' } & ServiceLowering<FakeProvisioned, FakeSerialized>,
     },
   };
   const config: PrismaAppConfig = {
