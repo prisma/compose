@@ -66,6 +66,26 @@ contract change, `deleteStateDatabase`, and the CLI destroy-tail ordering in
 
 Nothing here merges until both halves are on #113 and green.
 
+## Successor project (recorded, not started): decouple the CLI from Prisma Cloud
+
+Operator-directed 2026-07-17, after PR #113's review found Prisma Cloud
+semantics in the framework domain. The pragmatic call for #113 was to ship the
+`teardown` hook mirroring `preflight` — pattern-consistent, no new concept —
+and do the real decoupling separately. That project's scope, from the sites
+that leak today:
+
+- `core/app-config.ts`: `PreflightInput`/`TeardownInput` carry
+  `projectId`/`branchId` — replace with a target-owned opaque context
+  produced by container resolution and passed through core untyped.
+- `cli/ensure-containers.ts`: Project/Branch resolution via the Management
+  API — the "known debt" named by `architecture.config.json`'s
+  cross-domain exception; ADR-0017's config-driven model absorbs it (the
+  target's descriptor supplies the container-resolution step).
+- `cli/run-alchemy.ts`: sets `PRISMA_PROJECT_ID`/`PRISMA_BRANCH_ID` on the
+  child — becomes target-owned env the extension contributes.
+- Exit criterion: the `crossDomainExceptions` entry for `cli → lowering` is
+  deleted and `lint:deps` still passes.
+
 ## Successor project (recorded, not started): Compute GitHub App integration
 
 Out of scope for this project by operator decision (2026-07-17), to be opened
