@@ -13,6 +13,8 @@ import * as RealPrismaAlchemy from '@internal/lowering';
 import * as RealOutput from 'alchemy/Output';
 import * as Effect from 'effect/Effect';
 import * as Redacted from 'effect/Redacted';
+import type { ComputeProvisioned, ComputeSerialized } from '../descriptors/compute.ts';
+import type { S3StoreSerialized } from '../descriptors/s3-store.ts';
 // shared.ts's only @internal/lowering import is type-only, so pulling
 // projectIdOf in statically doesn't drag the mocked runtime module in early.
 import { type CloudApplication, projectIdOf } from '../descriptors/shared.ts';
@@ -131,19 +133,25 @@ const run = <A>(eff: Effect.Effect<unknown, unknown, unknown>): A =>
 // These mirror the real types with that collapse applied. Reusing the real
 // types would re-assert `Output<string>` over a plain string, which is the
 // exact type lie this slice removed from compute.ts.
-interface MockedProvisioned {
-  readonly serviceId: string;
-  readonly projectId: string;
-}
-interface MockedSerialized {
-  readonly environment: ReadonlyArray<{ id: string; key: string }>;
-  readonly port: number;
-}
-interface MockedS3StoreSerialized extends MockedSerialized {
-  readonly bucket: unknown;
-  readonly accessKeyId: unknown;
-  readonly secretAccessKey: unknown;
-}
+//
+// They are DERIVED from the real types rather than restated, so a renamed or
+// retyped handoff field breaks here instead of leaving these asserting a shape
+// that no longer exists. `run<A>` cannot catch that drift — it takes
+// Effect<unknown>, so `A` is an unchecked caller assertion — which makes these
+// definitions the only compile-time link back to the real types.
+/** The mocks collapse Output<T> to T; nothing else about the real types changes. */
+type Resolved<T> = T extends RealOutput.Output<infer U> ? U : T;
+type Mirror<T> = { readonly [K in keyof T]: Resolved<T[K]> };
+/** The mock EnvironmentVariable, standing in for the real resource. */
+type MockedEnvironment = ReadonlyArray<{ id: string; key: string }>;
+
+type MockedProvisioned = Mirror<ComputeProvisioned>;
+type MockedSerialized = Omit<Mirror<ComputeSerialized>, 'environment'> & {
+  readonly environment: MockedEnvironment;
+};
+type MockedS3StoreSerialized = Omit<Mirror<S3StoreSerialized>, 'environment'> & {
+  readonly environment: MockedEnvironment;
+};
 
 /** Sets env vars for the duration of `fn`, restoring whatever was there before. */
 async function withEnv<T>(values: Record<string, string | undefined>, fn: () => T): Promise<T> {
