@@ -7,8 +7,8 @@
  * prevent).
  *
  * Consumed by `descriptors/compute.ts` (which groups a provider's inbound
- * edges by brand and hands each group to that brand's registered landing) and
- * by tests. Nothing here knows what any brand means.
+ * edges by brand and hands each group to that brand's registered provider
+ * param) and by tests. Nothing here knows what any brand means.
  *
  * This module is reachable from the RUNTIME/authoring side (re-exported
  * through index.ts) — it must never import `@internal/lowering` or `effect`.

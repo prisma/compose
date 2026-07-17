@@ -11,8 +11,11 @@ import type { LowerContext, LoweredNode } from '@internal/core/deploy';
 // mode regardless of the (filesystem-dependent) test-file order.
 import * as RealPrismaAlchemy from '@internal/lowering';
 import * as RealOutput from 'alchemy/Output';
+import { type } from 'arktype';
 import * as Effect from 'effect/Effect';
 import * as Redacted from 'effect/Redacted';
+import { computeDescriptor } from '../descriptors/compute.ts';
+import type { ProviderParam, ResolvedCloudOptions } from '../descriptors/shared.ts';
 import * as RealPgWarm from '../pg-warm-resource.ts';
 
 // Stub the provider layer AND alchemy/Output so the compute target's data
@@ -1223,23 +1226,25 @@ describe("streams' provisioned bearer key — one value per PROVIDER, landed on 
         expect(writtenValue('COMPOSER_READER_EVENTS_APIKEY')).toBe('key-for-streamskey-events');
         expect(writtenValue('COMPOSER_WRITER_EVENTS_APIKEY')).toBe('key-for-streamskey-events');
 
-        // The provider's own landing: the same key, under the name the streams
-        // entrypoint reads (address-scoped; compute's run re-stashes it).
+        // The provider's own reserved provider param: the same key, under the
+        // name the streams entrypoint reads (address-scoped; compute's run
+        // validates and re-stashes it), JSON-encoded like any service-own
+        // literal param.
         expect(writes).toContainEqual({
           projectId: 'shop-project#cloud-id',
           key: 'COMPOSER_EVENTS_STREAMS_API_KEY',
-          value: 'key-for-streamskey-events',
+          value: '"key-for-streamskey-events"',
           class: 'production',
         });
       },
     );
   });
 
-  test('the landing refuses two disagreeing keys for one provider (a per-edge flip would be loud)', () => {
-    // The provider landing writes ONE key, which is only correct while the
+  test('the reserved provider param refuses two disagreeing keys for one provider (a per-edge flip would be loud)', () => {
+    // The provider param writes ONE key, which is only correct while the
     // provisioner mints per provider. Drive serialize directly with two
     // inbound edges whose refs disagree — the shape a per-edge flip would
-    // produce without the paired accepted-set landing.
+    // produce without a paired accepted-set provider param.
     const target = prismaCloud({ workspaceId: 'ws_1' });
     const node = compute({
       name: 'events',
@@ -1311,6 +1316,77 @@ describe("streams' provisioned bearer key — one value per PROVIDER, landed on 
         expect(keys).not.toContain('COMPOSER_LONELY_STREAMS_API_KEY');
       },
     );
+  });
+});
+
+describe("descriptors/compute.ts's provider-param loop is generic over the registry it is handed — adding a brand is control.ts's edit alone", () => {
+  const build = {
+    extension: '@prisma/composer/node',
+    type: 'node',
+    module: 'file:///test/service.ts',
+    entry: 'server.js',
+  };
+  const anyContract: Contract<'rpc', Record<never, never>> = {
+    kind: 'rpc',
+    __cmp: {},
+    satisfies: () => true,
+  };
+
+  test('three independently-registered provider params — including a brand this test invents — each write their own row through the same unmodified serialize()', async () => {
+    await withEnv({ PRISMA_BRANCH_ID: undefined }, () => {
+      // Neither of these two symbols is RPC_PEER_KEY or STREAMS_API_KEY —
+      // `computeDescriptor` is handed this registry as plain data and never
+      // imports a brand's module, so it cannot tell a real brand from a made-
+      // up one. That is the property this test pins: the loop in
+      // descriptors/compute.ts needs no edit to support a new registrant.
+      const brandOne = Symbol('provider-param-test/one');
+      const brandTwo = Symbol('provider-param-test/two');
+      const brandThree = Symbol('provider-param-test/three');
+      const providerParams: ReadonlyMap<symbol, ProviderParam> = new Map([
+        [brandOne, { name: 'PARAM_ONE', schema: type('string'), value: () => 'value-one' }],
+        [brandTwo, { name: 'PARAM_TWO', schema: type('string'), value: () => 'value-two' }],
+        // A third registrant may also decline to write a row at all.
+        [brandThree, { name: 'PARAM_THREE', schema: type('string'), value: () => undefined }],
+      ]);
+      const o: ResolvedCloudOptions = {
+        workspaceId: 'ws_1',
+        projectId: 'shop-project#cloud-id',
+        branchId: undefined,
+        providerParams,
+      };
+      const node = compute({ name: 'multi', deps: {}, build, expose: { any: anyContract } });
+      const ctx = {
+        address: 'multi',
+        node,
+        graph: { secrets: [], edges: [] },
+        application: { outputs: {} },
+        provisioned: new Map(),
+      } as unknown as LowerContext;
+      const provisioned: LoweredNode = { outputs: { projectId: 'shop-project#cloud-id' } };
+      const config = { service: { port: 3000 }, inputs: {} };
+      const before = recorded.envVar.length;
+
+      const descriptor = computeDescriptor(o);
+      if (descriptor.kind !== 'service') throw new Error('expected a service descriptor');
+      run<LoweredNode>(descriptor.serialize(ctx, provisioned, config));
+
+      const writes = recorded.envVar.slice(before).map(([, props]) => props);
+      expect(writes).toContainEqual({
+        projectId: 'shop-project#cloud-id',
+        key: 'COMPOSER_MULTI_PARAM_ONE',
+        value: '"value-one"',
+        class: 'production',
+      });
+      expect(writes).toContainEqual({
+        projectId: 'shop-project#cloud-id',
+        key: 'COMPOSER_MULTI_PARAM_TWO',
+        value: '"value-two"',
+        class: 'production',
+      });
+      expect(writes.map((w) => (w as { key: string }).key)).not.toContain(
+        'COMPOSER_MULTI_PARAM_THREE',
+      );
+    });
   });
 });
 

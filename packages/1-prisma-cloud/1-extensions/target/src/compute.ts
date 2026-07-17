@@ -12,10 +12,32 @@ import type {
 } from '@internal/core';
 import { hydrateSecrets, hydrateSync, number, service } from '@internal/core';
 import { blindCast } from '@internal/foundation/casts';
-import { configKey, deserialize, deserializeSecrets, stash, stashSecrets } from './serializer.ts';
+import {
+  deserialize,
+  deserializeSecrets,
+  type ProviderParamEntry,
+  stash,
+  stashProviderParams,
+  stashSecrets,
+} from './serializer.ts';
+import { RPC_ACCEPTED_KEYS_PARAM } from './service-keys.ts';
+import { STREAMS_API_KEY_PARAM } from './streams-keys.ts';
 
 const reservedParams = { port: number({ default: 3000 }) } as const;
 type ReservedParams = typeof reservedParams;
+
+/**
+ * Every reserved provider param this target ships (ADR-0031): the boot-side
+ * declarations (name + schema) `control.ts` also registers, one per brand,
+ * each in its own brand-owned module (`service-keys.ts`, `streams-keys.ts`)
+ * so writer and reader import the same constant rather than naming the same
+ * var twice. Adding a brand's reserved param here is this file's one
+ * necessary edit — `run()` itself stays generic over the list.
+ */
+const RESERVED_PROVIDER_PARAMS: readonly ProviderParamEntry[] = [
+  RPC_ACCEPTED_KEYS_PARAM,
+  STREAMS_API_KEY_PARAM,
+];
 
 /**
  * A Prisma Compute service — declarations only (deps + params + build + the
@@ -36,21 +58,6 @@ type ReservedParams = typeof reservedParams;
  * app's `prisma-composer.config.ts` (ADR-0017). This module loads nothing at
  * deploy time; nodes are pure data.
  */
-/**
- * Copies `COMPOSER_<address>_<rest>` to `COMPOSER_<rest>` for every var of this
- * service's address. Derives both names through `configKey`, so it cannot drift
- * from what deploy wrote.
- */
-function restashAddressFree(address: string): void {
-  const prefix = configKey(address, { owner: 'service', name: '' });
-  // An empty address already IS the address-free form — nothing to re-key.
-  if (prefix === configKey('', { owner: 'service', name: '' })) return;
-  for (const [key, value] of Object.entries(process.env)) {
-    if (value === undefined || !key.startsWith(prefix)) continue;
-    process.env[configKey('', { owner: 'service', name: key.slice(prefix.length) })] = value;
-  }
-}
-
 export const compute = <
   D extends Deps,
   P extends Params = Record<never, never>,
@@ -111,17 +118,13 @@ export const compute = <
     ...node,
     async run(address: string, boot: () => Promise<unknown>) {
       const config = deserialize(node, address);
-      // Re-key THIS service's whole reserved namespace address-free, before
-      // the typed re-stashes below: every reader downstream (config, secrets,
-      // serve()'s accepted keys, the streams entrypoint's API_KEY) looks its
-      // var up with no address, because one instance runs one service. Doing
-      // it by prefix keeps this brand-blind — a landing's reserved name is the
-      // registered landing's business (control.ts), never something compute
-      // has to know (ADR-0031). Only this address's own vars move; the typed
-      // stashes that follow overwrite anything they own, so they stay
-      // authoritative for params and secret pointers.
-      restashAddressFree(address);
       stash(node, config);
+      // Validate and re-stash every reserved provider param address-free too
+      // (ADR-0031) — serve()'s accepted keys, the streams entrypoint's
+      // API_KEY — the provider-side sibling of the param re-stash above. An
+      // absent row stays absent (never provisioned); a present one is
+      // schema-checked exactly like a declared param before it moves.
+      stashProviderParams(RESERVED_PROVIDER_PARAMS, address);
       // Re-emit the secret POINTERS address-free too, so secrets() double-looks-up
       // the same way with no address (the value stays only in its platform var).
       stashSecrets(node, address);

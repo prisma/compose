@@ -1,10 +1,10 @@
 /**
  * The streams module's bearer key as an ADR-0031 provisioning need: the ONE
- * brand and the ONE key env-var name — shared by control.ts (which registers
- * the provisioner that mints it and the landing that writes this var — see
- * its `streamsApiKeyProvisioner`/`streamsApiKeyLanding`) and the streams
- * entrypoint (which reads it), so minting and wiring can never drift apart.
- * Finding the edges themselves is `provisioned-edges.ts`'s generic,
+ * brand and the ONE reserved provider param — shared by control.ts (which
+ * registers the deploy-side `value(refs)` that mints and lands it — see its
+ * `streamsApiKeyProvisioner`/`streamsApiKeyParam`) and compute.ts (which
+ * validates and stashes it at boot), so minting and wiring can never drift
+ * apart. Finding the edges themselves is `provisioned-edges.ts`'s generic,
  * brand-blind scan. Mirrors `service-keys.ts` exactly.
  *
  * **Why the brand lives here, not in the declaring package.** ADR-0031's
@@ -18,10 +18,13 @@
  * This module is also reachable from the RUNTIME/authoring side (compute.ts,
  * re-exported through index.ts) — it must never import `@internal/lowering`
  * or `effect`, or those tokens leak into a user service's bundle (the
- * provisioner itself lives in control.ts, the control-plane-only entry).
+ * deploy-side `value(refs)` lives in control.ts, the control-plane-only
+ * entry).
  */
 import type { ProvisionNeed } from '@internal/core';
 import { provisionNeed } from '@internal/core';
+import { type } from 'arktype';
+import type { ProviderParamEntry } from './serializer.ts';
 import { configKey } from './serializer.ts';
 
 /** ADR-0031's need brand for the streams module's bearer key — control.ts registers the provisioner under this. */
@@ -36,9 +39,14 @@ export const STREAMS_API_KEY: unique symbol = Symbol.for('prisma:streams/api-key
  */
 export const streamsApiKeyNeed = (): ProvisionNeed => provisionNeed(STREAMS_API_KEY);
 
-/** The reserved key env var: COMPOSER_<addr>_STREAMS_API_KEY ("" ↦ the address-free name the entrypoint reads). */
-export const streamsApiKeyEnvName = (address: string): string =>
-  configKey(address, { owner: 'service', name: 'STREAMS_API_KEY' });
+/** The reserved provider param for the streams bearer key: the var name is `STREAMS_API_KEY`. */
+export const STREAMS_API_KEY_PARAM: ProviderParamEntry = {
+  name: 'STREAMS_API_KEY',
+  schema: type('string'),
+};
 
 /** The address-free name compute.ts re-stashes to and the streams entrypoint reads. */
-export const STREAMS_API_KEY_ENV = streamsApiKeyEnvName('');
+export const STREAMS_API_KEY_ENV = configKey('', {
+  owner: 'service',
+  name: STREAMS_API_KEY_PARAM.name,
+});

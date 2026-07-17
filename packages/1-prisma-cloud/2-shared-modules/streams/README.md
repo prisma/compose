@@ -57,8 +57,8 @@ Two consequences worth knowing:
   edge, because `@prisma/streams-server` authenticates a single `API_KEY` —
   every consumer of one `streams()` instance holds the same value. Cardinality
   is provisioner policy (ADR-0031), so per-edge keys are later a change of
-  that policy plus an accepted-set landing once the upstream server takes a
-  key set: no resource to add, no core change, nothing here to delete.
+  that policy plus an accepted-set provider param once the upstream server
+  takes a key set: no resource to add, no core change, nothing here to delete.
 - **No consumers, no key.** The need lives on the consumer's edge, so a
   `streams()` module nothing depends on never gets a key minted, and its
   server refuses to boot rather than serve unauthenticated. Wire a consumer,

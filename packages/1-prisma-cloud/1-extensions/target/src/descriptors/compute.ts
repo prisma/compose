@@ -3,6 +3,7 @@
 import { isParamSource, type ServiceNode } from '@internal/core';
 import type { NodeDescriptor } from '@internal/core/config';
 import * as Prisma from '@internal/lowering';
+import * as Output from 'alchemy/Output';
 import * as Effect from 'effect/Effect';
 import { paramBindingFor, paramName } from '../param.ts';
 import { provisionedEdges } from '../provisioned-edges.ts';
@@ -93,17 +94,17 @@ export function computeDescriptor(o: ResolvedCloudOptions): NodeDescriptor {
         // consumer-side special case left to write here.
 
         // Provider side (ADR-0031). Driven by the PROVIDER, not by its edges:
-        // every registered landing is asked, even when this service has no
-        // inbound edge for that brand, because "no edges" and "no var" are not
-        // the same thing — an absent var reads as "never provisioned" (local
-        // dev, tests), so a deployed provider with zero wired consumers must
-        // still be able to emit a deny-everything value. Whether an empty set
-        // means deny-all or emit-nothing is the BRAND's call, so the landing
-        // decides and may return undefined to write no row at all. Compute
-        // never names a brand — it looks one up.
+        // every registered reserved provider param is asked, even when this
+        // service has no inbound edge for that brand, because "no edges" and
+        // "no var" are not the same thing — an absent var reads as "never
+        // provisioned" (local dev, tests), so a deployed provider with zero
+        // wired consumers must still be able to emit a deny-everything value.
+        // Whether an empty set means deny-all or emit-nothing is that param's
+        // own call, so it decides and may return undefined to write no row at
+        // all. Compute never names a brand — it looks one up.
         //
-        // The gate is main's and stays: a service that exposes nothing can
-        // never be any binding's provider, so it gets no landing rows.
+        // The check is main's and stays: a service that exposes nothing can
+        // never be any binding's provider, so it gets no provider param rows.
         if (svc.expose !== undefined && Object.keys(svc.expose).length > 0) {
           const refsByBrand = new Map<symbol, unknown[]>();
           for (const edge of provisionedEdges(graph)) {
@@ -114,14 +115,23 @@ export function computeDescriptor(o: ResolvedCloudOptions): NodeDescriptor {
             refs.push(ref);
             refsByBrand.set(edge.brand, refs);
           }
-          for (const [brand, landing] of o.provisionLandings) {
-            const row = landing({ address, refs: refsByBrand.get(brand) ?? [] });
-            if (row === undefined) continue;
+          for (const [brand, entry] of o.providerParams) {
+            const raw = entry.value(refsByBrand.get(brand) ?? []);
+            if (raw === undefined) continue;
+            const key = configKey(address, { owner: 'service', name: entry.name });
+            // The value may still be an unresolved deploy-time Output (a
+            // minted key isn't known until Alchemy applies it) or already a
+            // plain value (e.g. a zero-refs deny-all literal) — either way it
+            // is JSON-encoded through the same `encode` a declared param's
+            // own literal takes, never a brand-invented format.
+            const value = Output.isOutput(raw)
+              ? Output.map(raw, (v) => encode('service', v))
+              : encode('service', raw);
             records.push(
-              yield* Prisma.EnvironmentVariable(`${row.key}-var`, {
+              yield* Prisma.EnvironmentVariable(`${key}-var`, {
                 projectId,
-                key: row.key,
-                value: row.value,
+                key,
+                value,
                 class: cls,
                 ...branch,
               }),

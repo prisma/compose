@@ -14,9 +14,13 @@ import { RPC_ACCEPTED_KEYS_ENV } from '@internal/rpc';
 import { type } from 'arktype';
 import { compute, postgres, postgresContract } from '../index.ts';
 import { configKey, deserialize, deserializeSecrets, encode, secretKey } from '../serializer.ts';
-import { serviceKeyEnvName } from '../service-keys.ts';
-import { STREAMS_API_KEY_ENV, streamsApiKeyEnvName } from '../streams-keys.ts';
+import { RPC_ACCEPTED_KEYS_PARAM } from '../service-keys.ts';
+import { STREAMS_API_KEY_ENV, STREAMS_API_KEY_PARAM } from '../streams-keys.ts';
 import { bootstrapService } from '../testing.ts';
+
+/** The deploy-side, address-scoped row for a reserved provider param. */
+const providerParamKey = (address: string, name: string): string =>
+  configKey(address, { owner: 'service', name });
 
 function scalarDeclaration(
   owner: ConfigDeclaration['owner'],
@@ -415,12 +419,20 @@ describe('compute().run(address, boot) → load() — the round trip', () => {
     expect(portAtBoot).toBe('3000');
   });
 
-  test('run() re-stashes the address-scoped RPC accepted-keys var address-free (ADR-0030)', async () => {
+  // Reserved provider params (ADR-0031) are the provider-side counterpart of
+  // a declared param: `run()` validates each one's address-scoped row against
+  // its own schema — the same `coerce` a declared param takes — and re-stashes
+  // it address-free, so `serve()`'s accepted keys and the streams entrypoint's
+  // API_KEY read a checked value, never raw copied bytes. It cannot be
+  // replaced by writing address-free at deploy: one project is one env
+  // namespace, so two services would collide on COMPOSER_PORT. Only boot
+  // knows which address it is.
+  test("run() validates a reserved provider param's address-scoped row and re-stashes it address-free (RPC's accepted-keys set)", async () => {
     const app = compute({ name: 'auth', deps: {}, build });
     let seenAtBoot: string | undefined;
     await withEnv(
       {
-        [serviceKeyEnvName('auth')]: '["key-a","key-b"]',
+        [providerParamKey('auth', RPC_ACCEPTED_KEYS_PARAM.name)]: '["key-a","key-b"]',
         COMPOSER_AUTH_PORT: '',
         COMPOSER_PORT: '',
         [RPC_ACCEPTED_KEYS_ENV]: '',
@@ -433,7 +445,25 @@ describe('compute().run(address, boot) → load() — the round trip', () => {
     expect(seenAtBoot).toBe('["key-a","key-b"]');
   });
 
-  test('run() re-stashes nothing when no accepted-keys var was written for this address', async () => {
+  test("run() validates a reserved provider param's own schema, not another's (streams' single-value key)", async () => {
+    const app = compute({ name: 'events', deps: {}, build });
+    let seenAtBoot: string | undefined;
+    await withEnv(
+      {
+        [providerParamKey('events', STREAMS_API_KEY_PARAM.name)]: '"minted-key-abc"',
+        COMPOSER_EVENTS_PORT: '',
+        COMPOSER_PORT: '',
+        [STREAMS_API_KEY_ENV]: '',
+      },
+      () =>
+        app.run('events', async () => {
+          seenAtBoot = process.env[STREAMS_API_KEY_ENV];
+        }),
+    );
+    expect(seenAtBoot).toBe('"minted-key-abc"');
+  });
+
+  test('run() stashes nothing when a reserved provider param row is absent — absence stays "never provisioned"', async () => {
     const app = compute({ name: 'plain', deps: {}, build });
     let seenAtBoot: string | undefined;
     await withEnv({ COMPOSER_PLAIN_PORT: '', COMPOSER_PORT: '', [RPC_ACCEPTED_KEYS_ENV]: '' }, () =>
@@ -444,44 +474,31 @@ describe('compute().run(address, boot) → load() — the round trip', () => {
     expect(seenAtBoot).toBe('');
   });
 
-  // The boot sweep (compute.ts's `restashAddressFree`) is what makes every
-  // address-free reader work — config, secrets, serve()'s accepted keys, and
-  // any landing's reserved var (the streams entrypoint's API_KEY is the second
-  // one). It cannot be replaced by writing address-free at deploy: one project
-  // is one env namespace, so two services would collide on COMPOSER_PORT.
-  // Only boot knows which address it is.
-  test("run() aliases a LANDING's var at this address address-free, with no knowledge of the brand", async () => {
+  test('run() fails loudly on a reserved provider param row that fails its schema, rather than passing raw bytes through', async () => {
     const app = compute({ name: 'events', deps: {}, build });
-    let seenAtBoot: string | undefined;
     await withEnv(
       {
-        [streamsApiKeyEnvName('streams.service')]: 'minted-key-abc',
-        COMPOSER_STREAMS_SERVICE_PORT: '',
+        // Not JSON — the shape a raw, unvalidated copy would have let through.
+        [providerParamKey('events', STREAMS_API_KEY_PARAM.name)]: 'not-json-at-all',
+        COMPOSER_EVENTS_PORT: '',
         COMPOSER_PORT: '',
-        [STREAMS_API_KEY_ENV]: '',
       },
-      () =>
-        app.run('streams.service', async () => {
-          seenAtBoot = process.env[STREAMS_API_KEY_ENV];
-        }),
+      () => expect(app.run('events', async () => {})).rejects.toThrow(/invalid value/),
     );
-    // compute.ts names no brand; the sweep moved this purely by address prefix.
-    expect(seenAtBoot).toBe('minted-key-abc');
   });
 
-  test("run() does NOT alias another service's var — only this address's namespace moves", async () => {
+  test("run() does not alias another service's reserved provider param — only this address's own row is read", async () => {
     const app = compute({ name: 'a', deps: {}, build });
     let seenAtBoot: string | undefined;
     await withEnv(
       {
         // Compute injects EVERY project var into EVERY service, so a sibling's
-        // landing var is always in this process's env — the normal case.
-        [streamsApiKeyEnvName('other.service')]: 'not-mine',
-        // And the sharp one: a service nested UNDER my address, whose var
-        // therefore starts with my own sweep prefix. Stripping the prefix must
-        // still not produce MY address-free key — it lands under the nested
-        // remainder instead, which no reader of mine looks up.
-        [streamsApiKeyEnvName('a.b')]: 'nested-not-mine',
+        // reserved-param row is always in this process's env — the normal case.
+        [providerParamKey('other.service', STREAMS_API_KEY_PARAM.name)]: '"not-mine"',
+        // And the sharp one: a service nested UNDER my address. Its row shares
+        // no key with mine — `configKey` addresses each service exactly, no
+        // prefix matching — so it must not surface here either.
+        [providerParamKey('a.b', STREAMS_API_KEY_PARAM.name)]: '"nested-not-mine"',
         COMPOSER_A_PORT: '',
         COMPOSER_PORT: '',
         [STREAMS_API_KEY_ENV]: '',
@@ -494,7 +511,7 @@ describe('compute().run(address, boot) → load() — the round trip', () => {
     expect(seenAtBoot).toBe('');
   });
 
-  test("stash() wins over the sweep's raw copy for a declared param (the sweep runs first)", async () => {
+  test('stash() writes the re-encoded typed value for a declared param, not a raw copy', async () => {
     const app = compute({
       name: 'web',
       deps: {},
@@ -503,8 +520,8 @@ describe('compute().run(address, boot) → load() — the round trip', () => {
     });
     let seenAtBoot: string | undefined;
     // The address-scoped row is textually different from what encode() emits
-    // (JSON tolerates the padding). The sweep copies bytes; stash re-encodes
-    // the typed value. Ordering decides which one the entry reads.
+    // (JSON tolerates the padding); stash() decodes then re-encodes the typed
+    // value, so the address-free row is always the canonical form.
     await withEnv(
       {
         COMPOSER_WEB_RETRIES: '  5  ',
@@ -520,7 +537,7 @@ describe('compute().run(address, boot) → load() — the round trip', () => {
     expect(seenAtBoot).toBe('5');
   });
 
-  test('run() with an empty address is a no-op sweep — the address-free form is already the target', async () => {
+  test('a lone-service deploy (address "") reads and re-writes the same address-free key for a declared param', async () => {
     const app = compute({
       name: 'plain',
       deps: {},
@@ -533,12 +550,11 @@ describe('compute().run(address, boot) → load() — the round trip', () => {
         seenAtBoot = process.env[COMPOSER_RETRIES_KEY];
       }),
     );
-    // Nothing to re-key onto itself; the address-free row stands.
     expect(seenAtBoot).toBe('7');
   });
 
-  test("serviceKeyEnvName('') is @internal/rpc's RPC_ACCEPTED_KEYS_ENV — writer and reader cannot drift", () => {
-    expect(serviceKeyEnvName('')).toBe(RPC_ACCEPTED_KEYS_ENV);
+  test("the RPC reserved provider param's address-free key is @internal/rpc's RPC_ACCEPTED_KEYS_ENV — writer and reader cannot drift", () => {
+    expect(providerParamKey('', RPC_ACCEPTED_KEYS_PARAM.name)).toBe(RPC_ACCEPTED_KEYS_ENV);
   });
 });
 

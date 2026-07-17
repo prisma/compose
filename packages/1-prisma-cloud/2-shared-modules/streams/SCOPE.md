@@ -45,10 +45,11 @@ a producer output: the `apiKey` connection param declares an ADR-0031
 `streams-keys.ts` — the target sits below this module, so the brand is
 imported downward). The target mints one value PER PROVIDER (the upstream
 server authenticates a single `API_KEY`), keeps it stable in deploy state,
-fills every consumer's param with it, and lands the same value on the streams
-service itself. Per-edge keys are later a provisioner-cardinality change plus
-an accepted-set landing once upstream accepts a key set — no resource to add,
-no core change. A module with no consumers gets no key and refuses to boot.
+fills every consumer's param with it, and stores the same value on the streams
+service itself as a reserved provider param. Per-edge keys are later a
+provisioner-cardinality change plus an accepted-set provider param once
+upstream accepts a key set — no resource to add, no core change. A module
+with no consumers gets no key and refuses to boot.
 
 ## Config surface
 

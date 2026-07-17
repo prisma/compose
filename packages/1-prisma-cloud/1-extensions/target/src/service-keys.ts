@@ -1,18 +1,27 @@
 /**
- * ADR-0030's per-binding service keys: the ONE accepted-keys env-var name,
- * shared by `control.ts` (which registers the provisioner that mints them and
- * the landing that writes this var — see its `serviceKeyLanding`) and
- * `@internal/rpc`'s `serve()` (which reads it), so writer and reader cannot
- * drift. Finding the edges themselves is `provisioned-edges.ts`'s generic,
+ * RPC's reserved provider param (ADR-0030/ADR-0031): the declaration —
+ * name + schema — for the accepted-keys set a provider stores, shared by
+ * `control.ts` (which registers the deploy-side `value(refs)` that mints and
+ * aggregates it — see its `rpcAcceptedKeysParam`) and `compute.ts` (which
+ * validates and stashes it at boot), so writer and reader cannot drift.
+ * Finding the edges themselves is `provisioned-edges.ts`'s generic,
  * brand-blind scan — RPC is not special-cased anywhere in this target.
  *
  * This module is reachable from the RUNTIME/authoring side — it must never
  * import `@internal/lowering` or `effect`, or those tokens leak into a user
- * service's bundle (the provisioner and landing live in control.ts, the
+ * service's bundle (the deploy-side `value(refs)` lives in control.ts, the
  * control-plane-only entry).
  */
-import { configKey } from './serializer.ts';
+import { type } from 'arktype';
+import type { ProviderParamEntry } from './serializer.ts';
 
-/** The reserved accepted-keys env var: COMPOSER_<addr>_RPC_ACCEPTED_KEYS ("" ↦ @internal/rpc's RPC_ACCEPTED_KEYS_ENV). */
-export const serviceKeyEnvName = (address: string): string =>
-  configKey(address, { owner: 'service', name: 'RPC_ACCEPTED_KEYS' });
+/**
+ * The reserved provider param for RPC's accepted-keys set: the var name is
+ * `RPC_ACCEPTED_KEYS`, derived through `configKey` at both ends
+ * (`configKey(address, …)` at deploy, `configKey('', …)` at boot — the
+ * address-free form is `@internal/rpc`'s `RPC_ACCEPTED_KEYS_ENV`).
+ */
+export const RPC_ACCEPTED_KEYS_PARAM: ProviderParamEntry = {
+  name: 'RPC_ACCEPTED_KEYS',
+  schema: type('string[]'),
+};
