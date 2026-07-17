@@ -5,7 +5,7 @@
  * barrel, so a consumer graph that imports this module never bundles a
  * `bun`/`node:` token or the server runtime.
  */
-export type { StreamsConfig, StreamsContract } from './contract.ts';
-export { durableStreams, streamsContract } from './contract.ts';
-export { streams } from './streams-module.ts';
+export type { StreamsConfig, StreamsContract } from '../contract.ts';
+export { durableStreams, streamsContract } from '../contract.ts';
+export { streams } from '../streams-module.ts';
 export { streamsService } from './streams-service.ts';

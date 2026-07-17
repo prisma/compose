@@ -10,7 +10,7 @@ import { secret } from '@internal/core';
 import node from '@internal/node';
 import { compute } from '@internal/prisma-cloud';
 import { s3 } from '@internal/storage';
-import { streamsContract } from './contract.ts';
+import { streamsContract } from '../contract.ts';
 
 export function streamsService() {
   return compute({

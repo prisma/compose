@@ -11,13 +11,13 @@ import { defineConfig } from 'tsdown';
 export default defineConfig([
   {
     ...baseConfig,
-    entry: { index: 'src/index.ts', 'streams-service': 'src/streams-service.ts' },
+    entry: { index: 'src/exports/index.ts', 'streams-service': 'src/exports/streams-service.ts' },
     exports: false,
     clean: true,
   },
   {
     ...baseConfig,
-    entry: { 'streams-entrypoint': 'src/streams-entrypoint.ts' },
+    entry: { 'streams-entrypoint': 'src/exports/streams-entrypoint.ts' },
     exports: false,
     clean: false,
     skipNodeModulesBundle: false,
@@ -29,7 +29,7 @@ export default defineConfig([
   },
   {
     ...baseConfig,
-    entry: { testing: 'src/testing.ts' },
+    entry: { testing: 'src/exports/testing.ts' },
     exports: false,
     clean: false,
     skipNodeModulesBundle: false,

@@ -11,7 +11,7 @@ import { module, secret } from '@internal/core';
 import type { S3Config, S3Contract } from '@internal/storage';
 import { s3 } from '@internal/storage';
 import { streamsContract } from './contract.ts';
-import { streamsService } from './streams-service.ts';
+import { streamsService } from './exports/streams-service.ts';
 
 export function streams(opts?: {
   name?: string;
