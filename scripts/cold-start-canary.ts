@@ -51,24 +51,68 @@
  * that skipped this check and reported "fixed" from four warm hits).
  *
  * A REQUIRED check: any close → exit 0, bug still present (today's normal);
- * every touch reaching a genuine cold start AND holding → exit 1, the
+ * enough touches reaching a genuine cold start AND holding → exit 1, the
  * forcing signal to remove createStreamsClient's IDEMPOTENT_BACKOFF
- * (PRO-219) and this canary; a run that never manages to force a cold start
- * → exit 0 with a CI warning annotation (a broken/inconclusive canary run,
- * not a clean bill of health), so a deploy flake never blocks unrelated PRs.
+ * (PRO-219) and this canary; a run that never manages to force a cold start,
+ * or one whose log evidence can't place a touch on either side of the boot,
+ * or one too small to trust an all-held result from → exit 0 with a CI
+ * warning annotation (a broken/inconclusive/underpowered canary run, not a
+ * clean bill of health), so a deploy flake never blocks unrelated PRs.
+ *
+ * Two more defects, found by a second review round on top of the log check
+ * above, are fixed here:
+ *
+ * 3. Sampling back-to-back (as fast as create/upload/start/promote allow)
+ *    produced atypically short boots — around 1s end to end — because
+ *    consecutive deployments land on some kind of already-warm host
+ *    resource; the mechanism isn't established, but the effect is. A manual
+ *    probe that instead spaced touches 60s apart against the same stack saw
+ *    boots of 3.3s, 10.4s, 11.6s, 12.8s, and 21.9s, and reproduced the close
+ *    on 3 of 5 touches. SAMPLE_INTERVAL_MS below reproduces that spacing, and
+ *    — per live evidence gathered while building this fix — is applied
+ *    before sample #0 too: even with DURABILITY_WAIT_MS already elapsed,
+ *    sample #0 landed in the same short, ambiguous window when it fired
+ *    right after the deploy step's own start of this service.
+ * 4. PRO-217 is intermittent, so a run where every touch happened to hold is
+ *    the outcome intermittency predicts most of the time from a small
+ *    sample — it is not evidence the bug is gone. `classifyColdStartRun`'s
+ *    bug-gone branch now requires a sample size, derived from a target close
+ *    rate, that makes an all-held run genuinely improbable if the bug is
+ *    still present; see cold-start-canary-classify.ts's
+ *    MIN_HELD_SAMPLES_FOR_BUG_GONE for the arithmetic.
+ *
+ * A third fix, also from that round: the boot-log timestamp comes from the
+ * streams server's own clock on the Compute VM, and `touchSentAt` comes from
+ * `new Date()` on the CI runner — two different clocks with no guaranteed
+ * sync between them. `classifyBootEvidence` in cold-start-canary-classify.ts
+ * only calls a touch confirmed-cold or confirmed-warm when it is on the far
+ * side of a margin comfortably larger than plausible clock skew; anything
+ * closer than that is `unknown`, not a guess. The latency-based fallback
+ * this file used to fall back to when the log read failed is gone outright —
+ * real samples have been observed running 860-1598ms, straddling any fixed
+ * latency threshold, so a latency alone cannot stand in for reading the log.
  */
 import { execSync } from 'node:child_process';
 import * as os from 'node:os';
 import {
   type ColdStartTouch,
+  classifyBootEvidence,
   classifyColdStartRun,
   classifyColdStartTouch,
   findListeningTimestamp,
-  touchRacedBoot,
+  MIN_HELD_SAMPLES_FOR_BUG_GONE,
 } from './cold-start-canary-classify.ts';
 
 const API = 'https://api.prisma.io/v1';
-const SAMPLES = Number(process.env['COLD_START_SAMPLES'] ?? '4');
+/**
+ * MIN_HELD_SAMPLES_FOR_BUG_GONE confirmed cold-start holds are what a
+ * bug-gone verdict needs; sampling fewer than that can never produce one
+ * (classifyColdStartRun reports inconclusive instead), so that count is the
+ * default budget. A close is decisive the moment it happens (see the
+ * early-exit in the sampling loop below), so a run against a stack where the
+ * bug is present typically finishes in far fewer samples than this.
+ */
+const SAMPLES = Number(process.env['COLD_START_SAMPLES'] ?? String(MIN_HELD_SAMPLES_FOR_BUG_GONE));
 /**
  * The streams module seals segments every 5s and uploads them to the store; a
  * fresh instance bootstraps from what the store holds. Sample too soon after
@@ -77,20 +121,41 @@ const SAMPLES = Number(process.env['COLD_START_SAMPLES'] ?? '4');
  */
 const DURABILITY_WAIT_MS = Number(process.env['COLD_START_DURABILITY_WAIT_MS'] ?? '10000');
 /**
- * How long to read a fresh deployment's boot logs before giving up on
- * finding the `listening` line. Historical log delivery over the WebSocket
- * (`?from_start=true`) is near-instant once connected — this is headroom for
- * connection setup and an unusually slow boot, not the expected wait.
+ * The gap enforced before every sample, including the first — reproduces the
+ * 60s-spaced manual probe that actually lands touches in the long boot
+ * window; see fix 3 in the module comment above. This is applied before
+ * sample #0 too, on top of DURABILITY_WAIT_MS: live runs during this fix
+ * showed sample #0 landing in the same ~1-1.3s ambiguous window that
+ * back-to-back sampling produces, even with DURABILITY_WAIT_MS already
+ * elapsed, most likely because it follows so soon after the deploy step's
+ * own start of this same service. Since any touch this run cannot place on
+ * either side of the boot blocks a bug-gone verdict for the whole run (see
+ * cold-start-canary-classify.ts), a sample #0 that is reliably ambiguous
+ * would make bug-gone unreachable no matter how many samples follow it.
  */
-const LOG_READ_TIMEOUT_MS = Number(process.env['COLD_START_LOG_READ_TIMEOUT_MS'] ?? '8000');
+const SAMPLE_INTERVAL_MS = Number(process.env['COLD_START_SAMPLE_INTERVAL_MS'] ?? '60000');
 /**
- * Fallback only: used when the deployment's logs can't be read at all (a WS
- * failure, not merely a slow boot). gotchas.md puts a warm response well
- * under 700ms and the boot window at ~3.5-8s; this sits above the warm
- * ceiling so a latency-only read stays conservative about calling something
- * a cold start.
+ * How long to read a fresh deployment's boot logs before giving up on
+ * finding the `listening` line. Manual probing has observed start→listening
+ * as long as 21.9s; this sits comfortably above that so a genuinely slow
+ * (but real) boot still gets read to completion rather than timing out into
+ * an `unknown` boot-evidence verdict.
  */
-const LATENCY_FALLBACK_THRESHOLD_MS = 1_000;
+const LOG_READ_TIMEOUT_MS = Number(process.env['COLD_START_LOG_READ_TIMEOUT_MS'] ?? '30000');
+/**
+ * The run's own wall-clock budget. If sampling is still going once this
+ * elapses, the loop stops taking new samples and reports whatever it has
+ * collected so far instead of running toward the CI job's own
+ * timeout-minutes kill: a job killed by that external timeout never reaches
+ * classifyColdStartRun at all, so it can't emit the inconclusive exit and
+ * warning annotation this script is supposed to use for a run that can't
+ * finish — it just shows up as a bare failed step. 20 minutes matches the
+ * worst-case budget (MIN_HELD_SAMPLES_FOR_BUG_GONE samples at roughly 85s
+ * each: 60s of spacing plus ~25s of create/upload/start/promote/touch/log-
+ * read, measured live) with the surrounding job's install/build/deploy/
+ * destroy/sweep steps still fitting under its 30-minute timeout.
+ */
+const MAX_RUN_MS = Number(process.env['COLD_START_MAX_RUN_MS'] ?? '1200000');
 
 const token = process.env['PRISMA_SERVICE_TOKEN'];
 const stackName = process.env['STACK_NAME'];
@@ -101,6 +166,10 @@ if (!token || !stackName) {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 interface ApiResponse {
@@ -265,7 +334,7 @@ async function sampleFreshStart(
     // A short, deliberate courtesy delay — not a "wait for running" poll.
     // Each retry is still racing to promote at the earliest legal moment;
     // this just keeps a slow boot from hammering the API every few ms.
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    await sleep(200);
   }
 
   const touchSentAt = new Date();
@@ -281,16 +350,13 @@ async function sampleFreshStart(
 
   const logText = await readDeploymentBootLog(deploymentId);
   const listeningAt = findListeningTimestamp(logText);
-  const coldStartConfirmed =
-    listeningAt !== undefined
-      ? touchRacedBoot(touchSentAt, listeningAt)
-      : latencyMs >= LATENCY_FALLBACK_THRESHOLD_MS;
+  const bootEvidence = classifyBootEvidence(touchSentAt, listeningAt);
   const evidence =
     listeningAt !== undefined
-      ? `logs: listening ${listeningAt.toISOString()}, touch sent ${touchSentAt.toISOString()}`
-      : `latency fallback: no listening line read within ${LOG_READ_TIMEOUT_MS}ms`;
+      ? `logs: listening ${listeningAt.toISOString()}, touch sent ${touchSentAt.toISOString()} (${bootEvidence})`
+      : `no listening line read within ${LOG_READ_TIMEOUT_MS}ms — boot evidence unknown, not guessed`;
 
-  const touch = classifyColdStartTouch(res.status, body, coldStartConfirmed);
+  const touch = classifyColdStartTouch(res.status, body, bootEvidence);
   const detail = touch === 'other' ? ` — ${body.slice(0, 160)}` : '';
   console.log(
     `  sample #${index}: ${touch} (${res.status}, ${latencyMs}ms) [${evidence}]${detail}`,
@@ -320,7 +386,7 @@ for (let attempt = 1; attempt <= 3 && !warmed; attempt++) {
     console.error(
       `  warmup attempt ${attempt}: ${warm.status} ${(await warm.text()).slice(0, 160)}`,
     );
-    await new Promise((resolve) => setTimeout(resolve, 5_000));
+    await sleep(5_000);
   }
 }
 if (!warmed) {
@@ -331,11 +397,32 @@ console.log(
   `Warmed up; waiting ${DURABILITY_WAIT_MS}ms for the stream to reach the store, ` +
     `then sampling ${SAMPLES} fresh streams instances…`,
 );
-await new Promise((resolve) => setTimeout(resolve, DURABILITY_WAIT_MS));
+await sleep(DURABILITY_WAIT_MS);
 
+const runStartedAt = Date.now();
 const touches: ColdStartTouch[] = [];
 for (let i = 0; i < SAMPLES; i++) {
-  touches.push(await sampleFreshStart(jobsUrl, streamsAppId, artifactPath, i));
+  if (Date.now() - runStartedAt > MAX_RUN_MS) {
+    console.log(
+      `  stopping after ${i} sample(s): the run's own ${MAX_RUN_MS}ms wall-clock budget is used ` +
+        'up — reporting the touches collected so far rather than risking a CI timeout kill.',
+    );
+    break;
+  }
+  console.log(`  waiting ${SAMPLE_INTERVAL_MS}ms before sample #${i}…`);
+  await sleep(SAMPLE_INTERVAL_MS);
+  const touch = await sampleFreshStart(jobsUrl, streamsAppId, artifactPath, i);
+  touches.push(touch);
+  // A close is decisive on its own (classifyColdStartRun's rule) — the
+  // verdict is already bug-present, and running the rest of the budget only
+  // spends CI minutes without changing the answer.
+  if (touch === 'closed') {
+    console.log(
+      `  close observed on sample #${i}; bug-present is already decided — skipping the ` +
+        `remaining ${SAMPLES - i - 1} samples.`,
+    );
+    break;
+  }
 }
 
 const result = classifyColdStartRun(touches);

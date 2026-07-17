@@ -2,44 +2,55 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import {
+  CLOCK_SKEW_MARGIN_MS,
   type ColdStartTouch,
+  classifyBootEvidence,
   classifyColdStartRun,
   classifyColdStartTouch,
   findListeningTimestamp,
+  MAX_FALSE_CLEAN_PROBABILITY,
+  MIN_HELD_SAMPLES_FOR_BUG_GONE,
   stripAnsiCodes,
-  touchRacedBoot,
+  TARGET_CLOSE_RATE,
 } from './cold-start-canary-classify.ts';
 
 describe('classifyColdStartTouch', () => {
-  it('a 201 confirmed to have raced the boot → held (the edge carried the request through it)', () => {
-    assert.equal(classifyColdStartTouch(201, '{"appended":{"n":1}}', true), 'held');
+  it('a 201 confirmed cold → held (the edge carried the request through a real boot)', () => {
+    assert.equal(classifyColdStartTouch(201, '{"appended":{"n":1}}', 'confirmed-cold'), 'held');
   });
 
-  it('a 201 NOT confirmed to have raced the boot → no-cold-start (it proves nothing about PRO-217)', () => {
-    assert.equal(classifyColdStartTouch(201, '{"appended":{"n":1}}', false), 'no-cold-start');
+  it('a 201 confirmed warm → no-cold-start (it proves nothing about PRO-217)', () => {
+    assert.equal(
+      classifyColdStartTouch(201, '{"appended":{"n":1}}', 'confirmed-warm'),
+      'no-cold-start',
+    );
   });
 
-  it("the jobs service's surfaced close → closed (the PRO-217 signal), regardless of coldStartConfirmed", () => {
+  it('a 201 with unknown boot evidence → other (log read failed or too close to call — not a guess)', () => {
+    assert.equal(classifyColdStartTouch(201, '{"appended":{"n":1}}', 'unknown'), 'other');
+  });
+
+  it("the jobs service's surfaced close → closed (the PRO-217 signal), regardless of boot evidence", () => {
     const body =
       'streams unreachable: Error: The socket connection was closed unexpectedly. For more information, pass `verbose: true`';
-    assert.equal(classifyColdStartTouch(502, body, true), 'closed');
-    assert.equal(classifyColdStartTouch(502, body, false), 'closed');
+    assert.equal(classifyColdStartTouch(502, body, 'confirmed-cold'), 'closed');
+    assert.equal(classifyColdStartTouch(502, body, 'unknown'), 'closed');
   });
 
   it('reset/refused faces of the same close → closed', () => {
     for (const body of ['ECONNRESET while fetching', 'connect ECONNREFUSED', 'socket hang up']) {
-      assert.equal(classifyColdStartTouch(502, body, false), 'closed', body);
+      assert.equal(classifyColdStartTouch(502, body, 'unknown'), 'closed', body);
     }
   });
 
   it('a 502 whose cause is something else → other (inconclusive, not a close)', () => {
-    assert.equal(classifyColdStartTouch(502, 'append failed: 500', false), 'other');
+    assert.equal(classifyColdStartTouch(502, 'append failed: 500', 'unknown'), 'other');
   });
 
-  it('any other status → other, regardless of coldStartConfirmed', () => {
-    assert.equal(classifyColdStartTouch(500, 'boom', true), 'other');
-    assert.equal(classifyColdStartTouch(404, 'not found', false), 'other');
-    assert.equal(classifyColdStartTouch(200, 'ok but not an append', true), 'other');
+  it('any other status → other, regardless of boot evidence', () => {
+    assert.equal(classifyColdStartTouch(500, 'boom', 'confirmed-cold'), 'other');
+    assert.equal(classifyColdStartTouch(404, 'not found', 'unknown'), 'other');
+    assert.equal(classifyColdStartTouch(200, 'ok but not an append', 'confirmed-cold'), 'other');
   });
 });
 
@@ -80,26 +91,50 @@ describe('findListeningTimestamp', () => {
   });
 });
 
-describe('touchRacedBoot', () => {
-  it('true when the touch was sent before the app finished booting', () => {
-    const touchSentAt = new Date('2026-07-17T12:04:09.000Z');
-    const listeningAt = new Date('2026-07-17T12:04:10.313Z');
-    assert.equal(touchRacedBoot(touchSentAt, listeningAt), true);
+describe('classifyBootEvidence (margin-aware, cross-clock comparison)', () => {
+  const listeningAt = new Date('2026-07-17T12:04:10.000Z');
+
+  it('touch sent comfortably before listening (beyond the skew margin) → confirmed-cold', () => {
+    const touchSentAt = new Date(listeningAt.getTime() - CLOCK_SKEW_MARGIN_MS - 1);
+    assert.equal(classifyBootEvidence(touchSentAt, listeningAt), 'confirmed-cold');
   });
 
-  it('false when the touch was sent after the app was already listening', () => {
-    const touchSentAt = new Date('2026-07-17T12:04:11.000Z');
-    const listeningAt = new Date('2026-07-17T12:04:10.313Z');
-    assert.equal(touchRacedBoot(touchSentAt, listeningAt), false);
+  it('touch sent exactly at the margin boundary before listening → confirmed-cold (>=)', () => {
+    const touchSentAt = new Date(listeningAt.getTime() - CLOCK_SKEW_MARGIN_MS);
+    assert.equal(classifyBootEvidence(touchSentAt, listeningAt), 'confirmed-cold');
   });
 
-  it('false when there is no listening timestamp to compare against', () => {
-    assert.equal(touchRacedBoot(new Date(), undefined), false);
+  it('touch sent comfortably after listening (beyond the skew margin) → confirmed-warm', () => {
+    const touchSentAt = new Date(listeningAt.getTime() + CLOCK_SKEW_MARGIN_MS + 1);
+    assert.equal(classifyBootEvidence(touchSentAt, listeningAt), 'confirmed-warm');
+  });
+
+  it('touch sent within the skew margin on either side of listening → unknown (could be skew, not order)', () => {
+    const justBefore = new Date(listeningAt.getTime() - CLOCK_SKEW_MARGIN_MS + 1);
+    const justAfter = new Date(listeningAt.getTime() + CLOCK_SKEW_MARGIN_MS - 1);
+    assert.equal(classifyBootEvidence(justBefore, listeningAt), 'unknown');
+    assert.equal(classifyBootEvidence(justAfter, listeningAt), 'unknown');
+  });
+
+  it('no listening timestamp at all → unknown, not a guess', () => {
+    assert.equal(classifyBootEvidence(new Date(), undefined), 'unknown');
+  });
+});
+
+describe('the sample-budget arithmetic', () => {
+  it('MIN_HELD_SAMPLES_FOR_BUG_GONE is the smallest N keeping an all-held run at or under 5% chance at a 20% close rate', () => {
+    assert.equal(TARGET_CLOSE_RATE, 0.2);
+    assert.equal(MAX_FALSE_CLEAN_PROBABILITY, 0.05);
+    assert.equal(MIN_HELD_SAMPLES_FOR_BUG_GONE, 14);
+    const chance = (n: number) => (1 - TARGET_CLOSE_RATE) ** n;
+    assert.ok(chance(MIN_HELD_SAMPLES_FOR_BUG_GONE) <= MAX_FALSE_CLEAN_PROBABILITY);
+    assert.ok(chance(MIN_HELD_SAMPLES_FOR_BUG_GONE - 1) > MAX_FALSE_CLEAN_PROBABILITY);
   });
 });
 
 describe('classifyColdStartRun (the three-exit mapping of a REQUIRED check)', () => {
   const run = (...touches: ColdStartTouch[]) => classifyColdStartRun(touches);
+  const heldTimes = (n: number): ColdStartTouch[] => Array.from({ length: n }, () => 'held');
 
   it('no touches → inconclusive (broken canary; warn, do not block)', () => {
     assert.equal(run().verdict, 'inconclusive');
@@ -117,9 +152,24 @@ describe('classifyColdStartRun (the three-exit mapping of a REQUIRED check)', ()
     assert.equal(result.verdict, 'bug-present');
   });
 
-  it('all held, every touch a confirmed cold start → bug-gone (exit 1 — the forcing signal), actionable for a cold reader', () => {
-    const result = run('held', 'held', 'held', 'held');
+  it('a close is decisive even in a run large enough to otherwise reach the bug-gone budget', () => {
+    const result = classifyColdStartRun([...heldTimes(MIN_HELD_SAMPLES_FOR_BUG_GONE), 'closed']);
+    assert.equal(result.verdict, 'bug-present');
+  });
+
+  it('all held but fewer than MIN_HELD_SAMPLES_FOR_BUG_GONE → inconclusive, not bug-gone (an all-held run this small is the expected outcome of an intermittent bug)', () => {
+    const result = classifyColdStartRun(heldTimes(4));
+    assert.equal(result.verdict, 'inconclusive');
+    assert.match(result.message, /All 4 confirmed cold-start touches held/);
+    assert.match(result.message, /41\.0%/); // 0.8^4
+    assert.match(result.message, new RegExp(String(MIN_HELD_SAMPLES_FOR_BUG_GONE)));
+    assert.match(result.message, /not blocking/i);
+  });
+
+  it('all held at exactly MIN_HELD_SAMPLES_FOR_BUG_GONE → bug-gone (exit 1 — the forcing signal), actionable for a cold reader', () => {
+    const result = classifyColdStartRun(heldTimes(MIN_HELD_SAMPLES_FOR_BUG_GONE));
     assert.equal(result.verdict, 'bug-gone');
+    assert.match(result.message, /4\.4%/); // 0.8^14
     assert.match(result.message, /not because of your change/);
     assert.match(result.message, /IDEMPOTENT_BACKOFF/);
     assert.match(result.message, /streams\/src\/client\.ts/);
@@ -129,11 +179,18 @@ describe('classifyColdStartRun (the three-exit mapping of a REQUIRED check)', ()
     assert.match(result.message, /PRO-219/);
   });
 
-  it('any touch that never went cold makes the whole run inconclusive, even with no closes and some holds', () => {
-    const result = run('held', 'no-cold-start', 'held', 'held');
+  it('one held short of the budget → inconclusive, not bug-gone', () => {
+    const result = classifyColdStartRun(heldTimes(MIN_HELD_SAMPLES_FOR_BUG_GONE - 1));
+    assert.equal(result.verdict, 'inconclusive');
+  });
+
+  it('any touch that never went cold makes the whole run inconclusive, even with no closes and plenty of holds', () => {
+    const result = classifyColdStartRun([
+      ...heldTimes(MIN_HELD_SAMPLES_FOR_BUG_GONE),
+      'no-cold-start',
+    ]);
     assert.equal(result.verdict, 'inconclusive');
     assert.match(result.message, /failed to force a cold start/);
-    assert.match(result.message, /1\/4 touches/);
     assert.match(result.message, /not blocking/);
   });
 
@@ -144,7 +201,7 @@ describe('classifyColdStartRun (the three-exit mapping of a REQUIRED check)', ()
   });
 
   it('an "other" (broken/ambiguous) touch also blocks a bug-gone verdict', () => {
-    const result = run('held', 'held', 'held', 'other');
+    const result = classifyColdStartRun([...heldTimes(MIN_HELD_SAMPLES_FOR_BUG_GONE), 'other']);
     assert.equal(result.verdict, 'inconclusive');
   });
 });
