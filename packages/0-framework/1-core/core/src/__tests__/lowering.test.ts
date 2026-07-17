@@ -12,7 +12,6 @@ import {
   buildConfig,
   type LowerContext,
   LowerError,
-  type LoweredNode,
   type LowerOptions,
   lower,
   lowering,
@@ -20,6 +19,7 @@ import {
   type ProvisionEdge,
   type ProvisionerDescriptor,
   resolveStateLayer,
+  type WiringOutputs,
 } from '../deploy.ts';
 import { Load } from '../graph.ts';
 import {
@@ -113,6 +113,16 @@ type Call =
       readonly environment: unknown;
     };
 
+// The fake 'fake/compute' descriptor's own intra-node handoff types — stand-
+// ins for a real extension's descriptor-owned provision/serialize products.
+interface FakeProvisioned {
+  readonly serviceId: string;
+  readonly projectId: string;
+}
+interface FakeSerialized {
+  readonly environment: ReadonlyArray<{ input: string; name: string; value: unknown }>;
+}
+
 function fakeExtension(opts: { provisions?: ReadonlyMap<symbol, ProvisionerDescriptor> } = {}) {
   const calls: Call[] = [];
   const descriptor: ExtensionDescriptor = {
@@ -124,36 +134,41 @@ function fakeExtension(opts: { provisions?: ReadonlyMap<symbol, ProvisionerDescr
     application: {
       provision: (ctx) => {
         calls.push({ phase: 'application', id: ctx.id });
-        return Effect.succeed({ outputs: { projectId: `${ctx.id}#project` } });
+        return Effect.succeed({ projectId: `${ctx.id}#project` });
       },
     },
     nodes: {
       'fake/db': Object.assign(
-        (ctx: LowerContext) => {
+        (ctx: LowerContext): Effect.Effect<WiringOutputs, unknown, unknown> => {
           calls.push({ phase: 'resource', id: ctx.id, type: ctx.node.type });
-          return Effect.succeed({ outputs: { url: `db://${ctx.id}` } });
+          return Effect.succeed({ url: `db://${ctx.id}` });
         },
         { kind: 'resource' as const },
       ),
       'fake/compute': {
         kind: 'service' as const,
-        provision: (ctx) => {
+        provision: (ctx: LowerContext): Effect.Effect<FakeProvisioned, unknown, unknown> => {
           calls.push({ phase: 'provision', id: ctx.id, address: ctx.address });
+          // The fake application hook's own product shape — test-only narrow,
+          // mirroring how a real extension guards ctx.application.
+          const application = ctx.application as { projectId: string };
           return Effect.succeed({
-            outputs: {
-              serviceId: `${ctx.id}#svc`,
-              projectId: ctx.application.outputs['projectId'],
-            },
+            serviceId: `${ctx.id}#svc`,
+            projectId: application.projectId,
           });
         },
-        serialize: (ctx, _provisioned, config) => {
+        serialize: (
+          ctx: LowerContext,
+          _provisioned: FakeProvisioned,
+          config: Config,
+        ): Effect.Effect<FakeSerialized, unknown, unknown> => {
           calls.push({ phase: 'serialize', id: ctx.id, address: ctx.address, config });
           // One "record" per Config leaf — mirrors the real extension's one
           // EnvironmentVariable per leaf, keyed by input+name.
           const records = Object.entries(config.inputs).flatMap(([input, values]) =>
             Object.entries(values).map(([name, value]) => ({ input, name, value })),
           );
-          return Effect.succeed({ outputs: { environment: records } });
+          return Effect.succeed({ environment: records });
         },
         package: (ctx, input) => {
           calls.push({
@@ -164,18 +179,21 @@ function fakeExtension(opts: { provisions?: ReadonlyMap<symbol, ProvisionerDescr
           });
           return Effect.succeed({ path: `/tmp/${ctx.id}.tar.gz`, sha256: `sha-${ctx.id}` });
         },
-        deploy: (ctx, provisioned, artifact, serialized) => {
+        deploy: (
+          ctx: LowerContext,
+          provisioned: FakeProvisioned,
+          artifact: Artifact,
+          serialized: FakeSerialized,
+        ): Effect.Effect<WiringOutputs, unknown, unknown> => {
           calls.push({
             phase: 'deploy',
             id: ctx.id,
             artifact,
-            environment: serialized.outputs['environment'],
+            environment: serialized.environment,
           });
           return Effect.succeed({
-            outputs: {
-              url: `https://${ctx.id}.example`,
-              projectId: provisioned.outputs['projectId'],
-            },
+            url: `https://${ctx.id}.example`,
+            projectId: provisioned.projectId,
           });
         },
       },
@@ -188,10 +206,10 @@ function fakeExtension(opts: { provisions?: ReadonlyMap<symbol, ProvisionerDescr
   return { descriptor, config, calls };
 }
 
-const run = (eff: ReturnType<typeof lowering>): LoweredNode =>
-  Effect.runSync(eff as Effect.Effect<LoweredNode, LowerError>);
+const run = (eff: ReturnType<typeof lowering>): undefined =>
+  Effect.runSync(eff as Effect.Effect<undefined, LowerError>);
 const runError = (eff: ReturnType<typeof lowering>): LowerError =>
-  Effect.runSync(Effect.flip(eff as Effect.Effect<LoweredNode, LowerError>));
+  Effect.runSync(Effect.flip(eff as Effect.Effect<undefined, LowerError>));
 
 describe('buildConfig', () => {
   test("matches a dependency input's params by name to the wired producer's lowered outputs, via its dependency edge", () => {
@@ -202,7 +220,7 @@ describe('buildConfig', () => {
       return {};
     });
     const graph = Load(root);
-    const lowered = new Map<string, LoweredNode>([['db', { outputs: { url: 'db://db' } }]]);
+    const lowered = new Map<string, WiringOutputs>([['db', { url: 'db://db' }]]);
 
     expect(buildConfig(auth, 'auth', graph, lowered, new Map())).toEqual({
       service: { port: 3000 },
@@ -245,7 +263,7 @@ describe('buildConfig', () => {
     const graph = Load(root);
     // The producer IS lowered (with some unrelated output), but a provisioned
     // param must ignore it entirely — its value comes only from `provisioned`.
-    const lowered = new Map<string, LoweredNode>([['auth', { outputs: { token: 'wrong-value' } }]]);
+    const lowered = new Map<string, WiringOutputs>([['auth', { token: 'wrong-value' }]]);
     const provisioned = new Map<string, unknown>([['consumer.auth', 'minted-value']]);
 
     expect(buildConfig(consumer, 'consumer', graph, lowered, provisioned)).toEqual({
@@ -401,7 +419,18 @@ describe('lowering a module root — a single service', () => {
     ]);
     // The root is always a module — its own lowering has no outputs yet
     // (boundary ports are future work); see the two-service suite below.
-    expect(result).toEqual({ outputs: {} });
+    expect(result).toBeUndefined();
+  });
+
+  test('the lowering effect resolves to undefined — S1 kills the stack-output dump for good', () => {
+    const { config } = fakeExtension();
+    const root = singleServiceModule('fake/compute');
+
+    const result = Effect.runSync(
+      lowering(root, config, opts(svcBundles)) as Effect.Effect<undefined, LowerError>,
+    );
+
+    expect(result).toBe(undefined);
   });
 
   test('a module-provisioned resource lowers before the service that consumes it', () => {
@@ -477,7 +506,7 @@ describe('lowering a module root — a single service', () => {
 
     const result = run(lowering(root, config, opts(svcBundles)));
 
-    expect(result).toEqual({ outputs: {} });
+    expect(result).toBeUndefined();
   });
 
   test('missing a bundle for a single-service module is a LowerError naming it', () => {
@@ -739,7 +768,7 @@ describe('lowering a module root — a provisioned resource and two connected se
       }),
     );
 
-    expect(result).toEqual({ outputs: {} });
+    expect(result).toBeUndefined();
   });
 
   test('fails with LowerError naming the type and the known types on an unknown resource type', () => {
@@ -1003,7 +1032,7 @@ describe('lowering a nested module — dotted addresses (H1: module-composition)
       ),
     );
 
-    expect(result).toEqual({ outputs: {} });
+    expect(result).toBeUndefined();
   });
 });
 
