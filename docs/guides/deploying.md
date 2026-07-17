@@ -63,7 +63,43 @@ place. A stage name must be a valid git ref name (`git check-ref-format`);
 an invalid name is a hard error, never a silent rename.
 
 After a deploy, each service is a Compute service in the Project; its public
-URL is its service endpoint domain, shown in the Console.
+URL is its service endpoint domain — printed when the deploy finishes, and
+also shown in the Console.
+
+## What a deploy prints
+
+A deploy ends by printing your app's own topology — the names you authored,
+what each one became on the platform, and the public URLs:
+
+```
+storefront-auth
+├─ auth
+│  └─ api   compute-service cps_abc123
+│           https://xyz.ewr.prisma.build
+├─ db       postgres-database pdb_def456
+└─ web      compute-service cps_ghi789
+            https://uvw.ewr.prisma.build
+```
+
+The tree is your module structure: `auth.api` is the `api` service inside the
+`auth` module. Under each name is the platform resource it became and its id
+— the thing to search for in the Console when you need it.
+
+**A URL appears only where the address is genuinely public.** A Compute
+service prints one because its endpoint is reachable. A database never does:
+it has a connection string, not a public endpoint, and printing it in a
+terminal would be the wrong thing in both directions. Nothing that reports a
+URL here is a secret, and nothing secret is reported here at all — an
+`s3-credentials` node, whose whole product is a key pair, prints no resource
+line for that reason.
+
+A node that deployed but published nothing reportable is still listed, marked
+`(no primitives reported)`, so a node is never silently missing from the tree.
+
+**If you're wondering where the JSON went:** deploys used to end with a raw
+`{ outputs: {} }` blob from the underlying deploy engine — always empty, never
+about your app. It's gone, replaced by the tree above. Nothing you can
+configure printed it and nothing depended on it.
 
 ## Destroying
 
