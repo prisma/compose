@@ -194,8 +194,8 @@ export function computeDescriptor(
         // that. Both fields are still unresolved Output references at this
         // point — apply resolves them before the report's runner sees them.
         return {
-          wiring: { url: deployment.deployedUrl, projectId: provisioned.projectId },
-          primitives: [
+          outputs: { url: deployment.deployedUrl, projectId: provisioned.projectId },
+          entities: [
             {
               kind: 'compute-service',
               id: provisioned.serviceId,

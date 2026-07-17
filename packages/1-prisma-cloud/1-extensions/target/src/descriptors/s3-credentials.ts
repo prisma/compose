@@ -17,12 +17,12 @@ export function s3CredentialsDescriptor(_o: ResolvedCloudOptions): NodeDescripto
   const lowering: Lowering = ({ id }) =>
     Effect.gen(function* () {
       const creds = yield* S3Credentials(`${id}-creds`, {});
-      // No primitives: a minted keypair has nothing publishable. Both fields
-      // are secret material, and secret material must never reach a primitive
-      // — primitives are built to be rendered to a terminal.
+      // No entities: a minted keypair has nothing publishable. Both fields
+      // are secret material, and secret material must never reach an entity
+      // — entities are built to be rendered to a terminal.
       return {
-        wiring: { accessKeyId: creds.accessKeyId, secretAccessKey: creds.secretAccessKey },
-        primitives: [],
+        outputs: { accessKeyId: creds.accessKeyId, secretAccessKey: creds.secretAccessKey },
+        entities: [],
       };
     });
   return Object.assign(lowering, { kind: 'resource' as const });
