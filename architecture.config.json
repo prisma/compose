@@ -91,13 +91,13 @@
       "plane": "shared"
     },
     {
-      "glob": "packages/0-framework/2-authoring/node/src/index.ts",
+      "glob": "packages/0-framework/2-authoring/node/src/exports/index.ts",
       "domain": "framework",
       "layer": "authoring",
       "plane": "shared"
     },
     {
-      "glob": "packages/0-framework/2-authoring/node/src/control.ts",
+      "glob": "packages/0-framework/2-authoring/node/src/exports/control.ts",
       "domain": "framework",
       "layer": "authoring",
       "plane": "control"

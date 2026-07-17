@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { assemble } from '../control.ts';
+import { assemble } from '../exports/control.ts';
 
 const tmpDirs: string[] = [];
 
