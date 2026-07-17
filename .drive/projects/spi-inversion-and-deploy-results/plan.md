@@ -3,9 +3,39 @@
 ## Summary
 
 Three slices: the DI refactor first (operator-directed ordering), then
-wiring enforcement and deployment results in parallel on the clean seams.
+wiring enforcement and deployment results on the clean seams.
 
 **Spec:** [spec.md](spec.md) · **Design notes:** [design-notes.md](design-notes.md)
+· **Learnings:** [learnings.md](learnings.md)
+
+## Delivery shape — ONE PR (operator decision, 2026-07-17)
+
+All three slices land on **one branch, `claude/spi-inversion`**, as
+[PR #117](https://github.com/prisma/composer/pull/117) — draft until S3
+merges. This overrides the default of one-PR-per-slice.
+
+**Two real consequences, recorded so they aren't rediscovered:**
+
+1. **S2 and S3 no longer run in parallel.** The plan sequenced them as a
+   parallel group because they were to be separate PRs touching different
+   parts of the loop. One branch plus one persistent implementer means they
+   **serialize**: S2, then S3. Parallelism was the only thing the split
+   bought, and the operator traded it deliberately.
+2. **Slice-INVEST's _Independent_ ("ships as one PR") no longer holds
+   literally**, and _Small_ ("manageable in a single code review") is under
+   real pressure — one reviewer now faces all three slices at once.
+   Mitigation, not a cure: each slice is independently reviewed inside the
+   build loop before the next starts, and the PR body separates them so a
+   reader can take them one at a time. If the final review strains, that is
+   the predicted cost of this decision, not a surprise.
+
+**Branch-rename note:** the branch was created as `claude/spi-inversion-s1`
+and renamed once the one-PR decision landed. GitHub **closed** the original
+PR (#115) on the rename rather than retargeting it, and it could not be
+reopened — the old head ref no longer resolves. #117 carries the identical
+branch at the same SHA; #115 has a pointer comment. No work was lost, but
+rename-after-PR is a trap worth avoiding next time: name the branch for the
+delivery shape before opening the PR.
 
 ## Tracker
 
@@ -81,8 +111,10 @@ mechanism on a fresh stack. Close PR #101 with a supersession comment.
 
 ## Sequencing
 
-- **Stack:** S1 → (S2 ∥ S3). S2 and S3 touch different parts of the loop
-  and can run in parallel once S1 merges.
+- **Stack:** S1 → S2 → S3, all on `claude/spi-inversion`.
+- Originally `S1 → (S2 ∥ S3)`. The one-PR decision serializes S2 and S3 —
+  see § Delivery shape. Neither waits on a merge now; each starts when the
+  previous is reviewed.
 
 ## Open items
 
