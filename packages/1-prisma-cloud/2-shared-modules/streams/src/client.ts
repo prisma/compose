@@ -18,6 +18,7 @@ import {
   BackoffDefaults,
   DurableStream,
   DurableStreamError,
+  FetchError,
   stream,
 } from '@durable-streams/client';
 import type { StreamsConfig } from './contract.ts';
@@ -88,6 +89,19 @@ const DEFAULT_TAIL_TIMEOUT_MS = 20_000;
 
 function isAlreadyExists(error: unknown): boolean {
   return error instanceof DurableStreamError && error.status === 409;
+}
+
+/**
+ * Whether a client operation failed because the stream does not exist — the
+ * one failure that provably applied NOTHING, so re-creating the stream and
+ * re-running the operation is safe even for an append. Deliberately exactly
+ * that: ambiguous failures (socket closes, 502/504) never match, and the
+ * wire client's error shape stays this module's knowledge, not the app's.
+ */
+export function isStreamNotFound(error: unknown): boolean {
+  return (
+    (error instanceof FetchError || error instanceof DurableStreamError) && error.status === 404
+  );
 }
 
 export function createStreamsClient(config: StreamsConfig): StreamsClient {

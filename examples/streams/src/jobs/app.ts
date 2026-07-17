@@ -13,7 +13,7 @@
  * runs behind `Bun.serve` in the deployed service and inside the integration
  * test with no server.
  */
-import type { StreamsClient } from '@prisma/composer-prisma-cloud/streams';
+import { isStreamNotFound, type StreamsClient } from '@prisma/composer-prisma-cloud/streams';
 
 const STREAM = 'jobs';
 
@@ -31,9 +31,6 @@ export function createJobsApp(events: StreamsClient): (req: Request) => Promise<
     return created;
   };
 
-  const isStreamMissing = (error: unknown): boolean =>
-    typeof error === 'object' && error !== null && 'status' in error && error.status === 404;
-
   // Ensure-then-run, healing a vanished stream: the memo says "created", but
   // the durable tier is the truth — if an operation 404s, the stream is gone
   // (a 404'd request provably applied nothing, so re-running is safe even for
@@ -43,7 +40,7 @@ export function createJobsApp(events: StreamsClient): (req: Request) => Promise<
     try {
       return await op();
     } catch (error) {
-      if (!isStreamMissing(error)) throw error;
+      if (!isStreamNotFound(error)) throw error;
       created = undefined;
       await ensureStream();
       return op();
