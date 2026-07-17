@@ -269,3 +269,33 @@ exercise the typed handle surface.
 | `createStreamsClient` "convert to a class" | Part B: class-based client and handles |
 | app.ts/server.ts split | Kept: the handler stays a pure `Request → Response` function testable without a server; reply on thread |
 | descriptors/compute.ts "just indentation?" | Substantive (per-brand block → generic loop); reply on thread; Part A reshapes it again |
+
+---
+
+## Amendment 1 (2026-07-17, post-audit rulings)
+
+From [streams-binding-audit.md](streams-binding-audit.md), after Will's
+review of the as-built branch:
+
+- **The provider contract is the postgres pattern** (`7b07aa0`): the
+  module's port is `Contract<'streams', StreamDefs>` with an honest empty
+  def map as its unread placeholder — the same encoding `postgresContract`
+  uses. The consumer's required type is equally wide (kind is the whole
+  wiring requirement); literal handle typing comes from the generic
+  parameter. The `never`-typed `__cmp` and its cast are deleted.
+- **Creation is implicit and only implicit** — no public `create()` on
+  handles; the first operation creates, memoized. Recorded as deliberate.
+- **Reading a never-created stream creates it** and returns an empty page,
+  uniformly on both the contract and dynamic paths. Deliberate: symmetry
+  beats a special case, and contract-declared names are reviewed
+  identifiers. Known cost, accepted: a typo'd *dynamic* name yields empty
+  data rather than an error.
+- **`contentType` is gone from the public surface**; the module is
+  JSON-events by contract. Any future negotiation belongs to the typed
+  `streamDef({ event })` follow-up.
+- **`StreamDef` carries `{ kind: 'stream-def' }`** so the def map rejects
+  arbitrary values and the typed follow-up has a shape to extend.
+- **Part A improvement over this doc**: `control.ts` *derives* its deploy
+  registry from the boot list (`provider-params.ts`) and throws at module
+  load on a missing value — stronger than the two-lists-plus-drift-test
+  this doc described.

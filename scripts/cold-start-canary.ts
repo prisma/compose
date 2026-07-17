@@ -52,7 +52,7 @@
  *
  * A REQUIRED check: any close → exit 0, bug still present (today's normal);
  * enough touches reaching a genuine cold start AND holding → exit 1, the
- * forcing signal to remove createStreamsClient's IDEMPOTENT_BACKOFF
+ * forcing signal to remove the streams client's IDEMPOTENT_BACKOFF
  * (PRO-219) and this canary; a run that never manages to force a cold start,
  * or one whose log evidence can't place a touch on either side of the boot,
  * or one too small to trust an all-held result from → exit 0 with a CI

@@ -249,7 +249,7 @@ export function classifyColdStartRun(touches: readonly ColdStartTouch[]): ColdSt
       message:
         `Cold-start close still present (${closed}/${n} first touches closed, ${held} held, ` +
         `${noColdStart} never went cold) — PRO-217 not fixed; keep the PRO-219 backoff in ` +
-        'createStreamsClient.',
+        'the streams client class (client.ts).',
     };
   }
 
@@ -293,7 +293,7 @@ export function classifyColdStartRun(touches: readonly ColdStartTouch[]): ColdSt
       `${asPercent(chanceAllHoldByLuck(held))}, so this counts as real evidence: the platform no ` +
       'longer shows the PRO-217 close, and the workaround exists with no problem. To fix this ' +
       'build (you are seeing it because the cleanup is now due, not because of your change): ' +
-      '1) delete IDEMPOTENT_BACKOFF and its uses in createStreamsClient ' +
+      '1) delete IDEMPOTENT_BACKOFF and its uses in the streams client class ' +
       '(packages/1-prisma-cloud/2-shared-modules/streams/src/client.ts); ' +
       '2) remove scripts/cold-start-canary.ts, scripts/cold-start-canary-classify.ts (+ its ' +
       'test) and the "Cold-start canary (PRO-217)" job in .github/workflows/e2e-deploy.yml; ' +

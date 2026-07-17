@@ -97,7 +97,7 @@ jobs:
     runs-on: ubuntu-latest
     # After the FT-5226 canary for the same quota-serialization reason as the
     # deploys. Fails when the ingress no longer closes first-touch connections
-    # to a booting instance — the signal to remove createStreamsClient's
+    # to a booting instance — the signal to remove the streams client's
     # IDEMPOTENT_BACKOFF (the PRO-219 compensation) and this canary. The bug
     # being PRESENT is today's normal and passes.
     #
