@@ -17,9 +17,7 @@ export function s3CredentialsDescriptor(_o: ResolvedCloudOptions): NodeDescripto
   const lowering: Lowering = ({ id }) =>
     Effect.gen(function* () {
       const creds = yield* S3Credentials(`${id}-creds`, {});
-      return {
-        outputs: { accessKeyId: creds.accessKeyId, secretAccessKey: creds.secretAccessKey },
-      };
+      return { accessKeyId: creds.accessKeyId, secretAccessKey: creds.secretAccessKey };
     });
   return Object.assign(lowering, { kind: 'resource' as const });
 }

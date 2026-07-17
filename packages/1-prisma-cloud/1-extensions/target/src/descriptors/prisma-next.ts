@@ -59,7 +59,7 @@ export function prismaNextDescriptor(o: ResolvedCloudOptions): NodeDescriptor {
         ...(node.targetRef !== undefined ? { refName: node.targetRef } : {}),
       });
 
-      return { outputs: { url: warm.url } };
+      return { url: warm.url };
     });
   return Object.assign(lowering, { kind: 'resource' as const });
 }

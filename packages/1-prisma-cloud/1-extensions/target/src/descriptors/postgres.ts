@@ -29,7 +29,7 @@ export function postgresDescriptor(o: ResolvedCloudOptions): NodeDescriptor {
       // Warm the DB so a consumer's first connect doesn't eat PPG's cold-start
       // (FT-5226). `warm.url` is the same url, so consumers depend on the warm.
       const warm = yield* PgWarm(`${id}-warm`, { url });
-      return { outputs: { url: warm.url } };
+      return { url: warm.url };
     });
   return Object.assign(lowering, { kind: 'resource' as const });
 }
