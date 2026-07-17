@@ -4,7 +4,7 @@ import type { ManagementApiClient } from '../client.ts';
 import type { ResolvedContainer } from '../container.ts';
 import { call, PrismaApiError } from '../http.ts';
 
-/** The framework-owned database a stage's deploy state lives in — a child of that stage's Branch (ADR-0033). */
+/** The framework-owned database a stage's deploy state lives in — a child of that stage's Branch (ADR-0034). */
 export const STATE_DATABASE_NAME = 'prisma-composer-state';
 
 /** Every connection created against a state database carries this prefix — see `cleanupAgedConnections`. */

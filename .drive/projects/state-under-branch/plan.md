@@ -2,7 +2,7 @@
 
 ## Summary
 
-**One slice** — ADR-0033 and its implementation in one PR
+**One slice** — ADR-0034 and its implementation in one PR
 ([#113](https://github.com/prisma/composer/pull/113)). The binding design it
 executes is [design-notes.md](design-notes.md).
 
@@ -41,9 +41,9 @@ planning. Tracker project:
 
 Two halves of one PR, in this order on the branch.
 
-### Half 1 — ADR-0033 + documentation corrections — DONE, APPROVED
+### Half 1 — ADR-0034 + documentation corrections — DONE, APPROVED
 
-ADR-0033 ("Deploy state lives in the stage's Branch"); ADR-0009 marked
+ADR-0034 ("Deploy state lives in the stage's Branch"); ADR-0009 marked
 superseded; the consequence note on ADR-0010 (lock scoped within the per-stage
 DB; severed-lock kill-switch property; redundant key retained) and the
 correction note on ADR-0024 (resources land on the platform's implicit default

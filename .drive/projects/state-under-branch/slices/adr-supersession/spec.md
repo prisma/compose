@@ -1,4 +1,4 @@
-# S1 — ADR-0033 + documentation corrections
+# S1 — ADR-0034 + documentation corrections
 
 Docs-only slice. Records the settled decision so S2's code is
 principle-compliant when it lands. The content source is
@@ -10,7 +10,7 @@ silent, the repo's existing ADR conventions decide, nothing else.
 
 One PR touching only `docs/`:
 
-1. **New `docs/design/90-decisions/ADR-0033-deploy-state-lives-in-the-stage-branch.md`.**
+1. **New `docs/design/90-decisions/ADR-0034-deploy-state-lives-in-the-stage-branch.md`.**
    Sections and required content:
    - **Decision** — the containment rule (design-notes § The decision), naming:
      per-stage database `prisma-composer-state` attached to the stage's
@@ -32,7 +32,7 @@ One PR touching only `docs/`:
    - **Consequences** — per-stage DB cost (OQ-1 noted), state DB visible in
      Console per stage (platform ask: protected flag), manual cutover for the
      legacy store, ADR-0010/0011/0012 survive.
-2. **ADR-0009** — status line → superseded by ADR-0033 (repo's existing
+2. **ADR-0009** — status line → superseded by ADR-0034 (repo's existing
    supersession convention).
 3. **ADR-0010** — consequence note: lock now lives in the per-stage database;
    `(stack, stage)` key retained though redundant; state-DB deletion severs
@@ -41,7 +41,7 @@ One PR touching only `docs/`:
    Composer's addressing (no Branch ensured or named); physically the platform
    attaches default-stage resources to the Project's implicit default Branch
    (post-#3902 invariant, confirmed with PDP 2026-07-17).
-5. **`docs/design/90-decisions/README.md`** — index entry for ADR-0033.
+5. **`docs/design/90-decisions/README.md`** — index entry for ADR-0034.
 6. **`docs/guides/deploying.md`** — upgrade note with the 4-step manual
    cutover (design-notes § Legacy workspace store).
 7. **`docs/design/10-domains/deploy-cli.md`** — state section updated: where
@@ -62,7 +62,7 @@ asks live).
 
 ## Slice-specific done conditions
 
-- ADR-0033 contains the ordering rules and teardown matrix (S2's tests cite
+- ADR-0034 contains the ordering rules and teardown matrix (S2's tests cite
   them).
 - No document still describes the workspace store as current except ADR-0009
   itself, which is marked superseded.

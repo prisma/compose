@@ -1,5 +1,5 @@
 /**
- * Destroy teardown (ADR-0033): after `alchemy destroy` has removed the stage's
+ * Destroy teardown (ADR-0034): after `alchemy destroy` has removed the stage's
  * resources, remove the stage's deploy-state database — the store the destroy
  * was reading until a moment ago, and the last thing Composer owns on the
  * stage's Branch.

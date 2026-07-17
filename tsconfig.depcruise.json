@@ -62,6 +62,7 @@
         "./packages/1-prisma-cloud/2-shared-modules/cron/src/scheduler-entrypoint.ts"
       ],
       "@internal/cron": ["./packages/1-prisma-cloud/2-shared-modules/cron/src/index.ts"],
+      "@prisma/composer/report": ["./packages/9-public/composer/src/report.ts"],
       "@prisma/composer/config": ["./packages/9-public/composer/src/config.ts"],
       "@prisma/composer/deploy": ["./packages/9-public/composer/src/deploy.ts"],
       "@prisma/composer/testing": ["./packages/9-public/composer/src/testing.ts"],

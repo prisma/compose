@@ -5,7 +5,7 @@ The design doc is binding: where it specifies an algorithm step, message
 string, failure semantic, or "unchanged" surface, the implementation follows
 it without reinterpretation. Deviations discovered necessary during execution
 go back through discussion mode, not into the diff. Requires S1 merged
-(ADR-0033 exists).
+(ADR-0034 exists).
 
 ## At a glance
 

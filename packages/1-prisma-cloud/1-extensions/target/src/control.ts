@@ -115,7 +115,7 @@ export const prismaCloud = (opts: PrismaCloudOptions = {}): ExtensionDescriptor 
     // in-shell names via a direct API POST — before any stack file or Alchemy.
     preflight: (input) => runPreflight(input),
 
-    // Destroy-time cleanup (ADR-0033): remove the stage's deploy-state
+    // Destroy-time cleanup (ADR-0034): remove the stage's deploy-state
     // database, once alchemy destroy has finished reading it and before the
     // CLI removes the Branch/Project.
     teardown: (input) => runTeardown(input),

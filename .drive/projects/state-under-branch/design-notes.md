@@ -1,6 +1,6 @@
 # Design notes — State Under Branch
 
-Running design record. The decision here becomes **ADR-0033** at slice S1; this
+Running design record. The decision here becomes **ADR-0034** at slice S1; this
 file is the exhaustive implementation-grade design the slices execute against.
 It is written to leave zero interpretation gaps: where a choice existed, the
 choice is made and recorded here.
@@ -451,7 +451,7 @@ timed out at exactly 3m22s. I read "52 seconds" as the state-database
 provisioning time — it was the time from *job* start, which is checkout,
 install and build, work both branches do identically. The deploy command hadn't
 even started. I then built a causal story on that number ("two databases
-provisioned end to end, roughly a minute each"), wrote it into ADR-0033's
+provisioned end to end, roughly a minute each"), wrote it into ADR-0034's
 consequences, raised the CI budget from 3 to 8 minutes to accommodate it, and
 told the operator the decision had a per-preview latency cost. All of it false.
 

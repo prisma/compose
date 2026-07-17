@@ -66,7 +66,7 @@ containment guarantee for webhook-driven teardown and credential scoping.
 
 # Project-DoD
 
-- [ ] ADR-0033 merged; ADR-0009 marked superseded; consequence/correction
+- [ ] ADR-0034 merged; ADR-0009 marked superseded; consequence/correction
       notes landed on ADR-0010 and ADR-0024; deploying guide carries the
       upgrade cutover note.
 - [ ] A named-stage deploy → destroy round-trip against a real workspace
