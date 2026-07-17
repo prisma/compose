@@ -25,6 +25,26 @@ the nonce.
 
 ### Core types — `packages/0-framework/1-core/core/src/deploy.ts`
 
+**Amended 2026-07-17 (F5, review) — `primitives` is required, not optional.**
+The original pin had `primitives?`, with the loop reading
+`result.primitives ?? []`. That lets a descriptor assert *"this node became
+no platform primitives"* **by staying silent** — no error, no type
+complaint, no test failure.
+
+That is the project's own thesis turned against its own code. ADR-0033 says a
+claim must be **named, justified, and singular**, and that the bag's sin was
+letting claims be made *anonymously, with nothing recording that a claim was
+being made at all*. An omitted optional field is exactly that. The live
+evidence: commit `0fe22f2`'s message records that rebuilding s3-store's
+result by hand "would have silently dropped them" — the author's care
+prevented a drop the **type** should have made impossible, which is the
+substitution this project exists to reverse. `s3-credentials` already models
+the honest form: `primitives: []`, deliberately, with a comment.
+
+Zero churn: all seven construction sites (five descriptors + two core test
+fakes) already supply it explicitly. Making it required breaks nothing and
+constrains only what comes next — D4's work and any third-party extension.
+
 **Amended 2026-07-17, before implementation** — S1-D2 established that
 resource attributes are `Output<T>`, not `T` (alchemy maps every attribute
 through `Output`; `Resource.d.ts:95-100`). The originally pinned
@@ -61,10 +81,14 @@ export interface DeployedPrimitive {
  */
 export type ReportedPrimitive = Input<DeployedPrimitive>;
 
-/** What a node's final lowering phase produces: wiring for dependents, primitives for reporting. */
+/**
+ * What a node's final lowering phase produces: wiring for dependents,
+ * primitives for reporting. `primitives` is REQUIRED — a node that became no
+ * platform primitives says so out loud with `[]`.
+ */
 export interface LoweredResult {
   readonly wiring: WiringOutputs;
-  readonly primitives?: readonly ReportedPrimitive[];
+  readonly primitives: readonly ReportedPrimitive[];
 }
 
 /** What one graph node became — the deploy subsystem's own result type. In-process only. */

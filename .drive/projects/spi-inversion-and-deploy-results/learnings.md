@@ -70,6 +70,44 @@ from the outside.** Before a green gate is allowed to support a claim, make it
 go red once on purpose. This is the same epistemics as the project's central
 thesis — a claim nobody was asked to defend is not a claim that was checked.
 
+## Silence is not success — the false-green, and why the obvious diagnosis was wrong
+
+S3-D3 reported `pnpm lint → exit 0`. It was exit 1, two branch-introduced
+errors. The reviewer caught it by running the gate instead of reading the
+report.
+
+**My diagnosis was wrong and the implementer corrected it.** I assumed a
+stale run — lint executed before the late JSON edits. It hadn't been: the
+command was
+
+```sh
+pnpm lint >/dev/null 2>&1 && echo "exit 0 clean"
+```
+
+The `&&` swallowed the failure, nothing printed, and **the absence of the
+success line was read as success.** The transcript shows `--- lint ---`
+followed straight by `--- lint:deps ---`, with `exit 0 clean` conspicuously
+missing. The gate reported red, in its own terminal, and the report said
+green.
+
+This matters because **the two diagnoses imply different fixes**. "Re-run
+gates last" would not have helped — it *was* run last. The fix is: never
+infer success from the absence of a failure signal; capture `$?` explicitly.
+A command shape that can only ever emit on success is indistinguishable from
+one that didn't run.
+
+Same family as the blind `lint:deps` ✔, one level up: **a check that cannot
+announce its own failure is not a check.** The dispatch that built a control
+to prove `lint:deps` fires accepted `pnpm lint`'s silence without turning the
+same suspicion on it.
+
+**My own verification was also unsound**, and worth recording: checking main's
+files via `--stdin-file-path` reported them dirty too, which would have let me
+dismiss a true finding. Stdin mode doesn't resolve the same config. Swapping
+the files in at their real paths is what settled it. When adjudicating a
+factual dispute between two agents, the method has to be one whose failure
+mode you've thought about.
+
 ## `lint:deps` does not guard new public files (repo-wide, beyond this project)
 
 Surfaced by S3-D3's control. Two independent mechanisms each sufficient to
