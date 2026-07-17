@@ -171,6 +171,52 @@ re-deriving them.
   events to alchemy's CLI session service (`src/Apply.ts:184-185`, `:415-421`).
   Capturing it requires wrapping that service or an upstream change.
 
+#### Actions — how resolved values reach program code after all
+
+The facts above say resolved values are unreachable from the stack effect. An
+**Action** is the exception alchemy provides, and S3's deploy report is built on
+it. Each of these was verified by a throwaway probe that applied a real stack
+against alchemy's in-memory state, not by reading the types:
+
+- **An Action whose input references a not-yet-created resource plans, and runs
+  during apply after the resources it references.** An Action is a graph node
+  that runs an Effect with its resolved input during plan/apply
+  (`src/Action.ts:12-13`); its upstream edges are derived from the Output
+  references found in its input (`Output.upstreamAny(action.Input)`,
+  `src/Plan.ts:543`), which is what orders it after them. Probed on a fresh
+  stack where the referenced resource did not yet exist: it planned and ran.
+- **The runner receives resolved values, arbitrarily deep.** Apply evaluates the
+  action's input against its tracker (`src/Apply.ts:1190`) and invokes the body
+  with the result (`src/Apply.ts:1205`); the runner's parameter is typed `In`,
+  the resolved shape, while the call site takes
+  `{ [k in keyof In]: Input<In[k]> }` (`src/Action.ts:39` and `:133`). Probed
+  two levels deep — `entries[].primitives[].id`, handed over as an
+  `Output<string>`, arrived in the runner as a real `string`.
+- **Alchemy hashes the RESOLVED input and noops on an unchanged hash.** Plan
+  resolves the input, then hashes that (`src/Plan.ts:1043-1044`), and an Action
+  whose prior run has the same hash is planned as a noop unless `--force`
+  (`src/Plan.ts:1069-1071`); apply persists the resolved snapshot alongside the
+  hash (`src/Apply.ts:1199-1200`, `src/State/ActionState.ts:28-30`). **This is why a
+  nonce evaluated at stack-effect time works**: it changes the resolved input,
+  so the hash differs and the body runs on an otherwise unchanged redeploy.
+  Established with a control, not by observing a re-run: three deploys — fresh
+  (ran), unchanged with a new nonce (ran), unchanged with the *same* nonce (did
+  **not** run). The third is what proves the noop is real and the nonce is what
+  defeats it; without it, "it ran" would be consistent with actions always
+  running.
+- **`Input<T>` maps `readonly T[]` correctly**, so an Action's `In` may use
+  `readonly` arrays and match the rest of the codebase. The reasoning that says
+  otherwise is a trap worth recording: `readonly T[]` genuinely fails the array
+  branch's `T extends any[]` test (`src/Input.ts:23`) and falls through to the
+  object branch — but that branch is `{ [K in keyof T]: Input<T[K]> }`
+  (`src/Input.ts:28`), a *homomorphic* mapped type over a naked type parameter,
+  and TypeScript special-cases those over arrays: elements are mapped, and both
+  array-ness and the `readonly` modifier survive. It never maps over `length` or
+  `map`. Probed for teeth rather than compilation: the `readonly` form accepts a
+  nested `Output<string>`, rejects a wrong type and an excess key at that same
+  nested position, and stays unassignable to a mutable array — which also rules
+  out a silent collapse to `any`.
+
 ### The registry's type safety rests on the loop, not the compiler
 
 Descriptors with different `P`/`S` assign into one
