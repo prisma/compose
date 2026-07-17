@@ -526,6 +526,31 @@ fails rather than standing one up.
 turbo run build && prisma-composer deploy module.ts --stage pr-42
 ```
 
+### The wiring contract is checked at deploy
+
+A connection declares the values it needs by name, and the producer on the
+other end must supply them. A producer that omits one fails the deploy, naming
+the edge, the param, and what the producer did supply:
+
+```
+Connection input "auth.db" declares param "url", but its producer "db" did not
+supply it — the producer's wiring outputs carry [host].
+```
+
+Fix it at whichever end is wrong: add the name to the producer's returned
+wiring outputs, or mark the param `optional` on the connection if absent is
+genuinely legal (the consumer then reads `undefined`).
+
+This is a deploy-time refusal, not a broken deploy — and it can appear on an
+app whose code didn't change. The gap used to pass silently: the value reached
+the consumer as `undefined`, went into its environment, and crashed *that*
+service at boot, blaming the reader instead of the supplier. Don't route around
+it by making the param optional unless absent really is valid; that reinstates
+the silent `undefined`.
+
+Only reachable if you authored the connection or the extension on one side —
+every shipped block supplies what it declares.
+
 ## Production pitfalls
 
 - **Scale-to-zero closes idle database connections.** A persistent client

@@ -107,6 +107,41 @@ preflight copies missing ones up on that first deploy. A name absent from
 both the platform and the shell fails the deploy early, naming the missing
 variable.
 
+## When a deploy stops on a wiring gap
+
+A dependency's connection declares the values it needs, by name. The node on
+the other end of the wire has to supply them. When one doesn't, the deploy
+stops and names the edge rather than standing the app up:
+
+```
+Connection input "auth.db" declares param "url", but its producer "db" did not
+supply it — the producer's wiring outputs carry [host]. Add "url" to the
+producer's returned wiring outputs, or declare the param optional on the
+connection.
+```
+
+Two fixes, and which is right depends on whether the value is genuinely
+required:
+
+- **The producer should be supplying it** — add the name to what the producer
+  returns. This is the common case: the two sides drifted, usually a rename on
+  one end only.
+- **Absent is legitimate** — declare the param `optional` on the connection.
+  The consumer then reads it as `undefined`, which is what it was already
+  receiving.
+
+**Why an app you didn't touch can start failing this.** It used to deploy. The
+missing value reached the consumer as `undefined`, was written into its
+environment, and broke at *that service's* boot — so the crash surfaced in the
+service that read the value, not the one that failed to supply it, and the
+stack trace pointed at the wrong end of the wire. The deploy now refuses up
+front. Nothing about your app got worse; the same mistake now reports itself
+where it was made, before anything is provisioned.
+
+You'll only meet this if you wrote the connection or the extension on one side
+of the wire — every block that ships with the framework supplies what it
+declares.
+
 ## Production behavior
 
 What deployed apps actually run into, and what to do about it:
