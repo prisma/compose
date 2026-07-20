@@ -30,7 +30,7 @@ export const BucketProvider = () =>
 
       return {
         stables: ['id'],
-        list: () => Effect.succeed([] as BucketAttributes[]),
+        list: () => Effect.succeed<BucketAttributes[]>([]),
         reconcile: Effect.fn(function* ({ news, output }) {
           const observed = output?.id
             ? yield* callOptional(() =>

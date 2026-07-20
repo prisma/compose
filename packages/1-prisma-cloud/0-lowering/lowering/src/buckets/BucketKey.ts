@@ -50,7 +50,7 @@ export const BucketKeyProvider = () =>
 
       return {
         stables: ['id', 'bucketId', 'secretAccessKey', 'accessKeyId', 'endpoint', 'bucketName'],
-        list: () => Effect.succeed([] as BucketKeyAttributes[]),
+        list: () => Effect.succeed<BucketKeyAttributes[]>([]),
         reconcile: Effect.fn(function* ({ news, output }) {
           // The secret is only returned at creation; persisted state is authoritative.
           if (output?.id) return output;
