@@ -13,6 +13,7 @@ import { RPC_PEER_KEY } from '@internal/rpc';
 import * as Output from 'alchemy/Output';
 import * as Effect from 'effect/Effect';
 import * as Layer from 'effect/Layer';
+import { bucketDescriptor } from '../descriptors/bucket.ts';
 import { computeDescriptor } from '../descriptors/compute.ts';
 import { postgresDescriptor } from '../descriptors/postgres.ts';
 import { prismaNextDescriptor } from '../descriptors/prisma-next.ts';
@@ -325,6 +326,7 @@ export const prismaCloud = (opts: PrismaCloudOptions = {}): ExtensionDescriptor 
       compute: computeDescriptor(o),
       credentials: s3CredentialsDescriptor(o),
       's3-store': s3StoreDescriptor(o),
+      bucket: bucketDescriptor(o),
     },
   };
 };
