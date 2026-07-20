@@ -16,10 +16,14 @@ the compile-time check actually works, and ends with the alternatives we weighed
 
 ## Purpose and scope
 
-Connections are **internal by definition**: every Connection kind — service RPC
-today, any later kind — is an edge between services inside one deployed
-application, provisioned by the framework, authenticated with framework-minted
-keys, running on the same network.
+Connections are **internal by definition** — where internal means *inside the
+application's topology*, not co-located on one network. Every Connection kind —
+service RPC today, any later kind — is an edge between two components declared
+in one application, provisioned by the framework, authenticated with
+framework-minted keys. The components may be provided by different targets, and
+such an edge necessarily crosses networks; that is a deployment fact about the
+edge, not a change in what the kind is for. What internal never means: an
+endpoint for parties outside the application.
 
 The service RPC kind serves that purpose and no other. It is deliberately
 minimal: a contract collapses to `method → { input, output }`, and a call is
@@ -38,9 +42,12 @@ faith and declined:
   application's own API is yours: the framework never touches your app code,
   so serve it with any framework or RPC library you like.
 - **It is not general distributed-systems infrastructure.** Protocol
-  guarantees are calibrated to same-network, service-to-service traffic and
-  the platform's actual failure modes — not to arbitrary networks. A proposal
-  adding robustness should name the concrete failure being guarded against.
+  guarantees are calibrated to framework-provisioned, point-to-point edges and
+  the named failure modes of the targets carrying them — a same-target edge
+  may assume its platform's specific failure modes; a cross-target edge
+  crosses networks and may warrant more. Either way, a proposal adding
+  robustness names the concrete failure being guarded against; it does not
+  design for arbitrary networks.
 
 Decisions about this kind's protocol and features calibrate against this
 scope first.
