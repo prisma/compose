@@ -1,25 +1,22 @@
 /**
  * The RPC kind's network adapter — the client `rpc(contract)` hydrates to.
- * Reads each method's Standard Schema pair off the contract's `__cmp[method]`
- * runtime value (rpc()'s `{ input, output }`), POSTs JSON to
- * `<url>/rpc/<method>`, and validates the response against the output schema
- * before returning it (a provider can be typed-compatible and still lie at
- * runtime — this is the per-call layer that catches that). When a
- * `serviceKey` is supplied (ADR-0030), every request also carries
- * `Authorization: Bearer <serviceKey>`.
+ * POSTs JSON to `<url>/rpc/<method>` for each contract method read off
+ * `contract.__cmp`. Every request carries an `Idempotency-Key` header: one
+ * `crypto.randomUUID()` minted per logical call and reused byte-identically
+ * across every retry of that call — never shared between two separate
+ * calls. A thrown network error, a 429, or any 5xx is retried with a
+ * bounded, jittered backoff; any other 4xx is not, since a malformed or
+ * unauthorized request stays wrong on a second try. `serve()` already
+ * validates a handler's output against the method schema before responding,
+ * so the client trusts that and does not re-validate — both ends of every
+ * edge are framework-provisioned. When a `serviceKey` is supplied
+ * (ADR-0030), every request also carries `Authorization: Bearer
+ * <serviceKey>`.
  */
 
 import type { Contract } from '@internal/core';
 import { blindCast } from '@internal/foundation/casts';
-import type { StandardSchemaV1 } from '@standard-schema/spec';
 import type { Client, RpcFns } from './rpc.ts';
-import { standardValidate } from './standard-schema.ts';
-
-/** rpc()'s runtime shape for one method: `{ input, output }` wearing a function's type. */
-interface MethodSchemas {
-  readonly input: StandardSchemaV1;
-  readonly output: StandardSchemaV1;
-}
 
 /**
  * A fetch-shaped transport. Defaults to the real `fetch`; a served handler
@@ -28,10 +25,33 @@ interface MethodSchemas {
  */
 export type Transport = (req: Request) => Promise<Response>;
 
-/** `<base>/rpc/<method>`, preserving a base URL's own path (e.g. a mount point). */
-function methodUrl(base: string, method: string): string {
-  const normalizedBase = base.endsWith('/') ? base : `${base}/`;
-  return new URL(`rpc/${method}`, normalizedBase).toString();
+/**
+ * The Prisma Compute ingress can close a service's first-touch connection
+ * while a scale-to-zero target boots (PRO-217), so every call is retried
+ * with a bounded, jittered exponential backoff — permanent protocol
+ * semantics for this kind, not a compensation that goes away once that
+ * platform behavior is fixed. These numbers mirror the streams module's
+ * IDEMPOTENT_BACKOFF; they are reimplemented here rather than imported
+ * because service-rpc is framework-layer and must not depend on
+ * prisma-cloud. `maxRetries` counts retries after the first attempt, so a
+ * persistently failing call sends 6 requests in total before giving up.
+ */
+const RETRY = {
+  initialDelayMs: 250,
+  multiplier: 2,
+  maxDelayMs: 5_000,
+  maxRetries: 5,
+};
+
+const IDEMPOTENCY_KEY_HEADER = 'Idempotency-Key';
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Whether a non-OK response is safe to retry: 429 or any 5xx, never another 4xx. */
+function isRetryableStatus(status: number): boolean {
+  return status === 429 || status >= 500;
 }
 
 /** The server's `{ error }` body, if the response has one — undefined otherwise. */
@@ -46,40 +66,81 @@ async function errorDetail(res: Response): Promise<string | undefined> {
   }
 }
 
+/** `<base>/rpc/<method>`, preserving a base URL's own path (e.g. a mount point). */
+function methodUrl(base: string, method: string): string {
+  const normalizedBase = base.endsWith('/') ? base : `${base}/`;
+  return new URL(`rpc/${method}`, normalizedBase).toString();
+}
+
+/**
+ * Sends one logical call over `send`, retrying a thrown error, a 429, or a
+ * 5xx with full-jitter backoff (a random wait between 0 and the current
+ * delay, which then grows by `RETRY.multiplier` up to `RETRY.maxDelayMs`).
+ * `buildRequest` is called fresh for each attempt but always carries the
+ * same idempotency key — only the transport call is repeated, not the key.
+ */
+async function callWithRetry(
+  send: Transport,
+  buildRequest: () => Request,
+  method: string,
+): Promise<unknown> {
+  let delay = RETRY.initialDelayMs;
+  let retries = 0;
+
+  for (;;) {
+    let res: Response;
+    try {
+      res = await send(buildRequest());
+    } catch (err) {
+      if (retries >= RETRY.maxRetries) throw err;
+      retries += 1;
+      await sleep(Math.random() * delay);
+      delay = Math.min(delay * RETRY.multiplier, RETRY.maxDelayMs);
+      continue;
+    }
+
+    if (res.ok) return res.json();
+
+    if (!isRetryableStatus(res.status) || retries >= RETRY.maxRetries) {
+      const detail = await errorDetail(res);
+      throw new Error(
+        `RPC call "${method}" failed: ${res.status} ${res.statusText}` +
+          (detail !== undefined ? ` — ${detail}` : ''),
+      );
+    }
+
+    retries += 1;
+    await sleep(Math.random() * delay);
+    delay = Math.min(delay * RETRY.multiplier, RETRY.maxDelayMs);
+  }
+}
+
 export function makeClient<C extends Contract<'rpc', RpcFns>>(
   contract: C,
   url: string,
   opts?: { fetch?: Transport; serviceKey?: string },
 ): Client<C> {
   const send = opts?.fetch ?? fetch;
-  const headers: Record<string, string> = { 'content-type': 'application/json' };
+  const baseHeaders: Record<string, string> = { 'content-type': 'application/json' };
   if (opts?.serviceKey !== undefined) {
-    headers['Authorization'] = `Bearer ${opts.serviceKey}`;
+    baseHeaders['Authorization'] = `Bearer ${opts.serviceKey}`;
   }
   const client: Record<string, (input: unknown) => Promise<unknown>> = {};
 
-  for (const [method, schemas] of Object.entries(
-    blindCast<
-      Record<string, MethodSchemas>,
-      'rpc() stores each method input/output Standard Schemas on the function value; RpcFns types only the call signature'
-    >(contract.__cmp),
-  )) {
+  for (const method of Object.keys(contract.__cmp)) {
     client[method] = async (input: unknown) => {
-      const res = await send(
-        new Request(methodUrl(url, method), {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(input),
-        }),
+      const idempotencyKey = crypto.randomUUID();
+      const body = JSON.stringify(input);
+      return callWithRetry(
+        send,
+        () =>
+          new Request(methodUrl(url, method), {
+            method: 'POST',
+            headers: { ...baseHeaders, [IDEMPOTENCY_KEY_HEADER]: idempotencyKey },
+            body,
+          }),
+        method,
       );
-      if (!res.ok) {
-        const detail = await errorDetail(res);
-        throw new Error(
-          `RPC call "${method}" failed: ${res.status} ${res.statusText}` +
-            (detail !== undefined ? ` — ${detail}` : ''),
-        );
-      }
-      return standardValidate(schemas.output, await res.json());
     };
   }
 
