@@ -11,7 +11,7 @@
  *
  * Control-plane only (imported by control.ts → prisma-composer.config.ts); runs
  * in the CLI parent, so it builds its own Management API client from env — the
- * same credential path `ensureContainers` uses.
+ * same credential path `container.ts`'s `ensure`/`locate` use.
  */
 import { paramManifest, provisionManifest } from '@internal/core';
 import type { PreflightInput } from '@internal/core/config';
