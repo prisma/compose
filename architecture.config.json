@@ -49,6 +49,18 @@
       "plane": "shared"
     },
     {
+      "glob": "packages/0-framework/2-authoring/node/src/*.ts",
+      "domain": "framework",
+      "layer": "authoring",
+      "plane": "shared"
+    },
+    {
+      "glob": "packages/0-framework/2-authoring/node/src/control/**",
+      "domain": "framework",
+      "layer": "authoring",
+      "plane": "control"
+    },
+    {
       "glob": "packages/0-framework/2-authoring/node/src/exports/index.ts",
       "domain": "framework",
       "layer": "authoring",
