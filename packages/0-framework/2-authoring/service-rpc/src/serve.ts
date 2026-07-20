@@ -143,17 +143,32 @@ function methodTable(
   return table;
 }
 
+/** The default maximum request body, in bytes: one mebibyte. */
+export const RPC_MAX_BODY_BYTES = 1024 * 1024;
+
+export interface ServeOptions {
+  /** Maximum request body in bytes. @default 1048576 */
+  readonly maxBodyBytes?: number;
+}
+
 /**
  * Routes `POST /rpc/<method>`: parses JSON, validates input, calls the
  * handler with `service.load()`'s deps, validates the output, and responds
- * JSON. An unknown method or invalid input is a 4xx; a handler (or output
- * validation) failure is a 5xx — either way the process does not crash.
+ * JSON. An unknown method, an oversized body, or invalid input is a 4xx; a
+ * handler (or output validation) failure is a 5xx — either way the process
+ * does not crash, and the response body never carries the exception's
+ * message (a handler error may name internals; callers get a generic 500).
  * `load()` is called exactly once, here, before the handler ever runs.
  */
 export function serve<S extends AnyRunnable, H extends Handlers<S>>(
   service: S,
   handlers: H,
+  options?: ServeOptions,
 ): (req: Request) => Promise<Response> {
+  const maxBodyBytes = options?.maxBodyBytes ?? RPC_MAX_BODY_BYTES;
+  if (!Number.isSafeInteger(maxBodyBytes) || maxBodyBytes <= 0) {
+    throw new Error('serve(): maxBodyBytes must be a positive integer.');
+  }
   const table = methodTable(
     service.expose ?? {},
     blindCast<
@@ -183,9 +198,24 @@ export function serve<S extends AnyRunnable, H extends Handlers<S>>(
       return jsonResponse({ error: `Method "${methodName}" requires POST` }, 405);
     }
 
+    const declaredLength = Number(req.headers.get('content-length') ?? Number.NaN);
+    if (declaredLength > maxBodyBytes) {
+      return jsonResponse({ error: `Request body exceeds ${maxBodyBytes} bytes` }, 413);
+    }
+
+    let text: string;
+    try {
+      text = await req.text();
+    } catch {
+      return jsonResponse({ error: 'Request body could not be read' }, 400);
+    }
+    if (new TextEncoder().encode(text).byteLength > maxBodyBytes) {
+      return jsonResponse({ error: `Request body exceeds ${maxBodyBytes} bytes` }, 413);
+    }
+
     let body: unknown;
     try {
-      body = await req.json();
+      body = JSON.parse(text);
     } catch {
       return jsonResponse({ error: 'Request body must be JSON' }, 400);
     }
@@ -200,8 +230,8 @@ export function serve<S extends AnyRunnable, H extends Handlers<S>>(
     try {
       const result = await method.handler(input, deps);
       return jsonResponse(await standardValidate(method.output, result));
-    } catch (err) {
-      return jsonResponse({ error: err instanceof Error ? err.message : String(err) }, 500);
+    } catch {
+      return jsonResponse({ error: `RPC method "${methodName}" failed` }, 500);
     }
   };
 }

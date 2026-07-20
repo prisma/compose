@@ -12,5 +12,5 @@ export { makeClient } from '../client.ts';
 export { contract } from '../contract.ts';
 export type { Client } from '../rpc.ts';
 export { perBindingToken, RPC_PEER_KEY, rpc } from '../rpc.ts';
-export type { Handlers } from '../serve.ts';
-export { RPC_ACCEPTED_KEYS_ENV, serve } from '../serve.ts';
+export type { Handlers, ServeOptions } from '../serve.ts';
+export { RPC_ACCEPTED_KEYS_ENV, RPC_MAX_BODY_BYTES, serve } from '../serve.ts';

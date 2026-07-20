@@ -196,9 +196,11 @@ Enforcement happens in three places:
    contract value), so a structurally-equivalent-but-distinct contract does not match.
    That is the RPC contract's current implementation, not a rule the framework or the
    Contract abstraction imposes.
-3. **Run (per call) — validate input and output against the contract's schemas.**
-   Catches a provider that is typed-compatible but lies at runtime: a bug, drift, or
-   a legacy server wrapped in a Service that TypeScript never saw.
+3. **Run (per call) — the serving adapter validates input and output against the
+   contract's schemas.** Catches a provider that is typed-compatible but lies at
+   runtime: a bug, drift, or a legacy server wrapped in a Service that TypeScript
+   never saw. Validation happens where the protocol is implemented (e.g. RPC's
+   `serve()`); the consumer does not re-validate responses.
 
 ### The compile-time check is plain TypeScript assignability
 

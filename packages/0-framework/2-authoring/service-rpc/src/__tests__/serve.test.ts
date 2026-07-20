@@ -94,12 +94,12 @@ describe('serve()', () => {
     expect(res.status).toBe(404);
   });
 
-  test('a handler throw is a 500, not a crash', async () => {
+  test('a handler throw is a 500 that never carries the exception message', async () => {
     const authService = fakeAuthService(() => ({ validTokens: [] }));
     const handler = serve(authService, {
       rpc: {
         verify: async () => {
-          throw new Error('db unreachable');
+          throw new Error('db unreachable at 10.0.3.7');
         },
       },
     });
@@ -113,6 +113,46 @@ describe('serve()', () => {
     );
 
     expect(res.status).toBe(500);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).not.toContain('db unreachable');
+    expect(body.error).not.toContain('10.0.3.7');
+  });
+
+  test('a body over the declared content-length limit is a 413 before parsing', async () => {
+    const authService = fakeAuthService(() => ({ validTokens: [] }));
+    const handler = serve(authService, { rpc: { verify: async () => ({ ok: true }) } });
+
+    const res = await handler(
+      new Request('http://auth.internal/rpc/verify', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'content-length': String(2 * 1024 * 1024),
+        },
+        body: JSON.stringify({ token: 't' }),
+      }),
+    );
+
+    expect(res.status).toBe(413);
+  });
+
+  test('an actually-oversized body is a 413 even without a content-length header', async () => {
+    const authService = fakeAuthService(() => ({ validTokens: [] }));
+    const handler = serve(
+      authService,
+      { rpc: { verify: async () => ({ ok: true }) } },
+      { maxBodyBytes: 64 },
+    );
+
+    const res = await handler(
+      new Request('http://auth.internal/rpc/verify', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ token: 'x'.repeat(500) }),
+      }),
+    );
+
+    expect(res.status).toBe(413);
   });
 
   test('the wrong HTTP verb on a known method is a 405', async () => {

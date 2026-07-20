@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { blindCast } from '@internal/foundation/casts';
 import { type } from 'arktype';
 import { makeClient } from '../client.ts';
 import { contract } from '../contract.ts';
@@ -9,7 +10,7 @@ const authContract = contract({
 });
 
 describe('makeClient()', () => {
-  test('POSTs JSON to <url>/rpc/<method> and returns the validated output', async () => {
+  test('POSTs JSON to <url>/rpc/<method> and returns the response body', async () => {
     const requests: Request[] = [];
     const client = makeClient(authContract, 'http://auth.internal', {
       fetch: async (req) => {
@@ -45,7 +46,7 @@ describe('makeClient()', () => {
     expect(requests[0]?.url).toBe('http://auth.internal/api/v1/rpc/verify');
   });
 
-  test('rejects a response that fails the output schema — a lying server is caught', async () => {
+  test('returns the response body without re-validating — per-call validation is serve()’s job', async () => {
     const client = makeClient(authContract, 'http://auth.internal', {
       fetch: async () =>
         new Response(JSON.stringify({ ok: 'not-a-boolean' }), {
@@ -53,7 +54,12 @@ describe('makeClient()', () => {
         }),
     });
 
-    await expect(client.verify({ token: 't' })).rejects.toThrow();
+    await expect(client.verify({ token: 't' })).resolves.toEqual(
+      blindCast<
+        { ok: boolean },
+        'proving the client returns the schema-violating body untouched, not the typed shape'
+      >({ ok: 'not-a-boolean' }),
+    );
   });
 
   test('throws naming the method when the transport responds non-OK', async () => {
