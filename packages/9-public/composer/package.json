@@ -10,6 +10,7 @@
     ".": "./dist/index.mjs",
     "./config": "./dist/config.mjs",
     "./deploy": "./dist/deploy.mjs",
+    "./report": "./dist/report.mjs",
     "./testing": "./dist/testing.mjs",
     "./casts": "./dist/casts.mjs",
     "./assertions": "./dist/assertions.mjs",
@@ -50,13 +51,13 @@
     "@internal/service-rpc": "workspace:0.1.0",
     "@internal/tsdown-config": "workspace:0.1.0",
     "@types/node": "^25.9.3",
-    "tsdown": "^0.22.4",
+    "tsdown": "^0.22.7",
     "typescript": "^6.0.3"
   },
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/prisma/compose.git",
+    "url": "https://github.com/prisma/composer.git",
     "directory": "packages/9-public/composer"
   },
   "engines": {

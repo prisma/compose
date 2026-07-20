@@ -6,10 +6,10 @@ import * as Prisma from '@internal/lowering';
 import * as Output from 'alchemy/Output';
 import * as Effect from 'effect/Effect';
 import * as Redacted from 'effect/Redacted';
+import { isPnPostgresResourceNode } from '../exports/prisma-next.ts';
 import { PgWarm } from '../pg-warm-resource.ts';
 import { resolveMigrationsDir } from '../pn-config.ts';
 import { PnMigration } from '../pn-migration-resource.ts';
-import { isPnPostgresResourceNode } from '../prisma-next.ts';
 import { resolveTargetRef } from '../prisma-next-migrate.ts';
 import { DEFAULT_REGION, projectIdOf, type ResolvedCloudOptions, validateName } from './shared.ts';
 
@@ -59,7 +59,12 @@ export function prismaNextDescriptor(o: ResolvedCloudOptions): NodeDescriptor {
         ...(node.targetRef !== undefined ? { refName: node.targetRef } : {}),
       });
 
-      return { outputs: { url: warm.url } };
+      // No `url` entity field — same reason as postgres: a connection string is
+      // not a public endpoint, and only the descriptor can know that.
+      return {
+        outputs: { url: warm.url },
+        entities: [{ kind: 'postgres-database', id: db.id }],
+      };
     });
   return Object.assign(lowering, { kind: 'resource' as const });
 }
