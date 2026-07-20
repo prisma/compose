@@ -222,7 +222,9 @@ const configFor = (descriptor: Descriptor) => ({
 
 describe("projectIdOf — narrowing ctx.application to this extension's own product", () => {
   test("accepts this extension's own application product", () => {
-    expect(projectIdOf({ projectId: 'shop-project-id' })).toBe('shop-project-id');
+    expect(projectIdOf({ projectId: 'shop-project-id', branchId: undefined })).toBe(
+      'shop-project-id',
+    );
   });
 
   // ctx.application is `unknown`: core never reads the application hook's
@@ -237,6 +239,11 @@ describe("projectIdOf — narrowing ctx.application to this extension's own prod
     ['a non-object', 'shop-project-id'],
     ['an object without projectId', { branchId: 'b_1' }],
     ['an object whose projectId is not a string', { projectId: 42 }],
+    ['an object missing branchId entirely', { projectId: 'shop-project-id' }],
+    [
+      'an object whose branchId is not a string or undefined',
+      { projectId: 'shop-project-id', branchId: 42 },
+    ],
   ])('throws, naming the hook that must run, on %s', (_label, value) => {
     expect(() => projectIdOf(value)).toThrow(/prisma-cloud: ctx\.application/);
     expect(() => projectIdOf(value)).toThrow(/application hook must run before any node lowers/);
@@ -253,7 +260,7 @@ describe('prismaCloud().application.provision (once-per-lowering hook)', () => {
         applicationOf(target).provision({ graph: { edges: [] } } as unknown as LowerContext),
       );
 
-      expect(result).toEqual({ projectId: 'shop-project-id' });
+      expect(result).toEqual({ projectId: 'shop-project-id', branchId: undefined });
       // "-", not "": the API rejects empty env-var values (verified at the R4 deploy proof).
       expect(recorded.envVar.slice(before)).toEqual([
         [
@@ -287,7 +294,7 @@ describe('prismaCloud().application.provision (once-per-lowering hook)', () => {
         applicationOf(target).provision({ graph: { edges: [] } } as unknown as LowerContext),
       );
 
-      expect(result).toEqual({ projectId: 'shop-project-id' });
+      expect(result).toEqual({ projectId: 'shop-project-id', branchId: 'branch_1' });
       expect(recorded.envVar.slice(before)).toEqual([
         [
           'DATABASE_URL-poison',
@@ -331,7 +338,7 @@ describe("prismaCloud().nodes['postgres'] — the resource descriptor", () => {
       // ctx.id is the module provision id — one Database per provisioned resource.
       const ctx = {
         id: 'data',
-        application: { projectId: 'shop-project#cloud-id' },
+        application: { projectId: 'shop-project#cloud-id', branchId: undefined },
       } as unknown as LowerContext;
 
       const result = run<LoweredResult>(resourceDescriptorOf(target, 'postgres')(ctx));
@@ -355,7 +362,7 @@ describe("prismaCloud().nodes['postgres'] — the resource descriptor", () => {
       const target = prismaCloud({ workspaceId: 'ws_1' });
       const ctx = {
         id: 'data2',
-        application: { projectId: 'shop-project#cloud-id' },
+        application: { projectId: 'shop-project#cloud-id', branchId: 'branch_1' },
       } as unknown as LowerContext;
       const before = recorded.db.length;
 
@@ -400,7 +407,7 @@ describe("prismaCloud().nodes['compute'] — the service descriptor", () => {
       const target = prismaCloud({ workspaceId: 'ws_1' });
       const ctx = {
         id: 'auth',
-        application: { projectId: 'shop-project#cloud-id' },
+        application: { projectId: 'shop-project#cloud-id', branchId: undefined },
       } as unknown as LowerContext;
 
       const result = run<MockedProvisioned>(serviceDescriptorOf(target, 'compute').provision(ctx));
@@ -420,7 +427,7 @@ describe("prismaCloud().nodes['compute'] — the service descriptor", () => {
       const target = prismaCloud({ workspaceId: 'ws_1' });
       const ctx = {
         id: 'auth2',
-        application: { projectId: 'shop-project#cloud-id' },
+        application: { projectId: 'shop-project#cloud-id', branchId: 'branch_1' },
       } as unknown as LowerContext;
       const before = recorded.svc.length;
 
@@ -459,7 +466,7 @@ describe("prismaCloud().nodes['compute'] — the service descriptor", () => {
         address: 'auth',
         node,
         graph: { secrets: [], edges: [] },
-        application: {},
+        application: { projectId: 'shop-project#cloud-id', branchId: undefined },
       } as unknown as LowerContext;
       const provisioned = { serviceId: 'auth-svc#cloud-id', projectId: 'shop-project#cloud-id' };
       const config = { service: { port: 3000 }, inputs: { db: { url: 'postgres://real-db' } } };
@@ -527,7 +534,7 @@ describe("prismaCloud().nodes['compute'] — the service descriptor", () => {
         address: 'consumer',
         node,
         graph: { secrets: [], edges: [] },
-        application: {},
+        application: { projectId: 'shop-project#cloud-id', branchId: undefined },
       } as unknown as LowerContext;
       const provisioned = {
         serviceId: 'consumer-svc#cloud-id',
@@ -587,7 +594,7 @@ describe("prismaCloud().nodes['compute'] — the service descriptor", () => {
           address: 'ingest',
           node,
           graph,
-          application: {},
+          application: { projectId: 'shop-project#cloud-id', branchId: undefined },
         } as unknown as LowerContext;
         const provisioned = { projectId: 'shop-project#cloud-id' };
         const config = { service: { port: 3000 }, inputs: {} };
@@ -639,7 +646,7 @@ describe("prismaCloud().nodes['compute'] — the service descriptor", () => {
           address: 'web',
           node,
           graph,
-          application: {},
+          application: { projectId: 'shop-project#cloud-id', branchId: undefined },
         } as unknown as LowerContext;
         const provisioned = { projectId: 'shop-project#cloud-id' };
         // buildConfig resolved the param to the opaque ParamSource, unvalidated — exactly what
@@ -684,7 +691,7 @@ describe("prismaCloud().nodes['compute'] — the service descriptor", () => {
         address: 'web',
         node,
         graph,
-        application: {},
+        application: { projectId: 'shop-project#cloud-id', branchId: undefined },
       } as unknown as LowerContext;
       const provisioned = { projectId: 'shop-project#cloud-id' };
       const config = {
@@ -724,7 +731,7 @@ describe("prismaCloud().nodes['compute'] — the service descriptor", () => {
         address: 'auth3',
         node,
         graph: { secrets: [], edges: [] },
-        application: {},
+        application: { projectId: 'shop-project#cloud-id', branchId: 'branch_1' },
       } as unknown as LowerContext;
       const provisioned = { projectId: 'shop-project#cloud-id' };
       const config = { service: { port: 3000 }, inputs: {} };
@@ -766,7 +773,7 @@ describe("prismaCloud().nodes['compute'] — the service descriptor", () => {
         address: 'auth',
         node,
         graph: { secrets: [], edges: [] },
-        application: {},
+        application: { projectId: 'shop-project#cloud-id', branchId: undefined },
       } as unknown as LowerContext;
       const provisioned = { projectId: 'shop-project#cloud-id' };
       // A port other than the pack default: serialize must carry 8080 through,
@@ -864,7 +871,7 @@ describe("prismaCloud().nodes['s3-store'] — the service descriptor with extend
         address: 'store',
         node,
         graph: { secrets: [], edges: [] },
-        application: {},
+        application: { projectId: 'shop-project#cloud-id', branchId: undefined },
       } as unknown as LowerContext;
       const provisioned = { serviceId: 'store-svc#cloud-id', projectId: 'shop-project#cloud-id' };
       // buildConfig would populate inputs.credentials from the wired resource's
@@ -895,7 +902,7 @@ describe("prismaCloud().nodes['s3-store'] — the service descriptor with extend
         address: 'store',
         node,
         graph: { secrets: [], edges: [] },
-        application: {},
+        application: { projectId: 'shop-project#cloud-id', branchId: undefined },
       } as unknown as LowerContext;
       const provisioned = { projectId: 'shop-project#cloud-id' };
       const serialize = (config: unknown) =>
@@ -963,7 +970,7 @@ describe("prismaCloud().nodes['s3-store'] — the service descriptor with extend
     const target = prismaCloud({ workspaceId: 'ws_1' });
     const ctx = {
       id: 'store',
-      application: { projectId: 'p#cloud-id' },
+      application: { projectId: 'p#cloud-id', branchId: undefined },
     } as unknown as LowerContext;
     const provisionResult = run<MockedProvisioned>(
       serviceDescriptorOf(target, 's3-store').provision(ctx),
@@ -1391,6 +1398,7 @@ describe("streams' provisioned bearer key — one value per PROVIDER, stored on 
       address: 'events',
       node,
       graph,
+      application: { projectId: 'shop-project#cloud-id', branchId: undefined },
       provisioned: new Map([
         ['reader.events', 'key-one'],
         ['writer.events', 'key-two'],
@@ -1495,7 +1503,7 @@ describe("descriptors/compute.ts's provider-param loop is generic over the regis
         address: 'multi',
         node,
         graph: { secrets: [], edges: [] },
-        application: { outputs: {} },
+        application: { projectId: 'shop-project#cloud-id', branchId: undefined },
         provisioned: new Map(),
       } as unknown as LowerContext;
       const provisioned = { serviceId: 'multi-svc#cloud-id', projectId: 'shop-project#cloud-id' };
