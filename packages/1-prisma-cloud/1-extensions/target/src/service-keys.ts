@@ -12,7 +12,7 @@
  * service's bundle (the deploy-side `value(refs)` lives in control.ts, the
  * control-plane-only entry).
  */
-import { RPC_PEER_KEY } from '@internal/rpc';
+import { RPC_PEER_KEY } from '@internal/service-rpc';
 import { type } from 'arktype';
 import type { ProviderParamEntry } from './serializer.ts';
 
@@ -20,7 +20,7 @@ import type { ProviderParamEntry } from './serializer.ts';
  * The reserved provider param for RPC's accepted-keys set: the var name is
  * `RPC_ACCEPTED_KEYS`, derived through `configKey` at both ends
  * (`configKey(address, …)` at deploy, `configKey('', …)` at boot — the
- * address-free form is `@internal/rpc`'s `RPC_ACCEPTED_KEYS_ENV`). `brand` is
+ * address-free form is `@internal/service-rpc`'s `RPC_ACCEPTED_KEYS_ENV`). `brand` is
  * `RPC_PEER_KEY`, the same brand `perBindingToken()`'s need carries — control.ts
  * looks its `value(refs)` up by this field.
  */

@@ -9,7 +9,7 @@
  *
  * **Why the brand lives here, not in the declaring package.** ADR-0031's
  * discipline is that the declarer owns the brand and the target imports it —
- * which is what `@internal/rpc` does, sitting BELOW the target. `@internal/streams`
+ * which is what `@internal/service-rpc` does, sitting BELOW the target. `@internal/streams`
  * sits ABOVE it (prisma-cloud's layer order is lowering → extensions →
  * modules), so a target import of the module would invert the layering. The
  * brand therefore lives in the target and the module imports it downward; the

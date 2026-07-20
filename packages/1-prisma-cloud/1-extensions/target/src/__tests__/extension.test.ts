@@ -10,7 +10,7 @@ import {
   secret,
   string,
 } from '@internal/core';
-import { RPC_ACCEPTED_KEYS_ENV } from '@internal/rpc';
+import { RPC_ACCEPTED_KEYS_ENV } from '@internal/service-rpc';
 import { type } from 'arktype';
 import { compute, postgres, postgresContract } from '../exports/index.ts';
 import { bootstrapService } from '../exports/testing.ts';
@@ -571,7 +571,7 @@ describe('compute().run(address, boot) → load() — the round trip', () => {
     expect(seenAtBoot).toBe('7');
   });
 
-  test("the RPC reserved provider param's address-free key is @internal/rpc's RPC_ACCEPTED_KEYS_ENV — writer and reader cannot drift", () => {
+  test("the RPC reserved provider param's address-free key is @internal/service-rpc's RPC_ACCEPTED_KEYS_ENV — writer and reader cannot drift", () => {
     expect(providerParamKey('', RPC_ACCEPTED_KEYS_PARAM.name)).toBe(RPC_ACCEPTED_KEYS_ENV);
   });
 });
