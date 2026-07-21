@@ -31,6 +31,8 @@ The capture workflow is the Ignite `product-record-gotcha` skill.
 - [Service-to-service HTTP gets ECONNRESET while the target cold-starts from scale-to-zero](#service-to-service-http-gets-econnreset-while-the-target-cold-starts-from-scale-to-zero)
 - [Compute ingress buffers streaming responses until completion — an open SSE tail delivers nothing and 504s at 60s](#compute-ingress-buffers-streaming-responses-until-completion--an-open-sse-tail-delivers-nothing-and-504s-at-60s)
 - [planLimitReached is masked by the cold-start "not configured correctly yet" message](#planlimitreached-is-masked-by-the-cold-start-not-configured-correctly-yet-message)
+- [Composer's secret model has no optional/conditional secrets — every "off" stage still needs a junk credential](#composers-secret-model-has-no-optionalconditional-secrets--every-off-stage-still-needs-a-junk-credential)
+- [Module-boundary param slots admit only sources, never a literal — a static-per-app value forces a platform env var or a factory option](#module-boundary-param-slots-admit-only-sources-never-a-literal--a-static-per-app-value-forces-a-platform-env-var-or-a-factory-option)
 
 ---
 
@@ -487,3 +489,57 @@ The Management API is no help: the project and database both read `status: "read
 - Upstream: [FT-5227](https://linear.app/prisma-company/issue/FT-5227/planlimitreached-is-masked-by-the-cold-start-not-configured-correctly)
 - Related: [FT-5226](https://linear.app/prisma-company/issue/FT-5226) (the cold-start message this is confused with, and whose retry workaround this defeats), [PRO-212](https://linear.app/prisma-company/issue/PRO-212) (the same API's habit of reporting the wrong field)
 - Surfaced through: [`packages/1-prisma-cloud/0-lowering/lowering/src/state/bootstrap.ts`](packages/1-prisma-cloud/0-lowering/lowering/src/state/bootstrap.ts) (`verifyOwnership`)
+
+---
+
+## Composer's secret model has no optional/conditional secrets — every "off" stage still needs a junk credential
+
+**Filed upstream:** not filed — a recorded framework design tradeoff ([ADR-0029](docs/design/90-decisions/ADR-0029-secrets-are-a-forwardable-slot.md): "every wired secret is required"), not a product bug.
+**Product:** Prisma Compute (deploy preflight / secret provisioning)
+**Version:** Prisma Composer framework, observed 2026-07-21
+**First hit:** the email module (`packages/1-prisma-cloud/2-shared-modules/email`) — its `deliveryCredential` secret is only ever read when `deliveryMode` is `resend`/`smtp`; mode `none` (the local-dev/preview story) never reads it
+**Cost:** no time lost — anticipated at design time (spec D8) — but it is real friction every app author hits, so it is recorded here rather than only in the spec
+
+**Symptom.** A stage that will never deliver email (preview, `EMAIL_DELIVERY_MODE=none`) still must set a non-empty `EMAIL_DELIVERY_CREDENTIAL`, or the deploy preflight rejects the app before it ever boots — even though the running service provably never calls `.expose()` on that secret in `none` mode (`delivery.ts`'s `noneDelivery` placeholder throws if it is ever invoked, and it never is).
+
+**Cause.** Prisma Composer's secret model has no "optional" or "conditional on another param's value" secret: every secret slot a service or module declares is required, unconditionally, the same way every declared dependency is required. There is no way to say "this secret is required only when `deliveryMode !== 'none'`" — the framework has no notion of one param's value gating whether another slot must be bound.
+
+**Workaround.** Set any non-empty junk value for `EMAIL_DELIVERY_CREDENTIAL` on stages where `deliveryMode` is `none` (documented in the module's README's env-var-per-stage table). The value is never read in that mode.
+
+**Reproduction.**
+
+1. Provision `email()` with `params: { deliveryMode: envParam('EMAIL_DELIVERY_MODE') }` and leave `EMAIL_DELIVERY_CREDENTIAL` unset on a stage where `EMAIL_DELIVERY_MODE=none`.
+2. Deploy → preflight fails before the service ever boots: the secret slot is unbound.
+3. Set `EMAIL_DELIVERY_CREDENTIAL` to any non-empty string → deploy succeeds; the value is never read (verified: `none` mode never constructs a `Delivery` backing).
+
+**References.**
+
+- Design record: [`.drive/projects/email-module/spec.md`](.drive/projects/email-module/spec.md) — D8, "the delivery credential secret is unconditionally required, junk allowed when mode is none"
+- Module README: [`packages/1-prisma-cloud/2-shared-modules/email/README.md`](packages/1-prisma-cloud/2-shared-modules/email/README.md) — "Platform env vars (per stage)"
+
+---
+
+## Module-boundary param slots admit only sources, never a literal — a static-per-app value forces a platform env var or a factory option
+
+**Filed upstream:** not filed — a design property of `ParamNeedBindings` (core's module boundary), not a product bug.
+**Product:** Prisma Compute (module boundary wiring)
+**Version:** Prisma Composer framework, observed 2026-07-21
+**First hit:** the email module's `deliveryUrl` — a value that is almost always static per app (it follows `deliveryMode`, which already varies per stage) but has nowhere to be bound as a plain literal at the module boundary
+**Cost:** no time lost — designed around at spec time — recorded per spec's friction-finding requirement
+
+**Symptom.** A module boundary's `params` (`ParamNeedBindings<PN>`) accepts only a `ParamSource` (e.g. `envParam(...)`) for each declared `paramNeed()` slot — never a plain literal value — even for a param whose value is genuinely constant across every deploy of every app that provisions the module. The only way to make a value vary per app while staying literal (not a platform env var) is to keep it OUT of the module boundary entirely and pass it as a plain factory option instead.
+
+**Cause.** `paramNeed()` slots exist specifically so an app can bind a per-stage-varying platform value through the boundary; the type only models that one case (a forwardable source), not "a literal the wiring layer should just pass through."
+
+**Workaround.** The email module put `deliveryUrl` outside the `params`/boundary system entirely: `email(opts?: { deliveryUrl?: string })` is a factory option, resolved once at module-construction time in application code, not a wired param. This avoids forcing every app to mint a platform env var for a value that is almost always `https://api.resend.com`.
+
+**Reproduction.**
+
+1. Try to provision a module's `paramNeed()` slot with a plain string literal instead of a `ParamSource` (e.g. `params: { deliveryUrl: 'https://api.resend.com' }` against a `ParamNeedBindings<{ deliveryUrl: ParamNeed }>` target).
+2. → does not type-check (and at runtime, `Load` rejects a non-source value bound into a param-forwarding slot — see `core/src/__tests__/params.test.ts`, "a non-source value wired into a module param-forwarding slot is rejected").
+3. Move the value to a factory option instead (`email({ deliveryUrl: '...' })`) → works, at the cost of it being fixed per module-factory call rather than reconfigurable through the deploy's own param-binding surface.
+
+**References.**
+
+- Design record: [`.drive/projects/email-module/spec.md`](.drive/projects/email-module/spec.md) — "Module factory" pinned consequences, "`deliveryUrl` is a factory option, static per app"
+- Core's param-forwarding rejection: [`packages/0-framework/1-core/core/src/__tests__/params.test.ts`](packages/0-framework/1-core/core/src/__tests__/params.test.ts)
