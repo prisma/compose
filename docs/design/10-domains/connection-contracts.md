@@ -2,7 +2,8 @@
 
 A service-to-service dependency is described by a **Contract**: a value both the
 consumer and the provider import. A Contract is parametric over its **kind**; the
-first — and today only — kind is **RPC**. Compatibility between consumer and provider
+first — and today only — kind is **service RPC** (`@prisma/composer/service-rpc`).
+Compatibility between consumer and provider
 is checked in three places — plain TypeScript assignability where the two are wired, a
 runtime `satisfies()` check at Load, and per-call input/output validation at Run.
 
@@ -12,6 +13,44 @@ where nothing checked that the provider answered what the consumer expected.
 
 The rest of this document builds the idea up from a worked example, explains how
 the compile-time check actually works, and ends with the alternatives we weighed.
+
+## Purpose and scope
+
+Connections are **internal by definition** — where internal means *inside the
+application's topology*, not co-located on one network. Every Connection kind —
+service RPC today, any later kind — is an edge between two components declared
+in one application, provisioned by the framework, authenticated with
+framework-minted keys. The components may be provided by different targets, and
+such an edge necessarily crosses networks; that is a deployment fact about the
+edge, not a change in what the kind is for. What internal never means: an
+endpoint for parties outside the application.
+
+The service RPC kind serves that purpose and no other. It is deliberately
+minimal: a contract collapses to `method → { input, output }`, and a call is
+`await auth.verify({ token })` — trivial by design, because the primary
+consumers of this surface are **agents generating services and the framework
+connecting them**. A surface this small is generated correctly on the first
+try and checked mechanically; that is a feature, not an unfinished
+implementation.
+
+Two things this kind is **not**, both of which have been proposed in good
+faith and declined:
+
+- **It is not an application API layer.** Middleware, metadata, streaming,
+  rich errors — the features that make an RPC framework attractive for
+  internet-facing APIs — are out of scope for internal edges. Your
+  application's own API is yours: the framework never touches your app code,
+  so serve it with any framework or RPC library you like.
+- **It is not general distributed-systems infrastructure.** Protocol
+  guarantees are calibrated to framework-provisioned, point-to-point edges and
+  the named failure modes of the targets carrying them — a same-target edge
+  may assume its platform's specific failure modes; a cross-target edge
+  crosses networks and may warrant more. Either way, a proposal adding
+  robustness names the concrete failure being guarded against; it does not
+  design for arbitrary networks.
+
+Decisions about this kind's protocol and features calibrate against this
+scope first.
 
 ## A worked example
 
@@ -207,7 +246,7 @@ derived as a mapped type over `M`, comparing two instantiations would relate the
 `M`s covariantly — silently dropping input-contravariance and accepting a provider
 that demands an input the consumer never sends. Materialising `Cmp` as concrete
 functions in the kind's builder is what makes plain assignability sound. (See
-`@prisma/composer/rpc`'s `contract-satisfaction.test-d.ts` for the full accept/reject
+`@prisma/composer/service-rpc`'s `contract-satisfaction.test-d.ts` for the full accept/reject
 matrix, typechecked in CI.)
 
 Schemas are **Standard Schema** (arktype is the canonical authoring library; any
