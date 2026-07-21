@@ -97,10 +97,10 @@ describe('loadAppConfig() — real c12 evaluation', () => {
     const configPath = path.join(dir, CONFIG_FILENAME);
     fs.writeFileSync(
       configPath,
-      "throw new Error('prismaCloud(): environment variable PRISMA_WORKSPACE_ID is required.');\n",
+      "throw new Error('exampleExtension(): environment variable EXAMPLE_API_TOKEN is required.');\n",
     );
 
-    await expect(loadAppConfig(configPath)).rejects.toThrow(/PRISMA_WORKSPACE_ID/);
+    await expect(loadAppConfig(configPath)).rejects.toThrow(/EXAMPLE_API_TOKEN/);
   });
 });
 
