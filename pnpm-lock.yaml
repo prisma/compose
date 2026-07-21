@@ -776,6 +776,37 @@ importers:
         specifier: ^4.1.10
         version: 4.1.10(@types/node@26.1.1)(vite@8.1.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.6.1)(yaml@2.9.0))
 
+  packages/1-prisma-cloud/2-shared-modules/email:
+    dependencies:
+      '@internal/core':
+        specifier: workspace:0.1.0
+        version: link:../../../0-framework/1-core/core
+      '@internal/foundation':
+        specifier: workspace:0.1.0
+        version: link:../../../0-framework/0-foundation/foundation
+      '@internal/service-rpc':
+        specifier: workspace:0.1.0
+        version: link:../../../0-framework/2-authoring/service-rpc
+      arktype:
+        specifier: ^2.2.3
+        version: 2.2.3
+    devDependencies:
+      '@internal/tsdown-config':
+        specifier: workspace:0.1.0
+        version: link:../../../0-framework/0-foundation/tsdown-config
+      '@types/bun':
+        specifier: ^1.3.13
+        version: 1.3.14
+      tsdown:
+        specifier: ^0.22.7
+        version: 0.22.12(typescript@6.0.3)
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.10
+        version: 4.1.10(@types/node@26.1.1)(vite@8.1.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.6.1)(yaml@2.9.0))
+
   packages/1-prisma-cloud/2-shared-modules/storage:
     dependencies:
       '@internal/core':
