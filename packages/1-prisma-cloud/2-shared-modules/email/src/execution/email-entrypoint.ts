@@ -13,12 +13,16 @@ import { createSmtpDelivery } from '../delivery-smtp.ts';
 import { emailService } from '../email-service.ts';
 import { createHandlers } from '../handlers.ts';
 import { createPgOutboxStore } from '../pg-outbox-store.ts';
+import { checkDeliveryUrl } from './check-delivery-url.ts';
 
 const service = emailService();
 
 const { db } = service.load();
 const { deliveryMode, deliveryUrl, from, port } = service.config();
 const { deliveryCredential } = service.secrets();
+
+const deliveryUrlError = checkDeliveryUrl(deliveryMode, deliveryUrl);
+if (deliveryUrlError !== null) throw new Error(deliveryUrlError);
 
 const store = await createPgOutboxStore(db.url);
 
