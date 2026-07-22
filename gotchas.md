@@ -562,6 +562,8 @@ The Management API is no help: the project and database both read `status: "read
 
 Setting `NODE_OPTIONS=--import=tsx` globally around the deploy command does make Node parse the JSX, but it also changes module resolution for every other Node process spawned during that deploy — it broke an unrelated, pre-existing import inside Alchemy's own CLI startup (`@alchemy.run/node-utils`'s `foregroundChild` export stopped resolving), so it isn't a safe fix.
 
+**Update, later dispatch.** The CLI now catches this specific failure at its `loadEntry` import site and rethrows a `CliError` naming the offending file, the cause, and this same precompile fix — a user hits an actionable message instead of node's raw `Unknown file extension` error and the trek to this entry (`packages/0-framework/3-tooling/cli/src/jsx-load-error.ts`).
+
 **Workaround.** Kept the JSX-authored `templates.tsx`/`emails/welcome.tsx` as the real source (so the example still demonstrates react-email authoring), but added a build step (`examples/email/scripts/build.ts`) that precompiles `templates.tsx` to plain, JSX-free JS via `bun build --target=node` (all real npm packages passed as `--external`, so nothing from `node_modules` gets inlined — this is a JSX transform, not a bundle) before `service.ts` imports it. `service.ts` imports the compiled `dist/mailer/templates.generated.ts`, not the raw `.tsx`; the runtime server bundle imports the same compiled file, so there's one wired-up template set, not two paths that could drift.
 
 **Reproduction.**
