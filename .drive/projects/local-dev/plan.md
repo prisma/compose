@@ -19,8 +19,9 @@ scripts. Implementer dispatches use Sonnet-4.6-mid, reviewers Opus-4.8-mid
 
 - **Outcome:** new lowering-layer package holding `store.ts`, `sigv4.ts`
   (incl. `mintKeyPair`), `handler.ts`, `memory-store.ts` (moved), plus new
-  `fs-store.ts` and `serve.ts` (node:http, SigV4 multi-credential, 501
-  multipart). Storage module consumes it; public surface byte-compatible;
+  `fs-store.ts`, `serve.ts` (node:http, SigV4 multi-credential, `/_pcdev/`
+  admin surface, 501 multipart), and the runnable `emulator-main.ts` daemon
+  entry. Storage module consumes it; public surface byte-compatible;
   its tests pass unmodified. `architecture.config.json` declares the package
   (spec § 1 — including the plane check that both import directions pass
   `lint:deps` **first**; a rejection is a stop condition).
@@ -42,20 +43,22 @@ scripts. Implementer dispatches use Sonnet-4.6-mid, reviewers Opus-4.8-mid
 
 ### S3 — the dev target: core seam + local providers + dev lowering path
 
-- **Outcome:** `DevDescriptor`/`DevStandInsInput`/`DevStandIns` +
-  `dev-process.ts` in core; `LowerOptions.dev` + `mergedDevProviders`;
-  `serviceAddress` threading (`ComputeSerialized.address` →
-  `DeploymentProps.serviceAddress`); `@internal/lowering/dev` (dev-store,
+- **Outcome:** `DevDescriptor` + `dev-process.ts` in core;
+  `LowerOptions.dev` + `mergedDevProviders`; `serviceAddress` threading
+  (`ComputeSerialized.address` → `DeploymentProps.serviceAddress`);
+  `@internal/lowering/dev` (dev-store, `emulator-daemon.ts` manager,
   compute/postgres/bucket local providers, `devProviders()`,
   `artifact-extract.ts`, `resolve-bin.ts`); target extension `src/dev/*`
-  (container, preflight + shared `preflight-names.ts`, stand-ins, teardown)
-  and `prismaCloud()`'s `dev` field; the lazy `resolveOptions` restructure
-  (factory constructs with no env).
+  (container, preflight + shared `preflight-names.ts`, teardown incl.
+  emulator stops) and `prismaCloud()`'s `dev` field; the lazy
+  `resolveOptions` restructure (factory constructs with no env).
 - **Proves:** integration test (no CLI): a fixture topology (compute +
   postgres + bucket) lowered with `dev: true` and driven through
   `alchemy deploy --stage dev` programmatically produces a correct process
   table, env store (incl. port override + poison rows + secret pointers),
-  running `prisma dev` instance, and unpacked artifacts; the scrubbed-env
+  running `prisma dev` instance, a healthy bucket-emulator daemon
+  (registry entry + health + provisioned bucket/credentials, surviving a
+  second converge and a version-bump restart), and unpacked artifacts; the scrubbed-env
   test (`prismaCloud()` with no `PRISMA_*`); ustar extract round-trips
   `packageComputeArtifact`'s output; placeholder minting stable across two
   preflight runs; env-param missing → listing error.

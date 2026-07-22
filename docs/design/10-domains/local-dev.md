@@ -40,9 +40,10 @@ Dev re-runs [deploy's pipeline](deploy-cli.md#the-pipeline) with these deltas:
    same adapters and produces the same bundles; missing output produces the
    same "run your build" error.
 4. **Containers** — the `dev.container` descriptor resolves a stable local
-   identity from the app name with no platform calls. Long-running stand-ins
-   the converge cannot own (the bucket server) start next, through the
-   extension's `dev.standIns` hook.
+   identity from the app name with no platform calls. Emulators need no step
+   here: each local provider ensures its emulator daemon is running when it
+   reconciles (step 5), the same way the Postgres provider shells the ORM's
+   `prisma dev`.
 5. **Lower + converge** — a dev-generated stack file (ADR-0007's pattern, at
    `.prisma-composer/dev/alchemy.run.ts`), driven with the extension's
    `dev.providers()` layer and Alchemy's built-in `localState()` store, always
@@ -81,9 +82,10 @@ The `dev` command reconciles the table against reality:
   churn.
 - **Record deleted** (a service removed from the topology, `--fresh`) → kill
   the child.
-- **Ctrl-C** → kill every child and stop the bucket server; the local Postgres
-  instances stay up (they run detached, hold the data, and make the next start
-  warm). `--fresh` is what stops and removes them.
+- **Ctrl-C** → kill every child. Every emulator — the Postgres instances and
+  the bucket emulator — stays up: they are machine-scoped daemons holding the
+  data, and they make the next start warm. `--fresh` is what stops and
+  removes them.
 
 The env materialization in each record is the one platform-side behavior the
 local target implements itself: the hosted platform joins the branch's config
@@ -98,25 +100,24 @@ Dev has three process lifetimes, each with a distinct owner:
 
 1. **Converge-scoped** — the Alchemy child (ADR-0007). Providers run here;
    nothing started here survives its exit.
-2. **Session-scoped** — owned by the long-running `dev` command: service
-   children (via the process table) and the bucket server (via
-   `dev.standIns`). They outlive every converge within a session and stop on
-   Ctrl-C. The bucket server is deliberately session-scoped rather than a
-   daemon: it is stateless over disk (objects, credentials, and port
-   allocations are files), boots in milliseconds, and daemonizing it would
-   mean owning pidfiles, discovery, stop UX, and stale-version skew for no
-   gain.
-3. **Machine-scoped daemons** — the `prisma dev` Postgres instances, the
-   classic local-emulator model (firebase/supabase emulators). They survive
-   dev sessions entirely and are removed only by `--fresh`. Dev uses this
-   tier only where a mature daemon manager already owns the machinery — the
-   ORM CLI's named instances (`prisma dev ls|stop|rm`) — rather than
-   building daemon management itself.
+2. **Session-scoped** — the app's own service children, owned by the
+   long-running `dev` command via the process table. They outlive every
+   converge within a session and stop on Ctrl-C.
+3. **Machine-scoped emulators** — every local backing service, uniformly:
+   the `prisma dev` Postgres instances and the bucket emulator. The classic
+   local-emulator model (firebase/supabase emulators): long-lived daemons
+   that survive dev sessions entirely, removed only by `--fresh`. A local
+   provider *ensures* its emulator is running at reconcile — spawning it
+   detached if absent — and provisions the app's instances (a database, a
+   bucket, accepted credentials) by communicating with it: the ORM CLI's own
+   daemon manager for Postgres, a loopback admin endpoint for the bucket
+   emulator. Ensuring happens inside converge, so no lifecycle hook exists
+   on `DevDescriptor` for emulators.
 
-`standIns` is the tier-2 seam: the owner for anything whose lifetime must
-exceed a converge but not the session. An extension that needs a true daemon
-can still start one detached inside the hook and return a no-op stop — a
-lifecycle choice inside the extension, not a seam change.
+The bucket emulator's daemon bookkeeping (registry, pidfile, stable port,
+version-skew restart) is framework-owned and minimal; Postgres reuses the
+ORM CLI's mature manager (`prisma dev ls|stop|rm`) rather than duplicating
+it.
 
 ## Resource substitution
 
@@ -132,8 +133,8 @@ semantics):
 | `ComputeService` | allocates a port (persisted in state, stable across runs); `endpointDomain = http://localhost:<port>` — which makes origin (ADR-0039) work unchanged |
 | `Deployment` | unpacks the artifact once per hash; writes the process-table record |
 | `EnvironmentVariable` | a key→value row in the dev state store |
-| `Bucket` | a directory under `.prisma-composer/dev/buckets/<bucket>/`, served by the local S3 server |
-| `BucketKey` | accepted credentials on the local S3 server |
+| `Bucket` | a directory under `.prisma-composer/dev/buckets/<bucket>/`, served by the bucket emulator |
+| `BucketKey` | credentials registered with the bucket emulator |
 | `ServiceKey` | **unchanged** — mints locally, persists in state |
 | `S3Credentials` | **unchanged** — mints locally, persists in state |
 | `PgWarm` | **unchanged** — real `select 1` against the local URL |
@@ -141,20 +142,20 @@ semantics):
 
 Because module-backed kinds (storage, streams, email) lower to compute services
 plus databases, they run their **real service code** locally against local
-Postgres — no per-module stand-in, maximum fidelity. The streams module's
-SQLite test stand-in remains a testing utility, not part of the dev loop.
+Postgres — no per-module emulator, maximum fidelity. The streams module's
+SQLite test server remains a testing utility, not part of the dev loop.
 
 ### Postgres
 
-The stand-in is the ORM CLI's local Postgres (`prisma dev`), **one named,
+The emulator is the ORM CLI's local Postgres (`prisma dev`), **one named,
 detached instance per `Database` resource** — instance names are derived from
 the app and database ids, so instances are isolated, discoverable
-(`prisma dev ls`), and survive across dev restarts for warm starts.
+(`prisma dev ls`), and survive across dev sessions for warm starts.
 Migrations are not special-cased: `PnMigration` runs exactly as it does in a
 deploy, against the local URL. `PgWarm` is near-instant locally and is kept
 (not stubbed) so the provider set stays uniform.
 
-### Buckets: a disk-backed S3 server
+### Buckets: a disk-backed S3 emulator
 
 The storage module already implements the S3 wire protocol over an
 `ObjectStore` interface with full SigV4 verification, including presigned URLs
@@ -164,11 +165,13 @@ with memory- and Postgres-backed stores. The domain layering
 (lowering < extensions < modules, upward imports denied) means dev machinery
 cannot import the storage module, so the protocol pieces (handler, SigV4,
 `ObjectStore`, memory store) move down into a shared protocol package at the
-lowering layer that both the module and the dev stand-in import — a
+lowering layer that both the module and the bucket emulator import — a
 behavior-preserving extraction; the storage module's public surface is
-unchanged. The dev bucket stand-in is then a third store implementation plus
-one shared local server (plain `node:http`, which runs under both node and
-bun, started through `dev.standIns` because it must outlive each converge):
+unchanged. The bucket emulator is then a third store implementation plus one
+daemonized local server per app (plain `node:http`, which runs under both
+node and bun), ensured by the `Bucket`/`BucketKey` providers at reconcile and
+administered through a loopback admin endpoint (`/_pcdev/…` — the underscore
+prefix cannot collide with a valid bucket name):
 
 - **Objects are plain files at their key paths** —
   `.prisma-composer/dev/buckets/<bucket>/<key>`. Browse them, open them, drop a
@@ -176,8 +179,8 @@ bun, started through `dev.standIns` because it must outlive each converge):
   implementation detail: inspectable state is half the value of local dev.
 - Object metadata (content type, user metadata) lives in a sidecar tree, so
   the object tree stays clean for humans.
-- One server per dev instance serves every bucket (the wire namespaces by path
-  bucket, as the handler already does), accepting each minted `S3Credentials`
+- One emulator instance per app serves every bucket (the wire namespaces by
+  path bucket, as the handler already does), accepting each registered
   pair.
 - Multipart upload is initially unimplemented and fails with a clear error
   naming the limitation; add it when a real consumer needs it.
@@ -219,7 +222,8 @@ Deploy's rule holds: every failure names its fix.
 | extension has no `dev` descriptor | which extension, and that it does not support local dev |
 | built output missing | same as deploy: the expected path, "run your build" |
 | `bun` not on PATH | that dev runs services under bun (the Compute runtime) and how to install it |
-| no installed `prisma` bin (the local-Postgres stand-in) | what was searched for and to add `prisma` to devDependencies |
+| no installed `prisma` bin (the local-Postgres emulator) | what was searched for and to add `prisma` to devDependencies |
+| the bucket emulator fails to start or report healthy | the instance name, its log file path, and the port it tried |
 | ORM `prisma dev` fails to start | the exact command that was attempted and its output |
 | port conflict on a persisted allocation | which service, which port, and how to free or re-allocate (`--fresh`) |
 | secret slot unbound | warning (not an error) naming the env var and the placeholder behavior |

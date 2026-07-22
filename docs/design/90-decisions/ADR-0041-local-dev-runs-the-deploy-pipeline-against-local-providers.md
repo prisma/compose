@@ -24,9 +24,7 @@ export interface DevDescriptor {
   readonly container: ContainerDescriptor;
   /** Dev value-sourcing policy: secrets from the shell else minted placeholders; env-sourced params from the shell else a hard error. */
   preflight?(input: PreflightInput): Promise<void>;
-  /** Long-running local stand-ins that outlive a converge (e.g. an S3 server) — started by the dev command before converge, stopped on exit. */
-  standIns?(input: DevStandInsInput): Promise<DevStandIns>;
-  /** `--fresh`: remove every local trace of the dev instance (stand-in servers, state, data). */
+  /** `--fresh`: remove every local trace of the dev instance — emulator daemons, state, data. */
   teardown?(input: TeardownInput): Promise<void>;
 }
 ```
@@ -56,8 +54,19 @@ three clusters:
 | Cluster | Resources | Local implementation |
 | --- | --- | --- |
 | Compute | `ComputeService`, `Deployment`, `EnvironmentVariable` | port allocation + a supervised child process per service + a local env-var store |
-| Postgres | `Project`, `Database`, `Connection` | the ORM CLI's local Postgres (`prisma dev`) |
-| Buckets | `Bucket`, `BucketKey` | the storage module's existing S3 wire handler + SigV4 verifier over a disk-backed object store — objects are plain files at their key paths |
+| Postgres | `Project`, `Database`, `Connection` | the ORM CLI's local Postgres **emulator** (`prisma dev`) |
+| Buckets | `Bucket`, `BucketKey` | a bucket **emulator**: the storage module's existing S3 wire handler + SigV4 verifier over a disk-backed object store — objects are plain files at their key paths |
+
+**Backing services are emulators: machine-scoped daemons, uniformly.** Every
+local backing service — the Postgres instances and the bucket server alike —
+is a long-lived daemon that survives dev sessions, exactly the model of the
+ORM's `prisma dev` (and of the firebase/supabase emulators). A local provider
+*ensures* its emulator is running when it reconciles (spawning it detached if
+absent) and provisions the app's instances — a database, a bucket, accepted
+credentials — by communicating with it: the ORM CLI's daemon manager for
+Postgres, a loopback admin endpoint for the bucket emulator. Because
+provisioning happens inside converge, no separate lifecycle hook exists on
+`DevDescriptor`; emulators are removed only by `--fresh`, through `teardown`.
 
 **Converge terminates; the dev command supervises.** Alchemy's converge is a
 run-to-completion program (ADR-0007 drives it in a child process that exits), so
@@ -89,7 +98,7 @@ The goal this serves is recorded in [goals.md](../00-purpose/goals.md):
 *where* the stand-in boundary sits. Porting a real application onto the
 framework settled it empirically: the port's hand-rolled dev script had to
 reverse-engineer the deployment address from the module-graph builder,
-hand-write the `COMPOSER_*` wire protocol, hand-start each stand-in, and
+hand-write the `COMPOSER_*` wire protocol, hand-start each emulator, and
 hand-mint placeholder secrets — every line of it framework knowledge leaking
 into an app repo. Whatever absorbs that script must produce *deploy-shaped*
 truth, or local verification proves nothing about a deploy.
@@ -133,11 +142,11 @@ to compute services plus databases, so under local providers they run their
 *real service code* against local Postgres — no per-module stand-in needed at
 all.
 
-The bucket cluster is the one place stand-in and reality could have diverged,
+The bucket cluster is the one place emulator and reality could have diverged,
 and the repo already closes it: the storage module implements the S3 wire
 protocol over an `ObjectStore` interface with full SigV4 verification
 (including presigned URLs), with memory- and Postgres-backed stores. The local
-bucket stand-in is a third store implementation — objects stored verbatim as
+bucket emulator is a third store implementation — objects stored verbatim as
 plain files at their key paths, so a developer can browse, inspect, and drop
 files into a bucket with ordinary filesystem tools.
 
@@ -145,7 +154,7 @@ One philosophical note, recorded so the tension is legible: Alchemy's own dev
 mode deploys real cloud resources and runs only code locally, precisely because
 its authors consider emulation a lie. This framework cannot take that position —
 credential-free local verification is a product requirement (agents must verify
-without cloud access) — so it accepts stand-ins, and keeps the lied-about
+without cloud access) — so it accepts local emulation, and keeps the lied-about
 surface as small and as typed as possible: eight providers behind contracts
 this repo owns.
 
@@ -167,7 +176,7 @@ this repo owns.
   hosted factory's required workspace variable stays deploy-only; the `dev`
   path resolves no credentials at all.
 - **A new operational dependency:** the ORM CLI's local Postgres (`prisma dev`)
-  is the postgres stand-in. Dev shells out to a sibling product's command.
+  is the postgres emulator. Dev shells out to a sibling product's command.
 - **Dev state is local and disposable.** The Alchemy state store is Alchemy's
   own `localState()` (`.alchemy/state/`); everything else — the process table,
   env store, unpacked artifacts, bucket objects, minted placeholders — lives
