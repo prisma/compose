@@ -235,6 +235,14 @@ function main(): void {
         'malformed credentials body: expected { "accessKeyId", "secretAccessKey" }',
       );
     }
+    const existing = state.credentials[parsed.accessKeyId];
+    if (existing && existing.app !== app) {
+      return text(
+        res,
+        409,
+        `accessKeyId "${parsed.accessKeyId}" is already registered by a different app`,
+      );
+    }
     state.credentials[parsed.accessKeyId] = { app, secretAccessKey: parsed.secretAccessKey };
     schedulePersist();
     res.writeHead(204);
@@ -251,6 +259,30 @@ function main(): void {
     schedulePersist();
     res.writeHead(204);
     res.end();
+  }
+
+  /** Path-style addressing: the bucket is the first non-empty path segment. Mirrors the handler's own `parseTarget`, which isn't exported. */
+  function bucketFromPath(pathname: string): string | undefined {
+    const first = pathname.split('/').find((s) => s.length > 0);
+    return first !== undefined ? decodeURIComponent(first) : undefined;
+  }
+
+  /**
+   * Credentials accepted for THIS request's target bucket only — its
+   * owning app, derived from the bucket's registration (the authoritative
+   * source for the `<app>--<name>` split; unregistered apps/names may
+   * themselves contain `--`, so the registration is trusted over re-parsing
+   * the string). An unknown bucket or an app with no registered credentials
+   * yields no candidates, which still resolves through the real 403 path
+   * below — never a bespoke "unknown bucket" shortcut that would reveal
+   * anything.
+   */
+  function credentialsForBucket(bucket: string | undefined): Credentials[] {
+    const owningApp = bucket !== undefined ? state.buckets[bucket]?.app : undefined;
+    if (owningApp === undefined) return [];
+    return Object.entries(state.credentials)
+      .filter(([, rec]) => rec.app === owningApp)
+      .map(([accessKeyId, rec]) => ({ accessKeyId, secretAccessKey: rec.secretAccessKey }));
   }
 
   async function handleS3Wire(
@@ -273,15 +305,13 @@ function main(): void {
     const fullUrl = `http://${host}${req.url ?? '/'}`;
     const headers = toWebHeaders(req.headers);
 
-    const candidates: Credentials[] = Object.entries(state.credentials).map(
-      ([accessKeyId, rec]) => ({
-        accessKeyId,
-        secretAccessKey: rec.secretAccessKey,
-      }),
-    );
-    // No registered credentials at all: fall through to a single verification
+    const candidates: Credentials[] = credentialsForBucket(bucketFromPath(url.pathname));
+    // No candidate for this bucket (unknown bucket, or its app has no
+    // credentials registered): fall through to a single verification
     // attempt against an unusable pair, so the request still resolves
-    // through the real 403 path instead of a bespoke shortcut.
+    // through the real 403 path instead of a bespoke shortcut. A valid
+    // signature from a DIFFERENT app's credential never even reaches this
+    // list, so it fails exactly the same way — same status, same body.
     if (candidates.length === 0) candidates.push({ accessKeyId: '', secretAccessKey: '' });
 
     let last: Response | undefined;
@@ -352,14 +382,17 @@ function main(): void {
     });
   });
 
-  process.on('SIGTERM', () => {
+  // Wait for every already-queued state write to actually land on disk
+  // before exiting — otherwise a SIGTERM arriving right after a mutation
+  // (e.g. an ensureDaemon version-skew restart) can race the write and
+  // silently lose it.
+  async function shutdown(): Promise<void> {
+    await stateFile.flush();
     server.close();
     process.exit(0);
-  });
-  process.on('SIGINT', () => {
-    server.close();
-    process.exit(0);
-  });
+  }
+  process.on('SIGTERM', () => void shutdown());
+  process.on('SIGINT', () => void shutdown());
 
   readJsonFile(stateJsonPath, isBucketsState)
     .then((loaded) => {

@@ -14,6 +14,7 @@ import {
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { bucketsClient } from '../client.ts';
 import { ensureDaemon, stopDaemon } from '../daemon.ts';
 import { tempDir } from './helpers.ts';
@@ -76,6 +77,56 @@ describe('bucket + credential admin', () => {
     // Objects already on disk are untouched — only `teardown`'s `fs.rm` owns them.
     expect(fs.existsSync(path.join(dir, 'kept.txt'))).toBe(true);
   });
+
+  test('re-registering an accessKeyId already owned by a different app is rejected with 409, naming neither secret', async () => {
+    const client = bucketsClient({ registryRoot });
+    await client.putCredentials('myapp', 'AKIACONFLICT', 'myappsecret');
+
+    const res = await fetch(`${daemonUrl}/_pcdev/apps/otherapp/credentials`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ accessKeyId: 'AKIACONFLICT', secretAccessKey: 'otherappsecret' }),
+    });
+    expect(res.status).toBe(409);
+    const body = await res.text();
+    expect(body).not.toContain('myappsecret');
+    expect(body).not.toContain('otherappsecret');
+
+    // The SAME app re-registering (rotating the secret) still succeeds.
+    await client.putCredentials('myapp', 'AKIACONFLICT', 'myappsecret-rotated');
+    const dir = path.join(tempDir('bucket-data'), 'objects');
+    await client.putBucket('myapp', 'uploads', dir);
+    const s3 = s3For('AKIACONFLICT', 'myappsecret-rotated');
+    await s3.send(new PutObjectCommand({ Bucket: 'myapp--uploads', Key: 'k', Body: 'x' }));
+    expect(fs.existsSync(path.join(dir, 'k'))).toBe(true);
+  });
+
+  test('a credentials owning app round-trips across a daemon restart', async () => {
+    const client = bucketsClient({ registryRoot });
+    const dir = path.join(tempDir('bucket-data'), 'objects');
+    await client.putBucket('myapp', 'uploads', dir);
+    await client.putCredentials('myapp', 'AKIARESTART', 'restartsecret');
+
+    await stopDaemon('buckets', { registryRoot });
+    const restarted = await ensureDaemon('buckets', { registryRoot });
+    daemonUrl = restarted.url;
+
+    // The secret survived: the original app's own credential still works.
+    const s3 = s3For('AKIARESTART', 'restartsecret');
+    await s3.send(
+      new PutObjectCommand({ Bucket: 'myapp--uploads', Key: 'k', Body: 'still owned by myapp' }),
+    );
+    expect(fs.existsSync(path.join(dir, 'k'))).toBe(true);
+
+    // The OWNER survived too: a different app re-registering the same
+    // accessKeyId still 409s, not a silent takeover.
+    const res = await fetch(`${daemonUrl}/_pcdev/apps/otherapp/credentials`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ accessKeyId: 'AKIARESTART', secretAccessKey: 'stolen' }),
+    });
+    expect(res.status).toBe(409);
+  });
 });
 
 describe('SigV4 round-trip', () => {
@@ -114,12 +165,12 @@ describe('SigV4 round-trip', () => {
     ).rejects.toThrow();
   });
 
-  test('SigV4 verifies against ANY accepted credential, not just the most recently registered', async () => {
+  test('SigV4 verifies against any of the bucket-owning apps OWN accepted credentials', async () => {
     const client = bucketsClient({ registryRoot });
     const dir = path.join(tempDir('bucket-data'), 'objects');
     await client.putBucket('myapp', 'uploads', dir);
     await client.putCredentials('myapp', 'AKIAFIRST', 'firstsecret');
-    await client.putCredentials('otherapp', 'AKIASECOND', 'secondsecret');
+    await client.putCredentials('myapp', 'AKIASECOND', 'secondsecret');
 
     const s3First = s3For('AKIAFIRST', 'firstsecret');
     await s3First.send(new PutObjectCommand({ Bucket: 'myapp--uploads', Key: 'a', Body: 'a' }));
@@ -159,6 +210,38 @@ describe('multi-app isolation', () => {
 
     expect(fs.readFileSync(path.join(dirOne, 'k'), 'utf8')).toBe('from tenant one');
     expect(fs.readFileSync(path.join(dirTwo, 'k'), 'utf8')).toBe('from tenant two');
+  });
+
+  test("app A's credential is rejected against app B's bucket exactly like a bad signature", async () => {
+    const client = bucketsClient({ registryRoot });
+    const dirTwo = path.join(tempDir('bucket-data-two'), 'objects');
+    await client.putBucket('tenant-two', 'data', dirTwo);
+    await client.putCredentials('tenant-one', 'AKIACROSSONE', 'onesecret');
+    await client.putCredentials('tenant-two', 'AKIACROSSTWO', 'twosecret');
+
+    // tenant-one's credential, CORRECTLY signed, targeting tenant-two's bucket.
+    const s3CrossApp = s3For('AKIACROSSONE', 'onesecret');
+    const crossAppUrl = await getSignedUrl(
+      s3CrossApp,
+      new PutObjectCommand({ Bucket: 'tenant-two--data', Key: 'x' }),
+      { expiresIn: 900 },
+    );
+    const crossAppRes = await fetch(crossAppUrl, { method: 'PUT', body: 'x' });
+
+    // tenant-two's OWN accessKeyId, but a wrong secret — a genuinely bad signature.
+    const s3BadSig = s3For('AKIACROSSTWO', 'not-the-real-secret');
+    const badSigUrl = await getSignedUrl(
+      s3BadSig,
+      new PutObjectCommand({ Bucket: 'tenant-two--data', Key: 'x' }),
+      { expiresIn: 900 },
+    );
+    const badSigRes = await fetch(badSigUrl, { method: 'PUT', body: 'x' });
+
+    expect(crossAppRes.status).toBe(403);
+    expect(crossAppRes.status).toBe(badSigRes.status);
+    expect(await crossAppRes.text()).toBe(await badSigRes.text());
+
+    expect(fs.existsSync(path.join(dirTwo, 'x'))).toBe(false);
   });
 });
 

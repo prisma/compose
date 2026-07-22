@@ -675,6 +675,9 @@ importers:
       '@aws-sdk/client-s3':
         specifier: ^3.1085.0
         version: 3.1087.0
+      '@aws-sdk/s3-request-presigner':
+        specifier: ^3.1085.0
+        version: 3.1087.0
       '@internal/tsdown-config':
         specifier: workspace:0.2.0
         version: link:../../../0-framework/0-foundation/tsdown-config

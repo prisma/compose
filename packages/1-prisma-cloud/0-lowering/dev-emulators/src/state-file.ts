@@ -24,6 +24,11 @@ export class StateFile<T> {
     return next;
   }
 
+  /** Resolves once every write() call made so far has landed on disk — for graceful shutdown, so a SIGTERM can't race an in-flight write and lose it. */
+  flush(): Promise<void> {
+    return this.queue;
+  }
+
   private async writeNow(value: T): Promise<void> {
     const dir = path.dirname(this.filePath);
     await fs.mkdir(dir, { recursive: true });

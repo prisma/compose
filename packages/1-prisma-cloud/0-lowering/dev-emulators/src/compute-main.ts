@@ -683,6 +683,10 @@ function main(): void {
       if (rt.child) kills.push(killChild(rt, TERMINATE_GRACE_MS));
     }
     await Promise.all(kills);
+    // Wait for every already-queued state write to actually land on disk —
+    // otherwise a SIGTERM racing an in-flight write (e.g. an ensureDaemon
+    // version-skew restart) can silently lose it.
+    await stateFile.flush();
     server.close();
     process.exit(0);
   }
