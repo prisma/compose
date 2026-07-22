@@ -10,6 +10,7 @@ import type { ModuleNode, ServiceNode } from '@internal/core';
 import { isNode } from '@internal/core';
 import { blindCast } from '@internal/foundation/casts';
 import { CliError } from './cli-error.ts';
+import { explainJsxLoadError } from './jsx-load-error.ts';
 
 export interface LoadedEntry {
   /** The resolved absolute path to the entry module on disk. */
@@ -19,10 +20,18 @@ export interface LoadedEntry {
 
 export async function loadEntry(entryArg: string, cwd: string): Promise<LoadedEntry> {
   const resolvedPath = path.resolve(cwd, entryArg);
-  // A dynamic import() with a non-literal specifier types as `any` — no cast
-  // needed; the isNode()/kind checks below are the real (runtime) guard.
-  const mod = await import(pathToFileURL(resolvedPath).href);
-  const root: unknown = mod.default;
+  let mod: unknown;
+  try {
+    mod = await import(pathToFileURL(resolvedPath).href);
+  } catch (error) {
+    const explained = explainJsxLoadError(error, resolvedPath);
+    if (explained !== undefined) throw new CliError(explained);
+    throw error;
+  }
+  const root: unknown = blindCast<
+    { default?: unknown },
+    'a dynamically-imported module namespace object; only its default export is read here, and the isNode()/kind checks below are the real (runtime) guard on it'
+  >(mod).default;
 
   if (!isNode(root) || root.kind === 'dependency' || root.kind === 'resource') {
     throw new CliError(
