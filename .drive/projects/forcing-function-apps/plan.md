@@ -127,7 +127,13 @@ decision point for splitting M2 into a successor project):
 
 - **S5 — Object storage as an emulated resource System**: blob contract, postgres + R2 backings, the swap demonstration — a direct application of hex-composition's H3 pattern (reusable system + same-contract fake).
 - **S6 — Streams as a resource**: design pass first (wrapper System vs managed primitive).
-- **S7 — open-chat port**: builds on S5, S6 (+ S1, S3 from M1).
+- **S7 — open-chat port**: builds on S5, S6 (+ S1, S3 from M1). Blocked on
+  **self-origin** for end-to-end sign-in.
+- **self-origin — a compute service's own origin as a pack-owned property**
+  (specced 2026-07-21, [slices/self-origin/](slices/self-origin/)): kills the
+  FRICTION #9 manual `APP_ORIGIN` workaround; includes the pdp-control-plane
+  PRO-200 fix (region-aware fallback endpoint domain). Parallel to S5/S6;
+  S7 joins it.
 - **S8 — The local dev loop**: builds on S7 — deliberately last, after two ports' worth of evidence.
 
 S5 and S6 are parallel; S7 joins them; S8 closes.
