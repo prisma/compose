@@ -40,9 +40,14 @@ function noPrismaBinError(): Error {
   );
 }
 
+/** Masks every connection-URL credential in captured CLI output before it is ever embedded in a thrown message — the no-value-logging contract (behavior contracts) applies to diagnostics too. */
+function sanitizeOutput(output: string): string {
+  return output.replace(/:\/\/([^:@/\s]+):[^@/\s]+@/g, '://$1:***@');
+}
+
 function couldNotReadUrlError(instance: string, output: string): Error {
   return new Error(
-    `could not read the database URL from "prisma dev --name ${instance} --detach"; output was: ${output}`,
+    `could not read the database URL from "prisma dev --name ${instance} --detach"; output was: ${sanitizeOutput(output)}`,
   );
 }
 
