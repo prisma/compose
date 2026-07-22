@@ -519,6 +519,19 @@ ships. Two things to know:
 
 Without `dir` you get the single-file form above, unchanged.
 
+**`dir` — a standalone built directory.** The directory-only sibling of
+`node()`, for a service whose runnable is nothing but a built tree — no
+single-file form to fall back to:
+
+```ts
+build: dir({ module: import.meta.url, dir: '../dist/server', entry: 'server.js' })
+```
+
+`dir` and `entry` resolve exactly like `node()`'s directory form above (same
+rules: no symlinks, `entry` must be inside `dir`), and it publishes as
+`@prisma/composer/dir`. Add `dirBuild()` from `@prisma/composer/dir/control`
+to the deploy config's `extensions`.
+
 **`nextjs` — a Next.js app.** `next build` with `output: 'standalone'` is the
 whole build; the adapter just needs to know where the app lives:
 

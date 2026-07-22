@@ -237,6 +237,17 @@ contain no symlinks (the packager rejects them — assembly fails and names the
 link), and `entry` must be a file inside `dir` (`../` is an error, not an
 escape). Omit `dir` for the single-file form.
 
+For a service with no single-file form at all — the runnable is always a
+directory — use `dir()` instead, the directory-only sibling of `node()`:
+
+```ts
+build: dir({ module: import.meta.url, dir: '../dist/server', entry: 'server.js' })
+```
+
+Same `dir`/`entry` rules as above. It's a separate package export,
+`@prisma/composer/dir`, with its own control entry
+`@prisma/composer/dir/control`.
+
 For Next.js, `next build` with `output: 'standalone'` is the whole build;
 `nextjs({ module, appDir })` tells the deploy where the app root is.
 
@@ -261,7 +272,8 @@ export default defineConfig({
 ```
 
 Add `nextjsBuild()` from `@prisma/composer/nextjs/control` to `extensions`
-when the app contains a Next.js service.
+when the app contains a Next.js service, or `dirBuild()` from
+`@prisma/composer/dir/control` for a `dir()`-built one.
 
 ## Databases
 
