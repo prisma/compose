@@ -92,6 +92,32 @@ provider performs the same join from the `EnvironmentVariable` records the
 lowering emitted — against props defined in this repo, once, not an emulation
 of a foreign API.
 
+### Process lifetimes
+
+Dev has three process lifetimes, each with a distinct owner:
+
+1. **Converge-scoped** — the Alchemy child (ADR-0007). Providers run here;
+   nothing started here survives its exit.
+2. **Session-scoped** — owned by the long-running `dev` command: service
+   children (via the process table) and the bucket server (via
+   `dev.standIns`). They outlive every converge within a session and stop on
+   Ctrl-C. The bucket server is deliberately session-scoped rather than a
+   daemon: it is stateless over disk (objects, credentials, and port
+   allocations are files), boots in milliseconds, and daemonizing it would
+   mean owning pidfiles, discovery, stop UX, and stale-version skew for no
+   gain.
+3. **Machine-scoped daemons** — the `prisma dev` Postgres instances, the
+   classic local-emulator model (firebase/supabase emulators). They survive
+   dev sessions entirely and are removed only by `--fresh`. Dev uses this
+   tier only where a mature daemon manager already owns the machinery — the
+   ORM CLI's named instances (`prisma dev ls|stop|rm`) — rather than
+   building daemon management itself.
+
+`standIns` is the tier-2 seam: the owner for anything whose lifetime must
+exceed a converge but not the session. An extension that needs a true daemon
+can still start one detached inside the hook and return a no-op stop — a
+lifecycle choice inside the extension, not a seam change.
+
 ## Resource substitution
 
 The full inventory (see
