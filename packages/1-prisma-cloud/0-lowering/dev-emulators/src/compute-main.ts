@@ -172,6 +172,13 @@ class ServiceLog {
   writeLine(line: string): void {
     fs.writeSync(this.ensureOpen(), `${line}\n`);
   }
+
+  /** Closes the fd if one was ever opened. Idempotent. */
+  close(): void {
+    if (this.fd === undefined) return;
+    fs.closeSync(this.fd);
+    this.fd = undefined;
+  }
 }
 
 function parseArgs(argv: readonly string[]): { readonly port: number; readonly stateDir: string } {
@@ -488,13 +495,13 @@ function main(): void {
 
     const svc = getOrCreateService(app, id);
     const rt = getRuntime(app, id);
-    svc.address = parsed.address;
-    svc.port = parsed.port;
 
     const changed = svc.artifactHash !== parsed.artifactHash || !envEquals(svc.env, parsed.env);
 
     if (svc.status === 'running') {
       if (!changed) {
+        // A true no-op: nothing about this service's persisted record
+        // changes, so nothing is mutated here either — nothing to persist.
         res.writeHead(204);
         res.end();
         return;
@@ -504,6 +511,8 @@ function main(): void {
       clearBackoffTimer(rt);
     }
 
+    svc.address = parsed.address;
+    svc.port = parsed.port;
     clearStableTimer(rt);
     rt.consecutiveFastExits = 0;
     svc.artifactHash = parsed.artifactHash;
@@ -637,7 +646,11 @@ function main(): void {
               stopService(svc, getRuntime(app, id)),
             ),
           );
-          for (const id of Object.keys(appRec.services)) runtimes.delete(runtimeKey(app, id));
+          for (const id of Object.keys(appRec.services)) {
+            const key = runtimeKey(app, id);
+            runtimes.get(key)?.log?.close();
+            runtimes.delete(key);
+          }
           delete state[app];
           schedulePersist();
         }
