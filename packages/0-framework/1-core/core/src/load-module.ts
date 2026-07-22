@@ -395,19 +395,19 @@ function flatten(
     if (typeof id !== 'string' || id.length === 0) {
       throw new LoadError(`provision() requires a non-empty id (module "${moduleNode.name}").`);
     }
-    // The id becomes the node's address segment, and config keys uppercase
-    // address segments and join them with "_" into an env-var key
-    // ([A-Z_][A-Z0-9_]*). So an id must be ASCII letters and digits only:
-    // "_" collides with the separator (id "auth_db" + param "url" vs id
+    // The id becomes the node's address segment, and addresses derive
+    // deterministic config keys (segments uppercased, "_"-joined — see
+    // isConfigKeySegment). So an id must be ASCII letters and digits only:
+    // "_" collides with the key separator (id "auth_db" + param "url" vs id
     // "auth" + input "db" + param "url" — both AUTH_DB_URL), "." is the
-    // node-id path separator, and anything else (e.g. "-") uppercases into
-    // a key the platform rejects at deploy.
+    // address path separator, and anything else (e.g. "-") has no place in
+    // a config key.
     if (!isConfigKeySegment(id)) {
       throw new LoadError(
         `provision() id "${id}" (module "${moduleNode.name}") must contain only ASCII letters ` +
-          'and digits ([A-Za-z0-9]) — the id becomes an address segment, and config keys ' +
-          'uppercase each segment and join them with "_" into an env-var key that must match ' +
-          `[A-Z_][A-Z0-9_]*. "${id}" would put "${id.toUpperCase()}" inside the derived key. ` +
+          'and digits ([A-Za-z0-9]) — the id becomes an address segment, and addresses derive ' +
+          'deterministic config keys (segments uppercased and joined with "_"). ' +
+          `"${id}" would put "${id.toUpperCase()}" inside the derived key. ` +
           '("_" collides with the key separator and "." with the address separator.)',
       );
     }

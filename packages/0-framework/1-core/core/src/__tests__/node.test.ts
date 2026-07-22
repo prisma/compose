@@ -286,7 +286,7 @@ describe('service()', () => {
     ).toThrow(/param name "max-conns" must contain only ASCII letters and digits/);
   });
 
-  test('accepts camelCase and digits in input and param names', () => {
+  test('accepts camelCase, digits-only, and single-char input and param names', () => {
     const db = dependency({
       name: 'db',
       type: 'fake/db',
@@ -297,8 +297,8 @@ describe('service()', () => {
         name: 'hello',
         extension: 'test/pack',
         type: 'fake/app',
-        inputs: { primaryDb2: db },
-        params: { maxConns: number({ default: 1 }) },
+        inputs: { primaryDb2: db, a: db },
+        params: { maxConns: number({ default: 1 }), '42': number({ default: 1 }) },
         build,
       }),
     ).not.toThrow();

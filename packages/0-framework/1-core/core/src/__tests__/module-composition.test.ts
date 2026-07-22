@@ -580,6 +580,16 @@ describe('provision ids must be config-key-safe segments', () => {
     );
   });
 
+  test('digits-only and single-char ids are accepted', () => {
+    const root = module('shop', {}, ({ provision }) => {
+      provision(noOpService(), { id: '42' });
+      provision(noOpService(), { id: 'a' });
+      return {};
+    });
+
+    expect(() => Load(root)).not.toThrow();
+  });
+
   test('a service whose name (the inferred id) is hyphenated is a LoadError before any deploy', () => {
     const root = module('shop', {}, ({ provision }) => {
       provision(noOpService('origin-proof'));

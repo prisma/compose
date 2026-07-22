@@ -13,7 +13,7 @@ import { compute } from '@prisma/composer-prisma-cloud';
 export default module('extension-config-fixture', {}, ({ provision }) => {
   provision(
     compute({
-      name: 'app',
+      name: 'extension-config-fixture',
       deps: {},
       build: node({ module: import.meta.url, entry: 'dist/server.js' }),
     }),

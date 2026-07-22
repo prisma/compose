@@ -450,12 +450,10 @@ function requireExtension(extension: string, factory: string): void {
 }
 
 /**
- * Config keys uppercase each address/input/param name and join them with "_"
- * (input "db"'s param "url" → env key "DB_URL"), and the result must be a
- * valid env-var key ([A-Z_][A-Z0-9_]*). So a name must be ASCII letters and
- * digits only: an underscore inside a name would collide with the separator
- * (param "db_url" vs input "db"'s param "url" both hit "DB_URL"), and any
- * other character (e.g. "-") uppercases into a key the platform rejects.
+ * Core's grammar for every name that becomes a config-key segment —
+ * addresses, input/param/secret names: ASCII letters and digits only.
+ * Conservative by design so any target medium — POSIX env-var keys
+ * included — can uppercase and "_"-join segments without escaping.
  */
 export function isConfigKeySegment(name: string): boolean {
   return /^[A-Za-z0-9]+$/.test(name);
@@ -469,10 +467,10 @@ function requireConfigKeySegmentName(
   if (!isConfigKeySegment(name)) {
     throw new Error(
       `${factory}() ${kind} name "${name}" must contain only ASCII letters and digits ` +
-        '([A-Za-z0-9]) — config keys uppercase each name and join them with "_" (an input "db"\'s ' +
-        'param "url" becomes env key "DB_URL"), so an underscore inside a name collides with ' +
-        'that separator, and any other character derives a key that fails the env-var key shape ' +
-        `[A-Z_][A-Z0-9_]*. "${name}" would put "${name.toUpperCase()}" inside the derived key.`,
+        '([A-Za-z0-9]) — declared names derive deterministic config keys, uppercased and joined ' +
+        'with "_" (an input "db"\'s param "url" becomes config key "DB_URL"), so an underscore ' +
+        'inside a name collides with that separator and any other character has no place in a ' +
+        `config key. "${name}" would put "${name.toUpperCase()}" inside the derived key.`,
     );
   }
 }
