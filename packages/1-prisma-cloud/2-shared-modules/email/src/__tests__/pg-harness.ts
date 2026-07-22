@@ -2,7 +2,7 @@
  * A throwaway local Postgres for the outbox integration test — copied from
  * storage's harness (`storage/src/__tests__/pg-harness.ts`) per the
  * workspace convention that a package's tests stay self-contained. Honors
- * `EMAIL_TEST_DATABASE_URL`, else spins an ephemeral `initdb`/`pg_ctl`
+ * `STATE_TEST_DATABASE_URL`, else spins an ephemeral `initdb`/`pg_ctl`
  * cluster, else returns `undefined` locally so the caller skips loudly; on
  * CI the absence of both throws. Admin CREATE/DROP DATABASE go through
  * Bun's SQL (the store's own driver) rather than adding a `pg` dep.
@@ -90,7 +90,7 @@ export async function createTestDatabase(baseUrl: string): Promise<TestDatabase>
  * absence throws so the suite can't silently go unexecuted.
  */
 export const startTestPostgres = (): TestPostgres | undefined => {
-  const fromEnv = process.env['EMAIL_TEST_DATABASE_URL'];
+  const fromEnv = process.env['STATE_TEST_DATABASE_URL'];
   if (fromEnv !== undefined) return { url: fromEnv, stop: () => {} };
 
   const initdb = findBinary('initdb');
@@ -99,7 +99,7 @@ export const startTestPostgres = (): TestPostgres | undefined => {
     if (process.env['CI'] !== undefined) {
       throw new Error(
         'CI is set but no Postgres is available for the email outbox integration test: neither ' +
-          'EMAIL_TEST_DATABASE_URL nor initdb/pg_ctl (PATH, Homebrew, or Ubuntu ' +
+          'STATE_TEST_DATABASE_URL nor initdb/pg_ctl (PATH, Homebrew, or Ubuntu ' +
           '/usr/lib/postgresql/*/bin) were found.',
       );
     }
