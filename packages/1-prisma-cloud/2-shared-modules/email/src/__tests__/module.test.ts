@@ -7,7 +7,14 @@
  * first shipped module using boundary params (spec §"Module factory").
  */
 import { describe, expect, test } from 'bun:test';
-import { Load, module, paramSource, secretSource } from '@internal/core';
+import {
+  isParamSource,
+  isSecretSource,
+  Load,
+  module,
+  paramSource,
+  secretSource,
+} from '@internal/core';
 import node from '@internal/node';
 import { compute } from '@internal/prisma-cloud';
 import { rpc } from '@internal/service-rpc';
@@ -15,6 +22,12 @@ import { emailOutboxContract, emailSender } from '../contract.ts';
 import { email } from '../email-module.ts';
 
 const build = node({ module: import.meta.url, entry: '../dist/x.mjs' });
+
+/** The env var name a `paramSource`/`secretSource` binding carries — asserting the identity, not just that a slot got bound to something. */
+function sourcePayload(binding: unknown): unknown {
+  if (isParamSource(binding) || isSecretSource(binding)) return binding.payload;
+  throw new Error('expected a ParamSource or SecretSource binding');
+}
 
 const senderConsumer = () =>
   compute({ name: 'sender-consumer', deps: { email: emailSender({}) }, build });
@@ -61,17 +74,21 @@ describe('email()', () => {
     ]);
   });
 
-  test('boundary params forward: deliveryMode/from reach the service as bound param sources', () => {
+  test('boundary params forward: deliveryMode/from map to their bound env sources, not just any source', () => {
     const graph = Load(rootWithEmail());
     const forwarded = graph.params.filter((p) => p.serviceAddress === 'email.service');
-    const slots = forwarded.map((p) => p.slot).sort();
-    expect(slots).toEqual(['deliveryMode', 'from']);
+    const bySlot = new Map(forwarded.map((p) => [p.slot, p.binding]));
+    expect(bySlot.size).toBe(2);
+    expect(sourcePayload(bySlot.get('deliveryMode'))).toBe('EMAIL_DELIVERY_MODE');
+    expect(sourcePayload(bySlot.get('from'))).toBe('EMAIL_FROM');
   });
 
-  test('the boundary secret forwards: deliveryCredential reaches the service', () => {
+  test('the boundary secret forwards: deliveryCredential maps to its bound env source', () => {
     const graph = Load(rootWithEmail());
     const forwarded = graph.secrets.filter((s) => s.serviceAddress === 'email.service');
-    expect(forwarded.map((s) => s.slot)).toEqual(['deliveryCredential']);
+    expect(forwarded).toHaveLength(1);
+    expect(forwarded[0]?.slot).toBe('deliveryCredential');
+    expect(sourcePayload(forwarded[0]?.source)).toBe('EMAIL_DELIVERY_CREDENTIAL');
   });
 
   test('the send port resolves to the service for a sender consumer', () => {
@@ -127,10 +144,13 @@ describe('email()', () => {
     });
   });
 
-  test('opts.name customizes the module id', () => {
+  test('opts.name sets the declared module name, independent of the provision id', () => {
+    // Deliberately distinct values: opts.name is the module's own declared
+    // name; id is the graph address a provision() call picks. Using the same
+    // string for both couldn't tell them apart.
     const root = module('root', {}, ({ provision }) => {
-      provision(email({ name: 'mail' }), {
-        id: 'mail',
+      provision(email({ name: 'mailer-module' }), {
+        id: 'mail-instance',
         params: {
           deliveryMode: paramSource('EMAIL_DELIVERY_MODE'),
           from: paramSource('EMAIL_FROM'),
@@ -142,7 +162,13 @@ describe('email()', () => {
 
     const graph = Load(root);
     const byId = new Map(graph.nodes.map((n) => [n.id, n.node]));
-    expect([...byId.keys()]).toContain('mail.service');
-    expect([...byId.keys()]).toContain('mail.db');
+    // Address generation is driven by the provision id.
+    expect([...byId.keys()]).toContain('mail-instance.service');
+    expect([...byId.keys()]).toContain('mail-instance.db');
+    // The module's own declared name/identifier is opts.name, not the id.
+    const moduleNode = byId.get('mail-instance');
+    expect(moduleNode !== undefined && 'name' in moduleNode ? moduleNode.name : undefined).toBe(
+      'mailer-module',
+    );
   });
 });
