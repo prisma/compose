@@ -14,6 +14,8 @@ import {
   encode,
   encodeParamPointer,
   isParamPointerRow,
+  readOrigin,
+  stashOrigin,
 } from '../serializer.ts';
 
 const build = {
@@ -127,6 +129,42 @@ describe('deserialize — env-sourced param boot resolution', () => {
     await withEnv({ [key]: encode('service', 'https://literal.example.com') }, () => {
       const config = deserialize(svc(), address);
       expect(config.service['appOrigin']).toBe('https://literal.example.com');
+    });
+  });
+});
+
+describe('stashOrigin/readOrigin — the framework-resolved origin row', () => {
+  const addressKey = configKey('web', { owner: 'service', name: 'ORIGIN' });
+  const freeKey = configKey('', { owner: 'service', name: 'ORIGIN' });
+
+  test('stashOrigin re-emits the address-scoped row address-free when present', async () => {
+    await withEnv(
+      { [addressKey]: encode('service', 'https://web.example.com'), [freeKey]: undefined },
+      () => {
+        stashOrigin('web');
+        expect(process.env[freeKey]).toBe(encode('service', 'https://web.example.com'));
+      },
+    );
+  });
+
+  test('stashOrigin is a no-op when the address-scoped row is absent', async () => {
+    await withEnv({ [addressKey]: undefined, [freeKey]: undefined }, () => {
+      stashOrigin('web');
+      expect(process.env[freeKey]).toBeUndefined();
+    });
+  });
+
+  test('readOrigin throws the pinned message when COMPOSER_ORIGIN is unset', async () => {
+    await withEnv({ [freeKey]: undefined }, () => {
+      expect(() => readOrigin()).toThrow(
+        "this service's origin is not available (env COMPOSER_ORIGIN is unset) — a deployed environment writes it automatically; a local harness must supply it like any other config value (set COMPOSER_ORIGIN to the JSON-encoded origin URL).",
+      );
+    });
+  });
+
+  test('readOrigin returns the decoded string when COMPOSER_ORIGIN is set — the idiom a local harness supplies it by', async () => {
+    await withEnv({ [freeKey]: encode('service', 'https://web.example.com') }, () => {
+      expect(readOrigin()).toBe('https://web.example.com');
     });
   });
 });

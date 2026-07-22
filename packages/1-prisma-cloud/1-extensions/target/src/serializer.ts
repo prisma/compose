@@ -23,6 +23,7 @@
 import type { Config, ConfigParam, Params, SecretBinding, ServiceNode } from '@internal/core';
 import { blindCast } from '@internal/foundation/casts';
 import type { StandardSchemaV1 } from '@standard-schema/spec';
+import { type } from 'arktype';
 import { secretName } from './secret.ts';
 
 // The ambient environment of whatever runtime hosts the bundle. Declared
@@ -344,6 +345,54 @@ export function stashProviderParams(entries: readonly ProviderParamEntry[], addr
     if (value === undefined) continue;
     process.env[configKey('', d)] = encode('service', value);
   }
+}
+
+/** The framework-resolved origin row: COMPOSER_<addr>_ORIGIN. Written
+ *  unconditionally per compute service at serialize (the service's own
+ *  provisioned endpoint URL); never a declared param, never in config(). */
+export const ORIGIN_KEY_NAME = 'ORIGIN';
+
+const ORIGIN_ENTRY: ParamEntry = {
+  owner: 'service',
+  name: ORIGIN_KEY_NAME,
+  param: { schema: type('string'), optional: true },
+};
+
+/**
+ * run()'s setup step for the origin row: read the address-scoped row through
+ * the same `coerce` a declared param uses, re-emit it address-free — the
+ * single-entry counterpart of `stashProviderParams`. An absent row is a
+ * no-op (`optional: true` makes `coerce` return `undefined`).
+ *
+ * A harness that needs to supply this itself (no deploy behind it) sets
+ * `COMPOSER_ORIGIN` directly to the JSON-encoded origin URL — exactly how the
+ * existing entrypoint tests supply their other `COMPOSER_*` rows.
+ */
+export function stashOrigin(address: string): void {
+  const key = configKey(address, ORIGIN_ENTRY);
+  const value = coerce(process.env[key], ORIGIN_ENTRY, key);
+  if (value === undefined) return;
+  process.env[configKey('', ORIGIN_ENTRY)] = encode('service', value);
+}
+
+/**
+ * Reads this service's origin back out of the address-free stash `stashOrigin`
+ * wrote. `COMPOSER_ORIGIN` unset is a loud failure — a deployed environment
+ * always writes it, so an unset row means either a local harness that hasn't
+ * supplied it or a boot() called before run().
+ */
+export function readOrigin(): string {
+  const key = configKey('', ORIGIN_ENTRY);
+  const value = coerce(process.env[key], ORIGIN_ENTRY, key);
+  if (value === undefined) {
+    throw new Error(
+      "this service's origin is not available (env COMPOSER_ORIGIN is unset) — a deployed environment writes it automatically; a local harness must supply it like any other config value (set COMPOSER_ORIGIN to the JSON-encoded origin URL).",
+    );
+  }
+  return blindCast<
+    string,
+    "ORIGIN_ENTRY's schema is type('string'), so coerce's schema-validated return is a string here"
+  >(value);
 }
 
 /** Synchronous Standard Schema validation — see the matching note in core's `config.ts`. */

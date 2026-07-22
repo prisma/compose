@@ -11,6 +11,7 @@ import {
   configKey,
   encode,
   encodeParamPointer,
+  ORIGIN_KEY_NAME,
   paramEntries,
   secretPointerRows,
 } from '../serializer.ts';
@@ -34,6 +35,10 @@ import {
 export interface ComputeProvisioned {
   readonly serviceId: Output.Output<string>;
   readonly projectId: string;
+  /** The platform-assigned public origin domain — resolves to `undefined` only
+   *  in the narrow provider-response gap serialize enforces away (see its
+   *  origin-row push): every other reader may treat it as present. */
+  readonly endpointDomain: Output.Output<string | undefined>;
 }
 
 /** compute's serialize → deploy handoff: the env-var rows deploy must depend on, and the resolved port it routes to. */
@@ -66,7 +71,7 @@ export function computeDescriptor(
           region: o.region ?? DEFAULT_REGION,
           ...(branchId !== undefined ? { branchId } : {}),
         });
-        return { serviceId: svc.id, projectId };
+        return { serviceId: svc.id, projectId, endpointDomain: svc.endpointDomain };
       }),
 
     // Two channels of rows: PARAMS (service-own literals JSON-encoded; dependency
@@ -173,6 +178,27 @@ export function computeDescriptor(
             );
           }
         }
+
+        // The framework-resolved origin (this dispatch): one row per compute
+        // service, unconditional — never declared, never in config(). The
+        // value is the platform's URL verbatim, no trailing-slash/normalization.
+        const originKey = configKey(address, { owner: 'service', name: ORIGIN_KEY_NAME });
+        records.push(
+          yield* Prisma.EnvironmentVariable(`${originKey}-var`, {
+            projectId,
+            key: originKey,
+            value: Output.map(provisioned.endpointDomain, (v) => {
+              if (v === undefined) {
+                throw new Error(
+                  `ComputeService for "${address}" reported no endpointDomain at provision — cannot resolve the service's own origin (Management API predates the PRO-200 fix?)`,
+                );
+              }
+              return encode('service', v);
+            }),
+            class: cls,
+            ...branch,
+          }),
+        );
 
         // Carries the resolved port to deploy(); falls back to 3000 if unset.
         // This is the only place the raw, untyped config is read, so it is the

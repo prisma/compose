@@ -57,6 +57,7 @@ export {
   isProvisionNeed,
   isSecretSource,
   module,
+  NODE,
   paramNeed,
   paramSource,
   provisionNeed,
