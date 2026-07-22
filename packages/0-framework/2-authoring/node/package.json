@@ -5,6 +5,8 @@
   "exports": {
     ".": "./dist/index.mjs",
     "./control": "./dist/control.mjs",
+    "./dir": "./dist/dir.mjs",
+    "./dir-control": "./dist/dir-control.mjs",
     "./package.json": "./package.json"
   },
   "scripts": {

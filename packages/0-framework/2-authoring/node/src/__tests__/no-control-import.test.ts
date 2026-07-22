@@ -54,4 +54,17 @@ describe('firewall: the authoring entry never reaches a control entry', () => {
       });
     }
   });
+
+  test('no module reachable from src/exports/dir.ts imports a /control entry', () => {
+    const reachable = reachableImports(path.join(srcDir, 'exports', 'dir.ts'));
+    expect(reachable.size).toBeGreaterThan(0);
+
+    for (const [file, specs] of reachable) {
+      const offending = specs.filter((spec) => /\/control(\.ts)?$|\/control\//.test(spec));
+      expect({ file: path.relative(srcDir, file), offending }).toEqual({
+        file: path.relative(srcDir, file),
+        offending: [],
+      });
+    }
+  });
 });

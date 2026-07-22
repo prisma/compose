@@ -73,6 +73,18 @@
       "plane": "control"
     },
     {
+      "glob": "packages/0-framework/2-authoring/node/src/exports/dir.ts",
+      "domain": "framework",
+      "layer": "authoring",
+      "plane": "shared"
+    },
+    {
+      "glob": "packages/0-framework/2-authoring/node/src/exports/dir-control.ts",
+      "domain": "framework",
+      "layer": "authoring",
+      "plane": "control"
+    },
+    {
       "glob": "packages/0-framework/2-authoring/nextjs/src/*.ts",
       "domain": "framework",
       "layer": "authoring",
@@ -571,6 +583,12 @@
       "plane": "control"
     },
     {
+      "glob": "packages/9-public/composer/src/exports/dir-control.ts",
+      "domain": "public",
+      "layer": "public",
+      "plane": "control"
+    },
+    {
       "glob": "packages/9-public/composer/src/exports/nextjs-control.ts",
       "domain": "public",
       "layer": "public",
@@ -608,6 +626,12 @@
     },
     {
       "glob": "packages/9-public/composer/src/exports/node.ts",
+      "domain": "public",
+      "layer": "public",
+      "plane": "shared"
+    },
+    {
+      "glob": "packages/9-public/composer/src/exports/dir.ts",
       "domain": "public",
       "layer": "public",
       "plane": "shared"
