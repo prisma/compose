@@ -560,10 +560,12 @@ async function main(): Promise<void> {
     // verbatim (S5 addition — the placeholder/hard-error paths have their
     // own dedicated script).
     const secrets = readJson(path.join(devDir, 'secrets.json')) as Record<string, string>;
+    // Compared as a boolean so the secret's value never rides an assertion
+    // error into the harness's failure log (CodeQL js/clear-text-logging).
     assertEqual(
-      secrets['LOCALDEV_FIXTURE_API_KEY'],
-      'test-api-key',
-      'secrets.json carries the shell-sourced secret',
+      secrets['LOCALDEV_FIXTURE_API_KEY'] === 'test-api-key',
+      true,
+      'secrets.json carries the shell-sourced secret verbatim',
     );
     assertEqual(
       secrets['LOCALDEV_FIXTURE_GREETING'],
