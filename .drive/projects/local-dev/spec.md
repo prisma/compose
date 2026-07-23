@@ -142,8 +142,10 @@ plus the shared daemon layer and typed loopback clients.
      `version` === this package's version → return `http://127.0.0.1:<port>`.
   3. Version mismatch → SIGTERM (5 s grace, SIGKILL), fall through. Dead
      pid / failed health → clean the entry, fall through.
-  4. Start: port = persisted port if any, else smallest ≥ 4300 unused across
-     registry entries, persisted immediately. Spawn `process.execPath
+  4. Start: port = persisted port if any, else allocated via `get-port`
+     (preferred range ≥ 4300, excluding registry-used ports — the free-port
+     PROBE is the library's, our persistence and range policy stay ours),
+     persisted immediately. Spawn `process.execPath
      <entry> --port <n> --state-dir <registryRoot>/<name>/` with
      `detached: true`, stdio appended to `<registryRoot>/<name>.log`,
      `unref()` — the `registryRoot` override governs the registry file, the
@@ -164,17 +166,19 @@ plus the shared daemon layer and typed loopback clients.
      endpoints frozen in deploy state reference it — fail with the pinned
      error; recovery is manual (`--fresh` does NOT touch the daemons — they
      are machine-global, shared by other apps).
-- **Concurrent-ensure protocol:** the observe→spawn→persist critical
-  section is serialized ACROSS PROCESSES per daemon name with an atomic
-  directory lock: `mkdir <registryRoot>/.lock-<name>` (atomic creation IS
-  acquisition; the holder writes its pid to `<lockDir>/pid`). On `EEXIST`:
-  if the recorded holder pid is dead, remove the lock dir and retry
-  immediately; else poll every 250 ms up to 10 s, then
-  `Error: timed out waiting for another process ensuring the <name> emulator — remove <lockDir> if stale.`
-  After acquiring, RE-READ the registry before deciding to spawn — the
-  previous holder may have already done the job. Port allocation happens
-  inside the lock, so two daemons can never claim one port. Release
-  (rm the dir) in a finally.
+- **Concurrent-ensure protocol (REVISED — operator decision, 2026-07-23):**
+  the observe→spawn→persist critical section is serialized ACROSS
+  PROCESSES per daemon name using `proper-lockfile` (maintained library;
+  its staleness/compromise semantics are adopted wholesale rather than our
+  earlier hand-rolled mkdir/pid protocol — commodity locking is exactly
+  where unforeseen edge cases hide). Our wrapper pins only: the lock path
+  is per-daemon under `<registryRoot>`; the bounded wait is ~10 s and its
+  exhaustion throws
+  `Error: timed out waiting for another process ensuring the <name> emulator — remove <lockDir> if stale.`;
+  the registry is RE-READ after acquiring (the previous holder may have
+  already done the job); port allocation happens inside the lock; release
+  runs in a finally on every path. The existing inter-process tests stand
+  unchanged — they validate behavior, not the engine.
 - `stopDaemon(name)`: SIGTERM/SIGKILL + registry cleanup. Not called by any
   v1 command — an operator escape hatch, exported for tests.
 - **Publish note (S5 scope):** `import.meta.resolve('@internal/dev-emulators/…')`
@@ -218,6 +222,14 @@ service child processes. Loopback `node:http` JSON admin API; state under its
   log file's current tail, then live lines while open.
 - `POST /apps/<app>/stop` → stop every child of the app (records kept,
   status `stopped`) → `204`.
+- `POST /apps/<app>/start` → start every service that has a stored
+  deployment spec and is not `running`, from that spec (a service with no
+  deployment recorded is skipped) → `204`. The symmetric inverse of
+  `/stop`, and the reason it must exist: Alchemy correctly skips a
+  provider's reconcile when nothing diffed, so a no-op converge can never
+  restart services a previous session stopped — the dev SESSION is the
+  explicit resume signal (found live on the open-chat proof: warm restart
+  printed ready while every service stayed stopped).
 - `DELETE /apps/<app>` → stop + remove the app's records and logs → `204`.
 
 Supervision policy (emulator-owned): unexpected exit → restart with backoff
@@ -321,6 +333,8 @@ export interface DevAttachInput {
 }
 
 export interface DevAttachment {
+  /** Start every stopped service from its last deployment (the session-resume signal — a no-op converge cannot start anything). */
+  startServices(): Promise<void>;
   /** Every service's local endpoint, for the front door. */
   endpoints(): Promise<readonly { readonly address: string; readonly url: string }[]>;
   /** Merged, line-oriented log stream across the app's services (including services that appear after later converges). Ends when `signal` aborts. */
@@ -404,6 +418,10 @@ registry (§ 2).
 
 Every local provider factory takes `(input: DevProvidersInput)`; `devDir`
 is `input.devDir`; nothing here reads `process.cwd()` or the environment.
+The emulator-facing service id is `slugServiceId(name)` (the same
+lowercase/hyphen slugging as postgres instance names) because a dotted
+address cannot satisfy § 2's id-segment rule; the real dotted address rides
+the deployment body and labels logs/endpoints.
 Two layer-order accommodations are pinned (this package cannot import the
 extensions layer): the app name is read as `input.container.input.appName`
 directly off the generic `ContainerInstance` (the field is on the base
@@ -436,11 +454,24 @@ scope, not v1.
      where `id` = the ComputeService's name resolved from
      `news.computeServiceId`. Resolve the address from
      `news.serviceAddress` (see § lowering handoff change).
-  3. Materialize env: `{ ...allOf(env.json) }`, then override
-     `configKey(address, { owner: 'service', name: 'port' })` =
-     `JSON.stringify(port)` (the serializer's service-own literal encoding),
-     then merge `secrets.json` entries verbatim (raw platform names), then
-     `PATH` and `HOME` from the current process env.
+  3. Materialize env SCOPED to the service: every `env.json` row whose key
+     is prefixed `COMPOSER_<address>_` (the address of the row's OWNER —
+     `configKey`'s convention) plus every row OUTSIDE the `COMPOSER_`
+     namespace (the poison `DATABASE_URL(_POOLED)` rows are deliberately
+     unprefixed and app-wide); then override `configKey(address, { owner:
+     'service', name: 'port' })` = `JSON.stringify(port)`, then merge
+     `secrets.json` entries verbatim (raw platform names), then `PATH` and
+     `HOME` from the current process env.
+     **Pinned parity note:** the hosted platform materializes the app-wide
+     row set into every deployment but DIFFS a deployment only on its own
+     referenced rows — an app-wide local materialization therefore
+     restart-amplifies (an early-deployed service's snapshot is incomplete
+     on the first converge, "completes" on the second, and diffs as
+     changed; observed live, three-converge byte evidence). Scoping the
+     content aligns local restart behavior with the platform's diff scope;
+     the dropped sibling rows have no sanctioned reader (`run()`/`load()`
+     consume only own-address rows, and ambient sibling reads are exactly
+     what the poison rows exist to punish).
   4. `PUT /apps/<app>/services/<id>/deployment` with `{ address,
      artifactDir, artifactHash, env, port }` — the emulator (re)starts the
      child only when the hash or env changed.
@@ -587,6 +618,7 @@ New control-plane files (all under `src/`, plane `control` in
     attaching followers for services that appeared after a later converge
     and re-attaching any follower whose connection dropped (an emulator
     restart shows a gap, never a dead session).
+  - `startServices()` → `POST /apps/<app>/start`.
   - `stopServices()` → `POST /apps/<app>/stop`.
 - `src/dev/teardown.ts` — `runDevTeardown(input: TeardownInput)`:
   1. `<prisma-bin> dev stop 'pcdev-<slug(app)>-*'` then
@@ -669,7 +701,9 @@ New control-plane files (all under `src/`, plane `control` in
        DEV_STACK_RELATIVE_PATH, cwd, stage: 'dev', containerEnv })`.
        Nonzero exit: print the stack-file reproduction hint (deploy's
        pattern, with `--stage dev`) and exit with that status.
-    8. Attach: `dev.attach({ container, devDir })` per extension; print the
+    8. Attach: `dev.attach({ container, devDir })` per extension; call every
+       attachment's `startServices()` (resume services a previous session's
+       Ctrl-C stopped — converge cannot, when nothing diffed); then print the
        front door from the merged `endpoints()` (ordered by address depth,
        fewest dots first, then lexicographic; first line preceded by
        `[dev] ready:`); pump every attachment's `logs()` to stdout, each
@@ -677,6 +711,15 @@ New control-plane files (all under `src/`, plane `control` in
     9. Watch loop (below) until SIGINT/SIGTERM; on exit call every
        attachment's `stopServices()`, then exit 0 — emulators and data stay
        up by design (machine-scoped daemons; `--fresh` removes instances).
+       Recorded limitation: the dev command becomes the SOLE signal
+       listener at this point (alchemy's transitively imported library code
+       registers exit-on-signal listeners at module load; they are stripped
+       so cleanup can run), so a second Ctrl-C does not force-quit a hung
+       stop — the emulator's kill grace bounds it in practice.
+       Recorded follow-up: `PreflightInput` carries no `devDir`, so the dev
+       preflight derives it from `process.cwd()` — correct under the CLI
+       (which runs from the app dir) but asymmetric with every other dev
+       hook; adding `devDir` to the input is future work, not v1.
   - `generate-dev-stack.ts` — like `generate-stack.ts` but at
     `.prisma-composer/dev/alchemy.run.ts`
     (`DEV_STACK_RELATIVE_PATH`), emitting:
@@ -699,8 +742,13 @@ New control-plane files (all under `src/`, plane `control` in
     as the reproduction line.
   - `watch.ts` — watch each assembled bundle's `watch` paths (the
     adapter-declared user-built inputs — § 3's `Bundle.watch`; a bundle
-    without them is not watched, noted once at startup). `fs.watch`
-    recursive on dirs, plain on files; debounce 300 ms per burst, coalescing across
+    without them is not watched, noted once at startup). The watch ENGINE
+    is `chokidar` v4 (operator decision: don't-reinvent-the-wheel beats the
+    no-new-deps contract here — chokidar absorbs the atomic-rename/inode
+    class we hand-fixed once already and the cross-platform recursive-watch
+    differences; v4 is pure JS, no native code, no glob surface). The
+    hand-rolled parent-directory workaround is deleted; its delete+recreate
+    regression test STAYS as a behavior test. Debounce 300 ms per burst, coalescing across
     services. On fire: re-run assemble for ALL services (correctness over
     cleverness; optimization is a recorded follow-up) → rewrite the dev stack
     file → re-run converge (`--stage dev`) — the emulator restarts exactly
@@ -709,31 +757,28 @@ New control-plane files (all under `src/`, plane `control` in
     watching (a broken build must not take down the running app). After
     every successful converge, re-print the front door from `endpoints()`.
 
-### 7. `dir()` build adapter (`packages/0-framework/2-authoring/node/src/dir.ts` — NEW entry)
+### 7. Directory-shaped builds (REVISED — no new adapter)
 
-Prerequisite for the open-chat proof (its runnable is a directory —
-friction #3's shape) and independently useful.
+**Correction (operator catch):** `node()`'s directory form —
+`node({ module, dir, entry })` — already exists on `main` and IS the fix
+for friction finding 3, implemented before this project's design pass; the
+original § 7
+pinned a duplicate `dir()` surface against a stale friction-log premise.
+There is no `dir()` adapter and no `@prisma/composer/dir` subpath. S2's
+real scope:
 
-- Package `@prisma/composer-dir`? NO — PIN: it ships inside the existing
-  node-adapter package as a sibling entry: `packages/0-framework/2-authoring/
-  node/src/dir.ts`, public subpath `@prisma/composer/dir` (via `9-public`
-  mapping, exactly how `node` is mapped today).
-- Authoring surface: `dir({ module: import.meta.url, dir: string, entry:
-  string })` — `dir` is the user-built output directory, `entry` the runnable
-  file within it, both resolved relative to `dirname(module)` (ADR-0004).
-- `assemble()`: validate `dir` exists (else deploy's "run your build" error
-  shape), validate `entry` exists inside it, **copy the tree verbatim**
-  (`fs.cp recursive`, symlink = hard error with ADR-0005's message shape,
-  reusing the walk/validation from `artifact.ts`'s conventions), plus the
-  standard wrapper bundling exactly as `node()`'s control does (the wrapper
-  `main.mjs` is what `bootstrap.js` imports). Returns
-  `{ dir: <workDir>, entry: bundle/<entry>, watch: [<the resolved input dir>] }`
-  — the same Bundle shape `node()` produces (the wrapper `main.mjs` sits at
-  the workdir root so the packaged bootstrap can import it; `entry` points
-  into the copied tree). (§ 3's `Bundle.watch`.)
-- No filename guessing, no tree walking beyond the verbatim copy: the author
-  states the directory and the entry (ADR-0005; the friction #3
-  recommendation, verbatim).
+- `Bundle.watch` (§ 3) and its population: `node()` single-file form →
+  `[resolved entry file]`; `node()` directory form → `[the resolved dir]`
+  (the WHOLE tree — a rebuild may touch only sibling files); `nextjs()` →
+  `[the standalone output dir]`.
+- The symlink-as-`dir` hole: `node()`'s directory form on `main`
+  dereferences a symlink passed AS `dir` itself (`statSync` follows links;
+  the no-symlink walk only checks children) — `lstat` the directory before
+  the walk, ADR-0005's error shape, tests through the directory form.
+- Doc corrections wherever the guide/deploy docs still describe `node()`
+  as single-file-only.
+
+The open-chat proof (S6) uses `node({ module, dir, entry })`.
 
 ### 8. Docs & rules
 
@@ -748,9 +793,15 @@ friction #3's shape) and independently useful.
 
 ## Behavior contracts (cross-cutting)
 
-- **No new runtime dependencies** in any shipped package. The S3 server,
-  tar reader, watcher, and emulator daemons use node built-ins only. (`alchemy`,
-  `effect`, `clipanion` are already present.)
+- **Dependency razor (operator decision):** commodity infrastructure with
+  latent edge cases uses MAINTAINED LIBRARIES — `chokidar` v4 (watching,
+  § 6), `proper-lockfile` (inter-process locking, § 2), `get-port` (free-
+  port probing, § 2). Hand-rolled code is reserved for wire formats we own
+  — the S3 handler, the ustar reader, the emulator admin APIs — where a
+  dependency is a liability, not a shield. (`alchemy`, `effect`,
+  `clipanion` are already present.) The earlier no-new-deps contract cost
+  real bugs in exactly the commodity code (a Linux port-probe
+  self-collision, a BSD/GNU pgrep detour) and is retired.
 - **Casts**: `.agents/rules/no-bare-casts.mdc` — every cast is `blindCast`
   with a justification, or real narrowing. The provider attribute shapes are
   typed against the hosted providers' exported types, not re-declared.
@@ -781,7 +832,9 @@ friction #3's shape) and independently useful.
       topology; a missing env-sourced param fails with the listing error.
 - [ ] After Ctrl-C, a second `prisma-composer dev` reaches ready as a warm
       start: same service ports and URLs, no re-provisioning, Postgres and
-      bucket data intact.
+      bucket data intact — and an HTTP round-trip against the front door
+      SUCCEEDS (the services are genuinely serving, not merely listed;
+      port-stability alone missed a live resume bug).
 - [ ] The open-chat port (via the `dir()` adapter) boots through
       `prisma-composer dev` with sign-in, history, and live-tail working —
       replacing its hand-rolled `scripts/dev.ts` (parity proof; port-repo
