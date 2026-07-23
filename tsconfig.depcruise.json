@@ -21,10 +21,6 @@
         "./packages/0-framework/2-authoring/service-rpc/src/exports/index.ts"
       ],
       "@internal/node/control": ["./packages/0-framework/2-authoring/node/src/exports/control.ts"],
-      "@internal/node/dir-control": [
-        "./packages/0-framework/2-authoring/node/src/exports/dir-control.ts"
-      ],
-      "@internal/node/dir": ["./packages/0-framework/2-authoring/node/src/exports/dir.ts"],
       "@internal/node": ["./packages/0-framework/2-authoring/node/src/exports/index.ts"],
       "@internal/nextjs/control": [
         "./packages/0-framework/2-authoring/nextjs/src/exports/control.ts"
@@ -92,8 +88,6 @@
       "@prisma/composer/service-rpc": ["./packages/9-public/composer/src/exports/service-rpc.ts"],
       "@prisma/composer/node/control": ["./packages/9-public/composer/src/exports/node-control.ts"],
       "@prisma/composer/node": ["./packages/9-public/composer/src/exports/node.ts"],
-      "@prisma/composer/dir/control": ["./packages/9-public/composer/src/exports/dir-control.ts"],
-      "@prisma/composer/dir": ["./packages/9-public/composer/src/exports/dir.ts"],
       "@prisma/composer/nextjs/control": [
         "./packages/9-public/composer/src/exports/nextjs-control.ts"
       ],

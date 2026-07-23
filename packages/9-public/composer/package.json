@@ -17,8 +17,6 @@
     "./service-rpc": "./dist/service-rpc.mjs",
     "./node": "./dist/node.mjs",
     "./node/control": "./dist/node-control.mjs",
-    "./dir": "./dist/dir.mjs",
-    "./dir/control": "./dist/dir-control.mjs",
     "./nextjs": "./dist/nextjs.mjs",
     "./nextjs/control": "./dist/nextjs-control.mjs",
     "./package.json": "./package.json"

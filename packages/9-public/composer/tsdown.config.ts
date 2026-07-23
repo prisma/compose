@@ -19,8 +19,6 @@ export default defineConfig([
       'service-rpc': 'src/exports/service-rpc.ts',
       node: 'src/exports/node.ts',
       'node-control': 'src/exports/node-control.ts',
-      dir: 'src/exports/dir.ts',
-      'dir-control': 'src/exports/dir-control.ts',
       nextjs: 'src/exports/nextjs.ts',
       'nextjs-control': 'src/exports/nextjs-control.ts',
     },
