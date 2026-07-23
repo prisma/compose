@@ -412,12 +412,29 @@ generated dev stack module imports from it) — nothing dev-flavored is
 exported from `/deploy` or the root. The seam TYPES
 (`DevExtensionDescriptor` and its inputs) remain in `app-config.ts`
 because `ExtensionDescriptor.dev` must reference them — they are contract,
-not emulation logic. Known remaining co-packaging point, recorded: the
-prisma-cloud extension's dev-hook IMPLEMENTATIONS are bundled into its
-shipped control entry (the `dev` field is constructed there); they never
-reach app runtime bundles (control/execution split). Excluding them from
-the shipped control bundle entirely would need a lazy dev-descriptor
-reference on the seam — not done unless the operator asks.
+not emulation logic. The IMPLEMENTATIONS are fully excluded from
+production bundles (operator directive): see the lazy dev reference
+below.
+
+**The dev seam is a lazy reference (REVISED — operator directive):**
+`ExtensionDescriptor.dev?: () => Promise<DevExtensionDescriptor>`. The
+production control entry carries ONE line — a thunk dynamically importing
+the extension's own dev entry by bare specifier — so no dev implementation
+code is bundled into, or loaded by, any deploy path. The extension ships a
+separate control-plane entry `src/exports/dev.ts` → public subpath
+`@prisma/composer-prisma-cloud/dev`, exporting `devDescriptor():
+DevExtensionDescriptor` (self-contained; the dev side needs none of the
+deploy factory's options — it is credential-free by design). `prismaCloud()`'s
+field is exactly:
+`dev: () => import('@prisma/composer-prisma-cloud/dev').then((m) => m.devDescriptor())`.
+Core's `@prisma/composer/dev` subpath gains
+`resolveDevDescriptors(config): Promise<ReadonlyMap<string, DevExtensionDescriptor>>`
+(resolves every non-build-only extension's thunk once, with the pinned
+no-dev-support error for a missing thunk); `devProviders(resolved,
+containers, devDir)` takes the RESOLVED map. The generated dev stack
+module top-level-awaits `resolveDevDescriptors(config)` (ESM TLA); the
+dev command resolves once at step 2 and passes resolved descriptors to
+every subsequent hook call. Deploy and destroy never touch `dev`.
 
 #### `src/dev/dev-store.ts` — the shared dev-instance store
 
