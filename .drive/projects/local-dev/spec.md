@@ -436,11 +436,24 @@ scope, not v1.
      where `id` = the ComputeService's name resolved from
      `news.computeServiceId`. Resolve the address from
      `news.serviceAddress` (see § lowering handoff change).
-  3. Materialize env: `{ ...allOf(env.json) }`, then override
-     `configKey(address, { owner: 'service', name: 'port' })` =
-     `JSON.stringify(port)` (the serializer's service-own literal encoding),
-     then merge `secrets.json` entries verbatim (raw platform names), then
-     `PATH` and `HOME` from the current process env.
+  3. Materialize env SCOPED to the service: every `env.json` row whose key
+     is prefixed `COMPOSER_<address>_` (the address of the row's OWNER —
+     `configKey`'s convention) plus every row OUTSIDE the `COMPOSER_`
+     namespace (the poison `DATABASE_URL(_POOLED)` rows are deliberately
+     unprefixed and app-wide); then override `configKey(address, { owner:
+     'service', name: 'port' })` = `JSON.stringify(port)`, then merge
+     `secrets.json` entries verbatim (raw platform names), then `PATH` and
+     `HOME` from the current process env.
+     **Pinned parity note:** the hosted platform materializes the app-wide
+     row set into every deployment but DIFFS a deployment only on its own
+     referenced rows — an app-wide local materialization therefore
+     restart-amplifies (an early-deployed service's snapshot is incomplete
+     on the first converge, "completes" on the second, and diffs as
+     changed; observed live, three-converge byte evidence). Scoping the
+     content aligns local restart behavior with the platform's diff scope;
+     the dropped sibling rows have no sanctioned reader (`run()`/`load()`
+     consume only own-address rows, and ambient sibling reads are exactly
+     what the poison rows exist to punish).
   4. `PUT /apps/<app>/services/<id>/deployment` with `{ address,
      artifactDir, artifactHash, env, port }` — the emulator (re)starts the
      child only when the hash or env changed.
