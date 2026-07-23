@@ -673,6 +673,26 @@ function main(): void {
   process.on('SIGTERM', () => void shutdown());
   process.on('SIGINT', () => void shutdown());
 
+  // This daemon hosts `@prisma/dev`'s runtime in-process, and a failed or
+  // abandoned start attempt can leave background async work behind whose
+  // eventual rejection would otherwise kill the process (bun and node both
+  // exit on an unhandled rejection). A machine-shared daemon serving every
+  // app's databases must not die because one attempt's debris rejected —
+  // log it (the daemon's stdio is teed to its registry log) and keep
+  // serving; every REQUEST path still reports its own errors as 500s.
+  process.on('unhandledRejection', (reason) => {
+    console.error(
+      'postgres-main: unhandled rejection from background work:',
+      reason instanceof Error ? maskCredentials(reason.stack ?? reason.message) : reason,
+    );
+  });
+  process.on('uncaughtException', (err) => {
+    console.error(
+      'postgres-main: uncaught exception from background work:',
+      err instanceof Error ? maskCredentials(err.stack ?? err.message) : err,
+    );
+  });
+
   readJsonFile(appsJsonPath, isAppsState)
     .then((loaded) => {
       if (loaded) state = loaded;
