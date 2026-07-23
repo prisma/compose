@@ -4,7 +4,7 @@
  * test uses a temp `registryRoot` and stops every daemon it started.
  */
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { spawn } from 'node:child_process';
+import { type ChildProcess, spawn, spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -44,6 +44,47 @@ async function ensure(name: DaemonName): Promise<{ url: string }> {
 function readEntry(name: DaemonName): RegistryEntry {
   const raw = fs.readFileSync(registryFilePath(registryRoot, name), 'utf8');
   return JSON.parse(raw) as RegistryEntry;
+}
+
+/** Runs the `ensure-and-print` fixture as a real, separate OS process and resolves with what it printed. */
+function ensureInSeparateProcess(name: DaemonName): Promise<{ url: string }> {
+  const fixture = fileURLToPath(new URL('./fixtures/ensure-and-print.ts', import.meta.url));
+  return new Promise((resolve, reject) => {
+    const child = spawn('bun', [fixture, name, registryRoot], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let out = '';
+    let err = '';
+    child.stdout?.on('data', (chunk: Buffer) => {
+      out += chunk.toString();
+    });
+    child.stderr?.on('data', (chunk: Buffer) => {
+      err += chunk.toString();
+    });
+    child.on('error', reject);
+    child.on('exit', (code) => {
+      if (code !== 0) {
+        reject(new Error(`ensure-and-print exited ${String(code)}: ${err}`));
+        return;
+      }
+      try {
+        resolve(JSON.parse(out.trim()) as { url: string });
+      } catch (parseErr) {
+        reject(parseErr);
+      }
+    });
+  });
+}
+
+/** A real, spawned scratch process — used as a fake lock holder with a genuine, checkable pid. */
+function spawnScratchProcess(script: string): ChildProcess {
+  return spawn('bun', ['-e', script], { stdio: 'ignore' });
+}
+
+function waitForExit(child: ChildProcess): Promise<void> {
+  return new Promise((resolve) => {
+    child.once('exit', () => resolve());
+  });
 }
 
 describe('ensureDaemon', () => {
@@ -216,4 +257,79 @@ describe('loopback clients', () => {
     const health = await client.health();
     expect(health.version).toBe(readOwnVersion());
   });
+});
+
+describe('concurrent-ensure protocol', () => {
+  test('two concurrent ensureDaemon calls from separate processes produce exactly one daemon and agree on its URL', async () => {
+    // Truly concurrent: both processes are spawned before either is
+    // awaited, so the race is real, not just two promises in one event
+    // loop — the mutex under test is an inter-process lock.
+    const [a, b] = await Promise.all([
+      ensureInSeparateProcess('compute'),
+      ensureInSeparateProcess('compute'),
+    ]);
+    started.add('compute');
+
+    expect(a.url).toBe(b.url);
+
+    const entry = readEntry('compute');
+    expect(isPidAlive(entry.pid)).toBe(true);
+    expect(`http://127.0.0.1:${String(entry.port)}`).toBe(a.url);
+
+    // Exactly one compute-main process is actually running for this
+    // registryRoot — not two racing spawns that both happened to land on
+    // the daemon eventually reporting the same (winning) URL. `-fl`
+    // (not `-af` — macOS's `pgrep -a` means "include ancestors", unlike
+    // GNU pgrep) matches the full argument list and prints it, so we can
+    // filter by this test's own registryRoot. Polled briefly: under a
+    // heavily loaded machine (many other daemons from concurrent test
+    // files) a bare snapshot can transiently race the OS reporting the
+    // just-spawned process, which is a verification-timing gap, not
+    // evidence of a double-spawn.
+    function matchCount(): number {
+      const pgrep = spawnSync('pgrep', ['-fl', 'compute-main.mjs']);
+      return (pgrep.stdout?.toString() ?? '')
+        .split('\n')
+        .filter((line) => line.includes(registryRoot)).length;
+    }
+    await waitFor(() => matchCount() === 1, 3000, 100);
+    expect(matchCount()).toBe(1);
+  }, 20_000);
+
+  test('a stale lock dir (dead holder pid) is broken and ensure proceeds', async () => {
+    const lockDir = path.join(registryRoot, '.lock-compute');
+    fs.mkdirSync(lockDir, { recursive: true });
+
+    // A real pid, guaranteed dead: spawn a scratch process and wait for it
+    // to exit before recording its (now-reaped) pid as the lock holder.
+    const scratch = spawnScratchProcess('process.exit(0)');
+    await waitForExit(scratch);
+    const deadPid = scratch.pid;
+    if (deadPid === undefined) throw new Error('failed to spawn a scratch process for a dead pid');
+    fs.writeFileSync(path.join(lockDir, 'pid'), String(deadPid));
+
+    const result = await ensure('compute');
+    expect(result.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
+    // The lock is released once ensureDaemon is done with it.
+    expect(fs.existsSync(lockDir)).toBe(false);
+  });
+
+  test('a held lock with a live holder times out with the pinned error', async () => {
+    const lockDir = path.join(registryRoot, '.lock-compute');
+    fs.mkdirSync(lockDir, { recursive: true });
+
+    // A real, long-lived scratch process standing in as the lock holder.
+    const holder = spawnScratchProcess('setInterval(() => {}, 1000);');
+    const holderPid = holder.pid;
+    if (holderPid === undefined) throw new Error('failed to spawn a scratch holder process');
+    fs.writeFileSync(path.join(lockDir, 'pid'), String(holderPid));
+
+    try {
+      await expect(ensureDaemon('compute', { registryRoot })).rejects.toThrow(
+        `timed out waiting for another process ensuring the compute emulator — remove ${lockDir} if stale.`,
+      );
+    } finally {
+      holder.kill('SIGKILL');
+    }
+  }, 15_000);
 });

@@ -39,6 +39,8 @@ const START_HEALTH_BUDGET_MS = 10_000;
 const HEALTH_POLL_INTERVAL_MS = 200;
 const TERMINATE_GRACE_MS = 5000;
 const TERMINATE_POLL_INTERVAL_MS = 150;
+const LOCK_POLL_INTERVAL_MS = 250;
+const LOCK_WAIT_BUDGET_MS = 10_000;
 
 function isErrnoException(err: unknown): err is NodeJS.ErrnoException {
   return err instanceof Error && 'code' in err;
@@ -226,11 +228,99 @@ function smallestUnused(used: ReadonlySet<number>, min: number): number {
   return port;
 }
 
+type ObserveResult =
+  | { readonly kind: 'healthy'; readonly entry: RegistryEntry }
+  | { readonly kind: 'stale-version'; readonly entry: RegistryEntry }
+  | { readonly kind: 'dead-or-unhealthy'; readonly entry: RegistryEntry }
+  | { readonly kind: 'absent' };
+
+/**
+ * Reads the registry entry and classifies it. "dead-or-unhealthy" covers
+ * both a provably dead pid AND a live pid that fails health — the latter
+ * can't be confirmed as our daemon (a reused pid after a reboot, a hung
+ * foreign process), so it is never signaled, only dropped.
+ */
+async function observeExisting(
+  registryFile: string,
+  healthPath: string,
+  ownVersion: string,
+): Promise<ObserveResult> {
+  const entry = await readJsonFile(registryFile, isRegistryEntry);
+  if (!entry) return { kind: 'absent' };
+  if (!isPidAlive(entry.pid)) return { kind: 'dead-or-unhealthy', entry };
+  const health = await probeHealth(entry.port, healthPath, EXISTING_HEALTH_TIMEOUT_MS);
+  if (health && health.version === ownVersion) return { kind: 'healthy', entry };
+  if (health && health.version !== ownVersion) return { kind: 'stale-version', entry };
+  return { kind: 'dead-or-unhealthy', entry };
+}
+
+/** `<registryRoot>/.lock-<name>` — the concurrent-ensure protocol's atomic directory lock. */
+function lockDirPath(registryRoot: string, name: DaemonName): string {
+  return path.join(registryRoot, `.lock-${name}`);
+}
+
+/** The pid the lock's directory records, or `undefined` when the pid file doesn't exist yet (still mid-acquire) or is unreadable. */
+async function readLockHolderPid(lockDir: string): Promise<number | undefined> {
+  let raw: string;
+  try {
+    raw = await fsp.readFile(path.join(lockDir, 'pid'), 'utf8');
+  } catch {
+    return undefined;
+  }
+  const pid = Number(raw.trim());
+  return Number.isInteger(pid) ? pid : undefined;
+}
+
+/**
+ * Acquires `<registryRoot>/.lock-<name>` (spec § 2 "Concurrent-ensure
+ * protocol"): atomic `mkdir` IS acquisition. On `EEXIST`, a dead holder's
+ * lock is stale and removed for an immediate retry; a live (or
+ * still-being-written) holder is polled every 250 ms up to a 10 s budget,
+ * after which the pinned timeout error is thrown.
+ */
+async function acquireLock(registryRoot: string, name: DaemonName): Promise<void> {
+  await fsp.mkdir(registryRoot, { recursive: true });
+  const lockDir = lockDirPath(registryRoot, name);
+  const deadline = Date.now() + LOCK_WAIT_BUDGET_MS;
+  for (;;) {
+    try {
+      await fsp.mkdir(lockDir);
+      await fsp.writeFile(path.join(lockDir, 'pid'), String(process.pid));
+      return;
+    } catch (err) {
+      if (!isErrnoException(err) || err.code !== 'EEXIST') throw err;
+
+      const holderPid = await readLockHolderPid(lockDir);
+      if (holderPid !== undefined && !isPidAlive(holderPid)) {
+        // A dead holder's lock is stale — remove it and retry immediately,
+        // no budget consumed.
+        await fsp.rm(lockDir, { recursive: true, force: true });
+        continue;
+      }
+      // Alive holder, or the pid file hasn't been written yet (another
+      // process is mid-acquire) — never remove a lock we can't prove is
+      // stale. Poll within the budget.
+      if (Date.now() >= deadline) {
+        throw new Error(
+          `timed out waiting for another process ensuring the ${name} emulator — remove ${lockDir} if stale.`,
+        );
+      }
+      await sleep(LOCK_POLL_INTERVAL_MS);
+    }
+  }
+}
+
+async function releaseLock(registryRoot: string, name: DaemonName): Promise<void> {
+  await fsp.rm(lockDirPath(registryRoot, name), { recursive: true, force: true });
+}
+
 /**
  * Ensure the named daemon is running and healthy at this package's version,
  * starting or replacing it as needed (spec § 2 `daemon.ts`). Idempotent —
  * safe to call repeatedly, including across unrelated processes on the same
- * machine.
+ * machine, and safe under concurrent callers across processes: the
+ * observe→spawn→persist critical section is serialized per daemon name by
+ * an atomic directory lock (the "Concurrent-ensure protocol").
  */
 export async function ensureDaemon(
   name: DaemonName,
@@ -241,69 +331,79 @@ export async function ensureDaemon(
   const healthPath = healthPathFor(name);
   const ownVersion = readOwnVersion();
 
-  const existing = await readJsonFile(registryFile, isRegistryEntry);
-  let reusablePort: number | undefined;
-
-  if (existing) {
-    reusablePort = existing.port;
-    if (isPidAlive(existing.pid)) {
-      const health = await probeHealth(existing.port, healthPath, EXISTING_HEALTH_TIMEOUT_MS);
-      if (health && health.version === ownVersion) {
-        return { url: `http://127.0.0.1:${existing.port}` };
-      }
-      if (health && health.version !== ownVersion) {
-        // Version mismatch: this IS our daemon, just stale — replace it.
-        await terminate(existing.pid, TERMINATE_GRACE_MS);
-      }
-      // Failed health while the pid is alive: can't confirm this is even our
-      // daemon (a reused pid after a reboot, a hung foreign process). Never
-      // signal something we can't identify — just drop the stale entry and
-      // let the port-in-use case surface naturally as a start failure below.
-    }
-    await fsp.rm(registryFile, { force: true });
+  // Optimistic, unlocked fast path: the common case is "already running and
+  // healthy", which needs no cross-process coordination at all.
+  const quick = await observeExisting(registryFile, healthPath, ownVersion);
+  if (quick.kind === 'healthy') {
+    return { url: `http://127.0.0.1:${quick.entry.port}` };
   }
 
-  const port = reusablePort ?? smallestUnused(await usedPorts(registryRoot), MIN_PORT);
-  const stateDir = daemonStateDir(registryRoot, name);
-  const logPath = daemonLogPath(registryRoot, name);
-  await fsp.mkdir(stateDir, { recursive: true });
-  await fsp.mkdir(path.dirname(logPath), { recursive: true });
-
-  const entry = fileURLToPath(import.meta.resolve(`@internal/dev-emulators/${name}-main`));
-  const logFd = fs.openSync(logPath, 'a');
-  let child: ChildProcess;
+  await acquireLock(registryRoot, name);
   try {
-    child = spawn(process.execPath, [entry, '--port', String(port), '--state-dir', stateDir], {
-      detached: true,
-      stdio: ['ignore', logFd, logFd],
+    // Re-read under the lock — the previous holder may have already
+    // finished the job while we were waiting to acquire it.
+    const observed = await observeExisting(registryFile, healthPath, ownVersion);
+    if (observed.kind === 'healthy') {
+      return { url: `http://127.0.0.1:${observed.entry.port}` };
+    }
+
+    let reusablePort: number | undefined;
+    if (observed.kind === 'stale-version') {
+      // This IS our daemon, just stale — replace it.
+      reusablePort = observed.entry.port;
+      await terminate(observed.entry.pid, TERMINATE_GRACE_MS);
+      await fsp.rm(registryFile, { force: true });
+    } else if (observed.kind === 'dead-or-unhealthy') {
+      reusablePort = observed.entry.port;
+      await fsp.rm(registryFile, { force: true });
+    }
+
+    // Port allocation happens inside the lock, so two daemons can never
+    // claim one port.
+    const port = reusablePort ?? smallestUnused(await usedPorts(registryRoot), MIN_PORT);
+    const stateDir = daemonStateDir(registryRoot, name);
+    const logPath = daemonLogPath(registryRoot, name);
+    await fsp.mkdir(stateDir, { recursive: true });
+    await fsp.mkdir(path.dirname(logPath), { recursive: true });
+
+    const entry = fileURLToPath(import.meta.resolve(`@internal/dev-emulators/${name}-main`));
+    const logFd = fs.openSync(logPath, 'a');
+    let child: ChildProcess;
+    try {
+      child = spawn(process.execPath, [entry, '--port', String(port), '--state-dir', stateDir], {
+        detached: true,
+        stdio: ['ignore', logFd, logFd],
+      });
+    } finally {
+      fs.closeSync(logFd);
+    }
+    child.unref();
+    if (child.pid === undefined) {
+      throw new Error(`failed to spawn the ${name} emulator — see ${logPath}.`);
+    }
+
+    await new StateFile<RegistryEntry>(registryFile).write({
+      pid: child.pid,
+      port,
+      version: ownVersion,
+      logPath,
     });
+
+    const healthy = await pollUntilHealthy(port, healthPath, START_HEALTH_BUDGET_MS);
+    if (!healthy) {
+      // Never leave an unsupervised, never-healthy process running: a spawn
+      // that didn't come up (a squatted port, a broken build) must not
+      // leak, even though the happy-path child is deliberately detached to
+      // outlive this call. Drop the registry entry too — it would
+      // otherwise point at a pid we just killed.
+      await terminate(child.pid, TERMINATE_GRACE_MS);
+      await fsp.rm(registryFile, { force: true });
+      throw new Error(`${name} emulator failed to start on port ${port} — see ${logPath}.`);
+    }
+    return { url: `http://127.0.0.1:${port}` };
   } finally {
-    fs.closeSync(logFd);
+    await releaseLock(registryRoot, name);
   }
-  child.unref();
-  if (child.pid === undefined) {
-    throw new Error(`failed to spawn the ${name} emulator — see ${logPath}.`);
-  }
-
-  await new StateFile<RegistryEntry>(registryFile).write({
-    pid: child.pid,
-    port,
-    version: ownVersion,
-    logPath,
-  });
-
-  const healthy = await pollUntilHealthy(port, healthPath, START_HEALTH_BUDGET_MS);
-  if (!healthy) {
-    // Never leave an unsupervised, never-healthy process running: a spawn
-    // that didn't come up (a squatted port, a broken build) must not leak,
-    // even though the happy-path child is deliberately detached to outlive
-    // this call. Drop the registry entry too — it would otherwise point at
-    // a pid we just killed.
-    await terminate(child.pid, TERMINATE_GRACE_MS);
-    await fsp.rm(registryFile, { force: true });
-    throw new Error(`${name} emulator failed to start on port ${port} — see ${logPath}.`);
-  }
-  return { url: `http://127.0.0.1:${port}` };
 }
 
 /** SIGTERM/SIGKILL + registry cleanup. Not called by any v1 command — an operator escape hatch, exported for tests. */
