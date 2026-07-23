@@ -218,6 +218,14 @@ service child processes. Loopback `node:http` JSON admin API; state under its
   log file's current tail, then live lines while open.
 - `POST /apps/<app>/stop` → stop every child of the app (records kept,
   status `stopped`) → `204`.
+- `POST /apps/<app>/start` → start every service that has a stored
+  deployment spec and is not `running`, from that spec (a service with no
+  deployment recorded is skipped) → `204`. The symmetric inverse of
+  `/stop`, and the reason it must exist: Alchemy correctly skips a
+  provider's reconcile when nothing diffed, so a no-op converge can never
+  restart services a previous session stopped — the dev SESSION is the
+  explicit resume signal (found live on the open-chat proof: warm restart
+  printed ready while every service stayed stopped).
 - `DELETE /apps/<app>` → stop + remove the app's records and logs → `204`.
 
 Supervision policy (emulator-owned): unexpected exit → restart with backoff
@@ -321,6 +329,8 @@ export interface DevAttachInput {
 }
 
 export interface DevAttachment {
+  /** Start every stopped service from its last deployment (the session-resume signal — a no-op converge cannot start anything). */
+  startServices(): Promise<void>;
   /** Every service's local endpoint, for the front door. */
   endpoints(): Promise<readonly { readonly address: string; readonly url: string }[]>;
   /** Merged, line-oriented log stream across the app's services (including services that appear after later converges). Ends when `signal` aborts. */
@@ -604,6 +614,7 @@ New control-plane files (all under `src/`, plane `control` in
     attaching followers for services that appeared after a later converge
     and re-attaching any follower whose connection dropped (an emulator
     restart shows a gap, never a dead session).
+  - `startServices()` → `POST /apps/<app>/start`.
   - `stopServices()` → `POST /apps/<app>/stop`.
 - `src/dev/teardown.ts` — `runDevTeardown(input: TeardownInput)`:
   1. `<prisma-bin> dev stop 'pcdev-<slug(app)>-*'` then
@@ -686,7 +697,9 @@ New control-plane files (all under `src/`, plane `control` in
        DEV_STACK_RELATIVE_PATH, cwd, stage: 'dev', containerEnv })`.
        Nonzero exit: print the stack-file reproduction hint (deploy's
        pattern, with `--stage dev`) and exit with that status.
-    8. Attach: `dev.attach({ container, devDir })` per extension; print the
+    8. Attach: `dev.attach({ container, devDir })` per extension; call every
+       attachment's `startServices()` (resume services a previous session's
+       Ctrl-C stopped — converge cannot, when nothing diffed); then print the
        front door from the merged `endpoints()` (ordered by address depth,
        fewest dots first, then lexicographic; first line preceded by
        `[dev] ready:`); pump every attachment's `logs()` to stdout, each
@@ -804,7 +817,9 @@ The open-chat proof (S6) uses `node({ module, dir, entry })`.
       topology; a missing env-sourced param fails with the listing error.
 - [ ] After Ctrl-C, a second `prisma-composer dev` reaches ready as a warm
       start: same service ports and URLs, no re-provisioning, Postgres and
-      bucket data intact.
+      bucket data intact — and an HTTP round-trip against the front door
+      SUCCEEDS (the services are genuinely serving, not merely listed;
+      port-stability alone missed a live resume bug).
 - [ ] The open-chat port (via the `dir()` adapter) boots through
       `prisma-composer dev` with sign-in, history, and live-tail working —
       replacing its hand-rolled `scripts/dev.ts` (parity proof; port-repo
