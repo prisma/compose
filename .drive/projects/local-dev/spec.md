@@ -722,31 +722,27 @@ New control-plane files (all under `src/`, plane `control` in
     watching (a broken build must not take down the running app). After
     every successful converge, re-print the front door from `endpoints()`.
 
-### 7. `dir()` build adapter (`packages/0-framework/2-authoring/node/src/dir.ts` — NEW entry)
+### 7. Directory-shaped builds (REVISED — no new adapter)
 
-Prerequisite for the open-chat proof (its runnable is a directory —
-friction #3's shape) and independently useful.
+**Correction (operator catch):** `node()`'s directory form —
+`node({ module, dir, entry })` — already exists on `main` and IS friction
+#3's fix, implemented before this project's design pass; the original § 7
+pinned a duplicate `dir()` surface against a stale friction-log premise.
+There is no `dir()` adapter and no `@prisma/composer/dir` subpath. S2's
+real scope:
 
-- Package `@prisma/composer-dir`? NO — PIN: it ships inside the existing
-  node-adapter package as a sibling entry: `packages/0-framework/2-authoring/
-  node/src/dir.ts`, public subpath `@prisma/composer/dir` (via `9-public`
-  mapping, exactly how `node` is mapped today).
-- Authoring surface: `dir({ module: import.meta.url, dir: string, entry:
-  string })` — `dir` is the user-built output directory, `entry` the runnable
-  file within it, both resolved relative to `dirname(module)` (ADR-0004).
-- `assemble()`: validate `dir` exists (else deploy's "run your build" error
-  shape), validate `entry` exists inside it, **copy the tree verbatim**
-  (`fs.cp recursive`, symlink = hard error with ADR-0005's message shape,
-  reusing the walk/validation from `artifact.ts`'s conventions), plus the
-  standard wrapper bundling exactly as `node()`'s control does (the wrapper
-  `main.mjs` is what `bootstrap.js` imports). Returns
-  `{ dir: <workDir>, entry: bundle/<entry>, watch: [<the resolved input dir>] }`
-  — the same Bundle shape `node()` produces (the wrapper `main.mjs` sits at
-  the workdir root so the packaged bootstrap can import it; `entry` points
-  into the copied tree). (§ 3's `Bundle.watch`.)
-- No filename guessing, no tree walking beyond the verbatim copy: the author
-  states the directory and the entry (ADR-0005; the friction #3
-  recommendation, verbatim).
+- `Bundle.watch` (§ 3) and its population: `node()` single-file form →
+  `[resolved entry file]`; `node()` directory form → `[the resolved dir]`
+  (the WHOLE tree — a rebuild may touch only sibling files); `nextjs()` →
+  `[the standalone output dir]`.
+- The symlink-as-`dir` hole: `node()`'s directory form on `main`
+  dereferences a symlink passed AS `dir` itself (`statSync` follows links;
+  the no-symlink walk only checks children) — `lstat` the directory before
+  the walk, ADR-0005's error shape, tests through the directory form.
+- Doc corrections wherever the guide/deploy docs still describe `node()`
+  as single-file-only.
+
+The open-chat proof (S6) uses `node({ module, dir, entry })`.
 
 ### 8. Docs & rules
 
