@@ -554,8 +554,18 @@ server that fails to start surfaces the underlying error text verbatim
 (credential-masked) in the 500 body.
 Version ownership: `@prisma/dev` resolves from the APP's node_modules
 (passed into the daemon as a resolved path), keeping the app in charge of
-its Prisma version; absent →
+its Prisma version. Resolution is two-step, pinned: (1)
+`createRequire(join(cwd, 'package.json')).resolve('@prisma/dev')`; (2) on
+failure, resolve `prisma`'s own package first and resolve `@prisma/dev`
+from THERE (apps typically depend on the `prisma` CLI, which carries it);
+both failing →
 `Error: local dev needs @prisma/dev for its local Postgres emulator — add "prisma" to your app's devDependencies.`
+The local `Database` provider PUTs the daemon's ensure with that path and
+stores the returned `{ url }` on its own ATTRIBUTES; the local
+`Connection` provider resolves its url from the daemon's listing (GET
+databases, matched by instance name derived from `news.databaseId`).
+`dev-store`'s `postgres.json` is DELETED — the daemon owns instance state.
+`resolve-bin.ts` and `spawn-utils.ts` are deleted with the shell-out.
 - Instance name derivation: `pcdev-<app>-<database-id>`, where `<app>` and
   `<database-id>` are lowercased with every char outside `[a-z0-9]` replaced
   by `-`, runs collapsed, trimmed to 63 chars.
@@ -674,11 +684,12 @@ New control-plane files (all under `src/`, plane `control` in
      `missingError` but scoped `local dev` and instructing
      `Set each in the shell you run \`prisma-composer dev\` from.`
 - `src/dev/emulators.ts` — `runDevEmulators(input: DevEmulatorsInput)`:
-  inspect the graph's node kinds; `ensureDaemon('compute')` always (every
-  app has services); `ensureDaemon('buckets')` when any `s3`-kinded resource
-  node exists. Postgres needs no pre-start — its instances are created at
-  provision through the ORM CLI. Idempotent; prints one `[dev]` line per
-  daemon it actually started.
+  inspect the graph's node kinds; `ensureDaemon('compute', …)` always
+  (every app has services); `ensureDaemon('buckets', …)` when any
+  `s3`-kinded resource node exists; `ensureDaemon('postgres', …)` when any
+  `postgres`- or `prisma-next`-kinded resource node exists (REVISED —
+  Postgres is a first-class daemon since the programmatic adoption).
+  Idempotent; prints one `[dev]` line per daemon it actually started.
 - `src/dev/attach.ts` — `devAttach(input: DevAttachInput): DevAttachment`,
   a Compute-emulator client scoped to the app:
   - `endpoints()` → `GET /apps/<app>/services`, mapped to
