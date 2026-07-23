@@ -575,7 +575,13 @@ teardown removes the app's instances through the daemon's admin API.
 the other two): `GET /health`; `PUT /apps/<app>/databases/<id>` body
 `{ "prismaDevModulePath": string }` → ensure a named persistent server
 (instance name per the derivation below; `databasePort` from the daemon's
-own persisted state, fresh-allocation retry per the § 2 pattern; the
+own persisted state, fresh-allocation retry per the § 2 pattern — and the
+retry recognizes a refusal of ANY of the four requested ports (database +
+the http/shadow/streams aux listeners), since `@prisma/dev`'s registry can
+claim a port no bind probe sees ("belongs to another Prisma Dev server");
+every one of its port-refusal errors carries the offending port as
+`.port`, conflicted ports are excluded from re-allocation, and the
+database port only advances when it was itself the refused one; the
 `@prisma/dev` module is imported from the CALLER-RESOLVED path so the app
 owns the version) → `{ "url": string }`, idempotent; `GET
 /apps/<app>/databases` → listing; `DELETE /apps/<app>` → close the app's
