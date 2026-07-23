@@ -161,6 +161,8 @@ export interface ComputeClient {
   followLogs(app: string, id: string, signal?: AbortSignal): AsyncIterable<string>;
   /** `POST /apps/<app>/stop`. */
   stopApp(app: string): Promise<void>;
+  /** `POST /apps/<app>/start` — the session-resume signal; starts every service with a stored deployment that isn't already running. */
+  startApp(app: string): Promise<void>;
   /** `DELETE /apps/<app>`. */
   deleteApp(app: string): Promise<void>;
 }
@@ -231,6 +233,11 @@ export function computeClient(opts: DaemonRootOptions = {}): ComputeClient {
 
     async stopApp(app) {
       const url = `${baseUrl}/apps/${encodeSegment(app)}/stop`;
+      await expectOk(await fetch(url, { method: 'POST' }));
+    },
+
+    async startApp(app) {
+      const url = `${baseUrl}/apps/${encodeSegment(app)}/start`;
       await expectOk(await fetch(url, { method: 'POST' }));
     },
 

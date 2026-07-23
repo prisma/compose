@@ -14,11 +14,13 @@ import { type ChildProcess, spawn } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as http from 'node:http';
 import * as path from 'node:path';
+import getPort, { portNumbers } from 'get-port';
 import { readOwnVersion } from './daemon.ts';
 import { isValidSegment } from './segments.ts';
 import { readJsonFile, StateFile } from './state-file.ts';
 
 const MIN_SERVICE_PORT = 3000;
+const MAX_SERVICE_PORT = 65_535;
 const TERMINATE_GRACE_MS = 5000;
 const STABLE_UPTIME_MS = 30_000;
 const BASE_BACKOFF_MS = 1000;
@@ -277,14 +279,20 @@ function main(): void {
     return ports;
   }
 
-  function smallestUnusedServicePort(): number {
-    const used = usedServicePorts();
-    let p = MIN_SERVICE_PORT;
-    while (used.has(p)) p++;
-    return p;
+  /**
+   * The smallest genuinely free port at or above `MIN_SERVICE_PORT`,
+   * excluding this daemon's own persisted allocations — persistence and
+   * the range policy stay ours; whether a candidate is actually bindable
+   * is `get-port`'s (spec § 2's dependency razor).
+   */
+  async function smallestUnusedServicePort(): Promise<number> {
+    return getPort({
+      port: portNumbers(MIN_SERVICE_PORT, MAX_SERVICE_PORT),
+      exclude: usedServicePorts(),
+    });
   }
 
-  function getOrCreateService(app: string, id: string): ServiceRecord {
+  async function getOrCreateService(app: string, id: string): Promise<ServiceRecord> {
     let appRec = state[app];
     if (!appRec) {
       appRec = { services: {} };
@@ -295,7 +303,7 @@ function main(): void {
     svc = {
       id,
       address: id,
-      port: smallestUnusedServicePort(),
+      port: await smallestUnusedServicePort(),
       status: 'stopped',
       logPath: serviceLogPath(app, id),
     };
@@ -426,6 +434,24 @@ function main(): void {
     schedulePersist();
   }
 
+  /**
+   * The session-resume signal: Alchemy's no-op reconcile never fires a
+   * deployment PUT, so nothing else restarts a service a previous session
+   * stopped. Reuses the exact deployment-PUT start rules — same spawn
+   * path, same supervision reset, and an explicit resume clears `held`
+   * the same way a deployment PUT does — but from the service's already
+   * STORED deployment spec, since no new one arrives with a start.
+   */
+  async function startService(app: string, id: string, svc: ServiceRecord): Promise<void> {
+    if (svc.artifactHash === undefined) return; // never deployed — nothing to start
+    if (svc.status === 'running') return; // idempotent — already up
+    const rt = getRuntime(app, id);
+    clearBackoffTimer(rt);
+    clearStableTimer(rt);
+    rt.consecutiveFastExits = 0;
+    await spawnService(app, id, svc, rt);
+  }
+
   // ——— HTTP plumbing ———
 
   function json(res: http.ServerResponse, status: number, body: unknown): void {
@@ -493,7 +519,7 @@ function main(): void {
     }
     if (!isDeploymentBody(parsed)) return text(res, 400, 'malformed deployment body');
 
-    const svc = getOrCreateService(app, id);
+    const svc = await getOrCreateService(app, id);
     const rt = getRuntime(app, id);
 
     const changed = svc.artifactHash !== parsed.artifactHash || !envEquals(svc.env, parsed.env);
@@ -583,7 +609,7 @@ function main(): void {
       if (method === 'PUT' && segments.length === 4 && segments[2] === 'services') {
         const id = segments[3];
         if (id === undefined || !isValidSegment(id)) return badSegment(res, id ?? '');
-        const svc = getOrCreateService(app, id);
+        const svc = await getOrCreateService(app, id);
         return json(res, 200, { port: svc.port, url: `http://localhost:${String(svc.port)}` });
       }
 
@@ -631,6 +657,18 @@ function main(): void {
             Object.entries(appRec.services).map(([id, svc]) =>
               stopService(svc, getRuntime(app, id)),
             ),
+          );
+        }
+        res.writeHead(204);
+        res.end();
+        return;
+      }
+
+      if (method === 'POST' && segments.length === 3 && segments[2] === 'start') {
+        const appRec = state[app];
+        if (appRec) {
+          await Promise.all(
+            Object.entries(appRec.services).map(([id, svc]) => startService(app, id, svc)),
           );
         }
         res.writeHead(204);
