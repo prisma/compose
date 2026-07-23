@@ -84,6 +84,14 @@ tests; README embedded + SPA-alternative sections complete.
 **Builds on:** S1 (S2's `email` input lands in whichever of S2/S4 merges
 second — coordinate at pickup). **Parallel with:** S2, S3.
 
+### S5 (proposed) — `rpc-port-isolation`
+
+**Status: pending operator confirmation** (raised from D5's dispatch
+collision + the service-level key-acceptance gap). Draft spec:
+`slices/rpc-port-isolation/spec.md`. If confirmed: sequence before S3's
+deployed consumer example (the admin port should be transport-isolated
+before it ships anywhere real); Linear issue created on confirmation.
+
 ## Sequencing
 
 - Stack: S1 → S2 → S3.
