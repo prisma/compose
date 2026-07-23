@@ -64,12 +64,32 @@ export async function waitForHttp(url: string, timeoutMs: number): Promise<Respo
 
 const DEFAULT_MIN_PORT = 4300;
 
-function canBind(port: number, host: string): Promise<boolean> {
-  return new Promise((resolve) => {
+interface BindAttempt {
+  readonly free: boolean;
+  readonly code?: string;
+}
+
+/**
+ * Binding is the only reliable way to ask "is this port free" — attempt it
+ * and read the OS's own verdict rather than guessing. `EADDRINUSE` (someone
+ * else is listening) and `EACCES` (privileged port, permission denied) both
+ * mean "taken" for our purposes. Any other errno is a genuine surprise —
+ * rethrow it loudly rather than silently treating it as "taken", which is
+ * exactly the bug that made `findFreePort` fail closed on every port on a
+ * CI runner that raised an errno this function didn't expect.
+ */
+function attemptBind(port: number, host: string): Promise<BindAttempt> {
+  return new Promise((resolve, reject) => {
     const probe = http.createServer();
-    probe.once('error', () => resolve(false));
+    probe.once('error', (err: NodeJS.ErrnoException) => {
+      if (err.code === 'EADDRINUSE' || err.code === 'EACCES') {
+        resolve({ free: false, code: err.code });
+        return;
+      }
+      reject(err);
+    });
     probe.listen(port, host, () => {
-      probe.close(() => resolve(true));
+      probe.close(() => resolve({ free: true }));
     });
   });
 }
@@ -81,22 +101,36 @@ function canBind(port: number, host: string): Promise<boolean> {
  * bind on the same port from succeeding — the two sockets coexist, and
  * which one actually receives an incoming request becomes ambiguous. A
  * port only counts as free here when NEITHER bind scope is already taken.
+ *
+ * The two attempts run SEQUENTIALLY, not concurrently: binding both
+ * `127.0.0.1` and `0.0.0.0` to the very same port at the same time makes
+ * the two probe sockets themselves overlap, and the kernel can refuse the
+ * second bind with `EADDRINUSE` even though nothing else was ever using
+ * the port — a self-inflicted collision, not a real one. Concurrent probes
+ * happened to not collide on macOS but did on Linux CI, which is what
+ * produced "no free port found in [4300, 4500)" on a runner where
+ * virtually every port is genuinely free.
  */
-async function isPortFree(port: number): Promise<boolean> {
-  const [loopback, wildcard] = await Promise.all([
-    canBind(port, '127.0.0.1'),
-    canBind(port, '0.0.0.0'),
-  ]);
-  return loopback && wildcard;
+async function checkPort(port: number): Promise<BindAttempt> {
+  const loopback = await attemptBind(port, '127.0.0.1');
+  if (!loopback.free) return loopback;
+  return attemptBind(port, '0.0.0.0');
 }
 
 /** The first genuinely free port at or above `startFrom` — a shared machine may have unrelated processes already bound near the default port range. */
 export async function findFreePort(startFrom: number = DEFAULT_MIN_PORT): Promise<number> {
+  const codeCounts = new Map<string, number>();
   for (let port = startFrom; port < startFrom + 200; port++) {
-    if (await isPortFree(port)) return port;
+    const result = await checkPort(port);
+    if (result.free) return port;
+    const code = result.code ?? 'unknown';
+    codeCounts.set(code, (codeCounts.get(code) ?? 0) + 1);
   }
+  const observed = [...codeCounts.entries()]
+    .map(([code, count]) => `${code}=${String(count)}`)
+    .join(', ');
   throw new Error(
-    `findFreePort: no free port found in [${String(startFrom)}, ${String(startFrom + 200)})`,
+    `findFreePort: no free port found in [${String(startFrom)}, ${String(startFrom + 200)}) — observed errnos: ${observed}`,
   );
 }
 
