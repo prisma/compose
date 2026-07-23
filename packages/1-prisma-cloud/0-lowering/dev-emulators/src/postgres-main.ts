@@ -148,15 +148,24 @@ function isPortConflict(err: unknown, port: number): boolean {
   return err.port === port;
 }
 
+/**
+ * A dynamic `import()` failure's own message routinely names a SECOND path
+ * (e.g. bun's "Cannot find module '<target>' from '<importer>'") — the
+ * importer half is this daemon's own internal location, not anything the
+ * caller gave us, and has no business in a response body. Rather than try
+ * to scrub an arbitrary underlying message for every runtime's own error
+ * phrasing, the resolution-failure case names only what the caller
+ * supplied — the pinned message plus the given `prismaDevModulePath`, and
+ * nothing else. (A DIFFERENT case — a module that resolves fine but whose
+ * `startPrismaDevServer()` call itself fails — still surfaces its
+ * underlying text verbatim, credential-masked, per spec § 2.)
+ */
 async function importPrismaDev(prismaDevModulePath: string): Promise<PrismaDevModule> {
   let mod: unknown;
   try {
     mod = await import(pathToFileURL(prismaDevModulePath).href);
-  } catch (err) {
-    const reason = err instanceof Error ? err.message : String(err);
-    throw new Error(
-      `${NOT_INSTALLED_MESSAGE} (failed to import "${prismaDevModulePath}": ${maskCredentials(firstLine(reason))})`,
-    );
+  } catch {
+    throw new Error(`${NOT_INSTALLED_MESSAGE} (could not resolve "${prismaDevModulePath}")`);
   }
   if (!isPrismaDevModule(mod)) {
     throw new Error(

@@ -179,8 +179,20 @@ describe('a bogus prismaDevModulePath', () => {
       throw new Error('expected ensureDatabase to reject');
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      // The client wraps the emulator's response as
+      // `request to the local dev emulator failed (${status}): ${body}` —
+      // assert the status explicitly, not just that SOME error was thrown.
+      expect(message).toContain('(500)');
       expect(message).toContain('local dev needs @prisma/dev');
       expect(message).toContain(bogusPath);
+      // No OTHER filesystem path leaks — e.g. a dynamic `import()`
+      // failure's own message routinely names a SECOND path (the
+      // importer's own internal location), which has no business in a
+      // response body. Every MULTI-SEGMENT absolute-path-shaped substring
+      // (2+ `/`-separated segments, so "@prisma/dev" itself doesn't count)
+      // must be the one path the client itself supplied.
+      const pathsInMessage = [...message.matchAll(/(?:\/[^\s"')/]+){2,}/g)].map((m) => m[0]);
+      expect([...new Set(pathsInMessage)]).toEqual([bogusPath]);
     }
   }, 15_000);
 });
