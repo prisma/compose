@@ -11,6 +11,7 @@ import {
   configKey,
   encode,
   encodeParamPointer,
+  type InputDocumentRow,
   paramEntries,
   serializeInput,
 } from '../serializer.ts';
@@ -41,10 +42,11 @@ export interface ComputeProvisioned {
   readonly endpointDomain: Output.Output<string | undefined>;
 }
 
-/** compute's serialize → deploy handoff: the env-var rows deploy must depend on, and the resolved port it routes to. */
+/** compute's serialize → deploy handoff: the env-var rows deploy must depend on, the resolved port it routes to, and the serialized input document (when the service declares one) for the deploy report. */
 export interface ComputeSerialized {
   readonly environment: readonly Prisma.EnvironmentVariable[];
   readonly port: number;
+  readonly input?: InputDocumentRow;
 }
 
 /**
@@ -203,7 +205,11 @@ export function computeDescriptor(
         // This is the only place the raw, untyped config is read, so it is the
         // only place the fallback belongs — from here on `port` is a number.
         const port = typeof config.service['port'] === 'number' ? config.service['port'] : 3000;
-        return { environment: records, port };
+        return {
+          environment: records,
+          port,
+          ...(inputRow !== undefined ? { input: inputRow } : {}),
+        };
       }),
 
     // Deterministic tar.gz (fixed mtimes/ordering) so unchanged inputs hash
@@ -234,6 +240,23 @@ export function computeDescriptor(
         // public endpoint, and this descriptor is the only party that knows
         // that. Both fields are still unresolved Output references at this
         // point — apply resolves them before the report's runner sees them.
+        //
+        // The report's two lines of honesty (ADR-0041): the serialized input
+        // document (secret-free by construction — every secret leaf is a
+        // `$secret` pointer) and every binding key that resolved absent in
+        // the deploy shell (a possible typo'd variable name). Newlines in a
+        // detail value render as one line per entry.
+        const inputDetails =
+          serialized.input !== undefined
+            ? {
+                details: {
+                  input: serialized.input.value,
+                  ...(serialized.input.absent.length > 0
+                    ? { absent: serialized.input.absent.join('\n') }
+                    : {}),
+                },
+              }
+            : {};
         return {
           outputs: { url: deployment.deployedUrl, projectId: provisioned.projectId },
           entities: [
@@ -241,6 +264,7 @@ export function computeDescriptor(
               kind: 'compute-service',
               id: provisioned.serviceId,
               url: deployment.deployedUrl,
+              ...inputDetails,
             },
           ],
         };

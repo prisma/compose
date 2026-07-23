@@ -91,6 +91,33 @@ describe('renderDeployment', () => {
     );
   });
 
+  test("an entity's details render one labeled line each — a newline-holding value one line per entry (ADR-0041's input document + absent keys)", () => {
+    const results = [
+      deployed('web', [
+        {
+          kind: 'compute-service',
+          id: 'cps_1',
+          url: 'https://a.example',
+          details: {
+            input: '{"greeting":"hello","stripeKey":{"$secret":"STRIPE_SECRET_KEY"}}',
+            absent: 'greeting → ENV_GREETING\nregion → ENV_REGION',
+          },
+        },
+      ]),
+    ];
+
+    expect(renderDeployment(result('app', results))).toBe(
+      [
+        'app',
+        '└─ web   compute-service cps_1',
+        '         https://a.example',
+        '         input {"greeting":"hello","stripeKey":{"$secret":"STRIPE_SECRET_KEY"}}',
+        '         absent greeting → ENV_GREETING',
+        '         absent region → ENV_REGION',
+      ].join('\n'),
+    );
+  });
+
   test('the app name alone when nothing deployed', () => {
     expect(renderDeployment(result('app', []))).toBe('app');
   });

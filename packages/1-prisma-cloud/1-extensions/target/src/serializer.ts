@@ -175,7 +175,7 @@ function coerceEnvSourcedParam(raw: string, d: ParamEntry, key: string): unknown
 /**
  * Boot: read each declared param from env by its key, reverse the param's own
  * serialization (missing/invalid fails loudly), assemble the typed Config.
- * Secrets ride a separate channel (deserializeSecrets), not this one.
+ * The input document rides its own channel (readInput), not this one.
  */
 export const deserialize = (node: ServiceNode, address: string): Config => {
   const service: Record<string, unknown> = {};

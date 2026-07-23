@@ -731,7 +731,7 @@ describe("prismaCloud().nodes['compute'] — the service descriptor", () => {
         const config = { service: { port: 3000 }, inputs: {} };
         const before = recorded.envVar.length;
 
-        run<MockedSerialized>(
+        const result = run<MockedSerialized>(
           serviceDescriptorOf(target, 'compute').serialize(ctx, provisioned, config),
         );
 
@@ -746,8 +746,59 @@ describe("prismaCloud().nodes['compute'] — the service descriptor", () => {
         });
         // No serialized EnvironmentVariable output carries the secret's value.
         expect(JSON.stringify(writes)).not.toContain('sk_live');
+        // The row also rides the serialize → deploy handoff, so deploy() can
+        // put the document (secret-free by construction) on the report entity.
+        expect(result.input).toEqual({
+          key: 'COMPOSER_INGEST_INPUT',
+          value: '{"stripeEnabled":true,"stripeKey":{"$secret":"STRIPE_SECRET_KEY"}}',
+          absent: [],
+        });
       },
     );
+  });
+
+  test('serialize records every env-bound input key that resolved absent — deploy-report fodder (ADR-0041)', async () => {
+    await withEnv({ NOT_SET_GREETING_VAR: undefined }, () => {
+      const target = prismaCloud({ workspaceId: 'ws_1' });
+      const node = compute({
+        name: 'ingest',
+        deps: {},
+        input: type({ 'greeting?': 'string' }),
+        build: {
+          extension: '@prisma/composer/node',
+          type: 'node',
+          module: 'file:///test/service.ts',
+          entry: 'server.js',
+        },
+      });
+      const graph = {
+        inputBindings: [
+          { serviceAddress: 'ingest', binding: { greeting: envParam('NOT_SET_GREETING_VAR') } },
+        ],
+        edges: [],
+      };
+      const ctx = {
+        address: 'ingest',
+        node,
+        graph,
+        application: { projectId: 'shop-project#cloud-id', branchId: undefined },
+      } as unknown as LowerContext;
+      const provisioned = {
+        projectId: 'shop-project#cloud-id',
+        endpointDomain: 'https://svc.example',
+      };
+      const config = { service: { port: 3000 }, inputs: {} };
+
+      const result = run<MockedSerialized>(
+        serviceDescriptorOf(target, 'compute').serialize(ctx, provisioned, config),
+      );
+
+      expect(result.input).toEqual({
+        key: 'COMPOSER_INGEST_INPUT',
+        value: '{}',
+        absent: ['greeting → NOT_SET_GREETING_VAR'],
+      });
+    });
   });
 
   test('an env-sourced reserved param serializes a POINTER row — value is the bound platform NAME, never a value', async () => {
@@ -1005,6 +1056,38 @@ describe("prismaCloud().nodes['compute'] — the service descriptor", () => {
       },
     ]);
   });
+
+  test("deploy puts the input document and its absent keys on the report entity's details (ADR-0041)", () => {
+    const target = prismaCloud({ workspaceId: 'ws_1' });
+    const ctx = { id: 'auth' } as unknown as LowerContext;
+    const provisioned = { serviceId: 'auth-svc#cloud-id', projectId: 'shop-project#cloud-id' };
+    const artifact = { path: '/tmp/auth.tar.gz', sha256: 'sha-auth' };
+    const serialized = {
+      environment: [],
+      port: 3000,
+      input: {
+        key: 'COMPOSER_AUTH_INPUT',
+        value: '{"stripeKey":{"$secret":"STRIPE_SECRET_KEY"}}',
+        absent: ['greeting → ENV_GREETING', 'region → ENV_REGION'],
+      },
+    };
+
+    const result = run<LoweredResult>(
+      serviceDescriptorOf(target, 'compute').deploy(ctx, provisioned, artifact, serialized),
+    );
+
+    expect(result.entities).toEqual([
+      {
+        kind: 'compute-service',
+        id: 'auth-svc#cloud-id',
+        url: 'https://auth-deploy.example',
+        details: {
+          input: '{"stripeKey":{"$secret":"STRIPE_SECRET_KEY"}}',
+          absent: 'greeting → ENV_GREETING\nregion → ENV_REGION',
+        },
+      },
+    ]);
+  });
 });
 
 describe("prismaCloud().nodes['s3-store'] — the service descriptor with extended outputs (§ 5)", () => {
@@ -1018,11 +1101,19 @@ describe("prismaCloud().nodes['s3-store'] — the service descriptor with extend
   test('serialize surfaces bucket + the wired credentials alongside compute env writes', async () => {
     await withEnv({}, () => {
       const target = prismaCloud({ workspaceId: 'ws_1' });
-      const node = s3StoreService({ name: 'store', deps: {}, build });
+      const node = s3StoreService({
+        name: 'store',
+        deps: {},
+        input: type({ bucket: 'string' }),
+        build,
+      });
       const ctx = {
         address: 'store',
         node,
-        graph: { inputBindings: [], edges: [] },
+        graph: {
+          inputBindings: [{ serviceAddress: 'store', binding: { bucket: 'streams' } }],
+          edges: [],
+        },
         application: { projectId: 'shop-project#cloud-id', branchId: undefined },
       } as unknown as LowerContext;
       const provisioned = {
@@ -1031,9 +1122,9 @@ describe("prismaCloud().nodes['s3-store'] — the service descriptor with extend
         endpointDomain: 'https://store-svc.example',
       };
       // buildConfig would populate inputs.credentials from the wired resource's
-      // lowered outputs; bucket is the service's own param.
+      // lowered outputs; bucket is a key of the service's own input document.
       const config = {
-        service: { port: 3000, bucket: 'streams' },
+        service: { port: 3000 },
         inputs: { credentials: { accessKeyId: 'AKIA123', secretAccessKey: 'sekret' } },
       };
 
@@ -1053,18 +1144,18 @@ describe("prismaCloud().nodes['s3-store'] — the service descriptor with extend
   test('serialize fails closed when credentials or bucket are unwired (F5)', async () => {
     await withEnv({}, () => {
       const target = prismaCloud({ workspaceId: 'ws_1' });
-      const node = s3StoreService({ name: 'store', deps: {}, build });
-      const ctx = {
-        address: 'store',
-        node,
-        graph: { inputBindings: [], edges: [] },
-        application: { projectId: 'shop-project#cloud-id', branchId: undefined },
-      } as unknown as LowerContext;
       const provisioned = {
         projectId: 'shop-project#cloud-id',
         endpointDomain: 'https://svc.example',
       };
-      const serialize = (config: unknown) =>
+      const ctxFor = (node: unknown, inputBindings: readonly unknown[]) =>
+        ({
+          address: 'store',
+          node,
+          graph: { inputBindings, edges: [] },
+          application: { projectId: 'shop-project#cloud-id', branchId: undefined },
+        }) as unknown as LowerContext;
+      const serialize = (ctx: LowerContext, config: unknown) =>
         run<MockedS3StoreSerialized>(
           serviceDescriptorOf(target, 's3-store').serialize(
             ctx,
@@ -1073,17 +1164,28 @@ describe("prismaCloud().nodes['s3-store'] — the service descriptor with extend
           ),
         );
 
-      // No credentials wired.
-      expect(() => serialize({ service: { port: 3000, bucket: 'streams' }, inputs: {} })).toThrow(
-        /must wire a 'credentials' dependency and a 'bucket' param/,
-      );
-      // No bucket param.
+      // No credentials wired (the bucket input is fine).
+      const withBucket = s3StoreService({
+        name: 'store',
+        deps: {},
+        input: type({ bucket: 'string' }),
+        build,
+      });
       expect(() =>
-        serialize({
+        serialize(
+          ctxFor(withBucket, [{ serviceAddress: 'store', binding: { bucket: 'streams' } }]),
+          { service: { port: 3000 }, inputs: {} },
+        ),
+      ).toThrow(/must wire a 'credentials' dependency and declare a 'bucket' input key/);
+
+      // No input schema at all — no document, so no bucket key.
+      const withoutInput = s3StoreService({ name: 'store', deps: {}, build });
+      expect(() =>
+        serialize(ctxFor(withoutInput, []), {
           service: { port: 3000 },
           inputs: { credentials: { accessKeyId: 'AKIA123', secretAccessKey: 'sekret' } },
         }),
-      ).toThrow(/must wire a 'credentials' dependency and a 'bucket' param/);
+      ).toThrow(/must wire a 'credentials' dependency and declare a 'bucket' input key/);
     });
   });
 
