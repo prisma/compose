@@ -28,6 +28,9 @@ const MAX_DATABASE_PORT = 65_535;
 const APPS_STATE_MODE = 0o600;
 /** Spec § 2 step 5's pattern, applied to a fresh database-port allocation. */
 const MAX_FRESH_PORT_CANDIDATES = 5;
+/** Adoption patience for a name whose live lock holder is still mid-boot. */
+const MAX_ADOPT_ATTEMPTS = 8;
+const ADOPT_RETRY_DELAY_MS = 400;
 
 const NOT_INSTALLED_MESSAGE =
   'local dev needs @prisma/dev for its local Postgres emulator — add "prisma" to your app\'s devDependencies.';
@@ -477,28 +480,32 @@ function main(): void {
         return { url };
       } catch (err) {
         if (isNameAlreadyTaken(err)) {
-          // Our own earlier attempt (this loop's, or a crashed run's) left the
-          // name behind — the name is namespaced to this app+database, so it
-          // is ours by construction. A live server is simply the goal already
-          // reached: adopt it. A dead state entry is cleared and the start
-          // retried.
-          const ghost = await adoptableServerOf(err);
-          if (ghost !== undefined) {
-            const url = ghost.database.connectionString;
-            runtimes.set(instanceName, ghost);
-            appRec.databases[id] = {
-              id,
-              instanceName,
-              databasePort: databasePortOf(url) ?? dbPort,
-              url,
-            };
-            schedulePersist();
-            return { url };
-          }
-          if (attempt < MAX_FRESH_PORT_CANDIDATES) {
-            const internalState = await importPrismaDevInternalState(prismaDevModulePath);
-            await internalState.deleteServer(instanceName);
-            continue;
+          // "Already running" is thrown on ELOCKED — a LIVE process holds
+          // this server's state lock (verified in @prisma/dev's source; the
+          // parent stale-state error class is never thrown). The name is
+          // namespaced to this app+database, so that live server IS the goal:
+          // adopt it. The holder may still be mid-boot (its dump briefly
+          // unreadable), so adoption is retried with patience. NEVER delete
+          // the server's state or data here — the previous recovery did, and
+          // deleting pglite's files under a live holder wiped a migrated
+          // database's schema and crashed the daemon natively and silently.
+          for (let adoptAttempt = 1; adoptAttempt <= MAX_ADOPT_ATTEMPTS; adoptAttempt += 1) {
+            const ghost = await adoptableServerOf(err);
+            if (ghost !== undefined) {
+              const url = ghost.database.connectionString;
+              runtimes.set(instanceName, ghost);
+              appRec.databases[id] = {
+                id,
+                instanceName,
+                databasePort: databasePortOf(url) ?? dbPort,
+                url,
+              };
+              schedulePersist();
+              return { url };
+            }
+            if (adoptAttempt < MAX_ADOPT_ATTEMPTS) {
+              await new Promise((resolve) => setTimeout(resolve, ADOPT_RETRY_DELAY_MS));
+            }
           }
         }
         const conflictPort = portConflictOf(err, [
