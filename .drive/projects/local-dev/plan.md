@@ -133,10 +133,11 @@ scripts. Implementer dispatches use Sonnet-4.6-mid, reviewers Opus-4.8-mid
   nor a secret/env-param; the S4 fixture needs both to script the bucket
   file-drop round-trip and the placeholder-warning / env-param-error
   criteria at the CLI level.
-- **Emulator stop/reap honesty (verify):** after `stopServices()`, the
-  listing shows `stopped`/`pid: null` while the OS process may still be in
-  its SIGTERM grace window. Verify against the pinned stop semantics and
-  make the listing truthful (S3 code).
+- ~~Emulator stop/reap honesty~~ — **resolved, no bug**: `killChild`
+  already awaits SIGTERM → 5 s grace → SIGKILL → exit before state flips;
+  the observation was the grace period itself. Locked in by a regression
+  test (an ignores-SIGTERM fixture: the listing never says `stopped` while
+  the pid lives, and the stop measurably takes the grace period).
 
 ## Close-out (required)
 
