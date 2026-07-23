@@ -83,9 +83,13 @@ describe('startWatch()', () => {
     // A single-file `fs.watch` bound to the original inode goes silently
     // dead after the file is unlinked and a new one created at the same
     // path — exactly what `rm -rf dist && bun build --outfile dist/x.mjs`
-    // does on every rebuild. Watching the file's PARENT directory instead
-    // (this module's actual strategy) survives it — found live against
-    // examples/store's catalog service during the S5 proving pass.
+    // does on every rebuild. Found live against examples/store's catalog
+    // service during the S5 proving pass; the fix at the time was a
+    // hand-rolled parent-directory watch, since replaced by chokidar
+    // (design tip 74272d8), which absorbs this class of rename/inode-swap
+    // itself. The regression this test guards against is unchanged, so its
+    // assertions stay exactly as they were — only the engine underneath
+    // changed.
     const dir = tempDir();
     const file = path.join(dir, 'server.mjs');
     fs.writeFileSync(file, 'v1');
@@ -94,6 +98,10 @@ describe('startWatch()', () => {
     const stop = startWatch([{ address: 'catalog', paths: [file] }], () => {
       calls += 1;
     });
+    // chokidar's own watch setup is asynchronous (it returns synchronously,
+    // then finishes attaching OS-level watches shortly after) — a grace
+    // window before the first change, not a change to what's asserted.
+    await sleep(100);
 
     try {
       fs.rmSync(file);
