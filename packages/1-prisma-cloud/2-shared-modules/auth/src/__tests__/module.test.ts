@@ -1,14 +1,15 @@
 /**
  * The `auth()` module Loads into a wired graph: the db is a BOUNDARY dep the
- * root supplies (D2 — dedicated vs shared is the root's call), the instance
- * secret is provisioned inside (D8), the service wires to both, the
- * `baseUrl` boundary param forwards down, and the three ports wire to
- * consumers independently (least-privilege by wiring, D9).
+ * root supplies (dedicated vs shared is the root's call), the instance
+ * secret is the service's ordinary slot bound to `mintedSecret()` inside the
+ * factory (consumers see no secret slot), the `baseUrl` boundary param
+ * forwards down, and the three ports wire to consumers independently
+ * (least-privilege by wiring).
  */
 import { describe, expect, test } from 'bun:test';
 import { isParamSource, Load, module, paramSource } from '@internal/core';
 import node from '@internal/node';
-import { compute } from '@internal/prisma-cloud';
+import { compute, isMintedSecretBinding } from '@internal/prisma-cloud';
 import { pnContract, pnPostgres } from '@internal/prisma-cloud/prisma-next';
 import { rpc } from '@internal/service-rpc';
 import { auth } from '../auth-module.ts';
@@ -48,7 +49,7 @@ function rootWithAuth() {
 }
 
 describe('auth()', () => {
-  test('Loads the secret and the service; the db stays a boundary dep wired through', () => {
+  test('Loads the service with a minted secret slot; the db stays a boundary dep wired through', () => {
     const graph = Load(rootWithAuth());
     const byId = new Map(graph.nodes.map((n) => [n.id, n.node]));
     const typeOf = (id: string): string | undefined => {
@@ -56,7 +57,6 @@ describe('auth()', () => {
       return n !== undefined && 'type' in n ? n.type : undefined;
     };
 
-    expect(typeOf('auth.secret')).toBe('auth-secret');
     expect(typeOf('auth.service')).toBe('compute');
     // The database is the ROOT's node — the module provisions no db of its own.
     expect(typeOf('database')).toBe('prisma-next');
@@ -66,12 +66,13 @@ describe('auth()', () => {
       input: 'db',
       kind: 'dependency',
     });
-    expect(graph.edges).toContainEqual({
-      from: 'auth.secret',
-      to: 'auth.service',
-      input: 'secret',
-      kind: 'dependency',
-    });
+    // The instance secret is the service's ordinary slot, bound to
+    // mintedSecret() by the factory — no dedicated secret node exists.
+    const binding = graph.secrets.find(
+      (b) => b.serviceAddress === 'auth.service' && b.slot === 'secret',
+    );
+    expect(binding).toBeDefined();
+    expect(isMintedSecretBinding(binding!)).toBe(true);
   });
 
   test('forwards the baseUrl boundary param down to the service', () => {
@@ -124,7 +125,9 @@ describe('auth()', () => {
       }),
     );
     const ids = graph.nodes.map((n) => n.id);
-    expect(ids).toContain('identity.secret');
     expect(ids).toContain('identity.service');
+    expect(
+      graph.secrets.some((b) => b.serviceAddress === 'identity.service' && b.slot === 'secret'),
+    ).toBe(true);
   });
 });

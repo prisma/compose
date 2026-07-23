@@ -16,7 +16,6 @@ import * as RealOutput from 'alchemy/Output';
 import { type } from 'arktype';
 import * as Effect from 'effect/Effect';
 import * as Redacted from 'effect/Redacted';
-import * as RealAuthSecret from '../auth-secret-resource.ts';
 import { PRISMA_CLOUD_EXTENSION_ID, PrismaCloudContainer } from '../container.ts';
 import type { ComputeProvisioned, ComputeSerialized } from '../descriptors/compute.ts';
 import { computeDescriptor } from '../descriptors/compute.ts';
@@ -29,6 +28,7 @@ import {
   projectIdOf,
   type ResolvedCloudOptions,
 } from '../descriptors/shared.ts';
+import * as RealMintedSecret from '../minted-secret-resource.ts';
 import * as RealPgWarm from '../pg-warm-resource.ts';
 import * as RealS3Credentials from '../s3-credentials-resource.ts';
 
@@ -47,7 +47,7 @@ const recorded: {
   pkg: Array<[unknown]>;
   serviceKey: Array<[string, unknown]>;
   creds: Array<[string, unknown]>;
-  authSecret: Array<[string, unknown]>;
+  mintedSecret: Array<[string, unknown]>;
   bucket: Array<[string, unknown]>;
   bucketKey: Array<[string, unknown]>;
 } = {
@@ -60,7 +60,7 @@ const recorded: {
   pkg: [],
   serviceKey: [],
   creds: [],
-  authSecret: [],
+  mintedSecret: [],
   bucket: [],
   bucketKey: [],
 };
@@ -156,22 +156,21 @@ mock.module('../s3-credentials-resource.ts', () => ({
   S3CredentialsProvider: () => ({ stub: 's3-credentials-provider' }),
 }));
 
-// AuthSecret is a real Alchemy Resource (needs the Stack service); stub it so
-// the auth-secret lowering's data flow runs purely. The real provider mints a
+// MintedSecret is a real Alchemy Resource (needs the Stack service); stub it
+// so the minted-slot serialize path runs purely. The real provider mints a
 // random secret — a fixed value here so assertions can name it.
-mock.module('../auth-secret-resource.ts', () => ({
-  ...RealAuthSecret,
-  AuthSecret: (id: string, props: unknown) => {
-    recorded.authSecret.push([id, props]);
-    return Effect.succeed({ value: 'auth-secret-stub' });
+mock.module('../minted-secret-resource.ts', () => ({
+  ...RealMintedSecret,
+  MintedSecret: (id: string, props: unknown) => {
+    recorded.mintedSecret.push([id, props]);
+    return Effect.succeed({ value: 'minted-secret-stub' });
   },
-  AuthSecretProvider: () => ({ stub: 'auth-secret-provider' }),
+  MintedSecretProvider: () => ({ stub: 'minted-secret-provider' }),
 }));
 
 const { prismaCloud } = await import('../exports/control.ts');
-const { compute, envParam, envSecret, postgres, postgresContract, s3StoreService } = await import(
-  '../exports/index.ts'
-);
+const { compute, envParam, envSecret, mintedSecret, postgres, postgresContract, s3StoreService } =
+  await import('../exports/index.ts');
 const { dependency, module, provisionNeed, secret, string } = await import('@internal/core');
 const { lowering } = await import('@internal/core/deploy');
 const { RPC_PEER_KEY } = await import('@internal/service-rpc');
@@ -471,22 +470,6 @@ describe("prismaCloud().nodes['credentials'] — the resource descriptor", () =>
   });
 });
 
-describe("prismaCloud().nodes['auth-secret'] — the resource descriptor", () => {
-  test('reports NO entities — a minted secret is secret material, and an entity is built to be printed', () => {
-    const target = prismaCloud({ workspaceId: 'ws_1' });
-    const ctx = { id: 'secret' } as unknown as LowerContext;
-
-    const result = run<LoweredResult>(resourceDescriptorOf(target, 'auth-secret')(ctx));
-
-    // The secret reaches consumers through the OUTPUTS — that is what they are for.
-    expect(result.outputs).toEqual({ value: 'auth-secret-stub' });
-    // It must never reach an entity. Entities get rendered to a terminal
-    // and are the one channel with nothing publishable to say here.
-    expect(result.entities).toEqual([]);
-    expect(recorded.authSecret).toEqual([['secret-secret', {}]]);
-  });
-});
-
 describe("prismaCloud().nodes['s3'] — the real-bucket resource descriptor", () => {
   test('creates a Bucket + BucketKey; outputs carry the four S3Config names; entity carries the bucket id', async () => {
     await withEnv({}, () => {
@@ -775,6 +758,65 @@ describe("prismaCloud().nodes['compute'] — the service descriptor", () => {
         expect(JSON.stringify(writes)).not.toContain('sk_live');
       },
     );
+  });
+
+  test('a mintedSecret slot mints at serialize: a framework var carries the minted value, the pointer row names it', () => {
+    const target = prismaCloud({ workspaceId: 'ws_1' });
+    const node = compute({
+      name: 'auth',
+      deps: {},
+      secrets: { instanceKey: secret() },
+      build: {
+        extension: '@prisma/composer/node',
+        type: 'node',
+        module: 'file:///test/service.ts',
+        entry: 'server.js',
+      },
+    });
+    // The enclosing module bound the slot to mintedSecret() — no user name.
+    const graph = {
+      secrets: [{ serviceAddress: 'auth', slot: 'instanceKey', source: mintedSecret() }],
+      edges: [],
+    };
+    const ctx = {
+      address: 'auth',
+      node,
+      graph,
+      application: { projectId: 'shop-project#cloud-id', branchId: undefined },
+    } as unknown as LowerContext;
+    const provisioned = {
+      projectId: 'shop-project#cloud-id',
+      endpointDomain: 'https://svc.example',
+    };
+    const config = { service: { port: 3000 }, inputs: {} };
+    const before = recorded.envVar.length;
+    const mintedBefore = recorded.mintedSecret.length;
+
+    run<MockedSerialized>(
+      serviceDescriptorOf(target, 'compute').serialize(ctx, provisioned, config),
+    );
+
+    // One MintedSecret resource, keyed by the slot's config key — stable per
+    // service+slot, so its provider keeps the value across deploys.
+    expect(recorded.mintedSecret.slice(mintedBefore)).toEqual([
+      ['COMPOSER_AUTH_INSTANCEKEY-minted', {}],
+    ]);
+    const writes = recorded.envVar.slice(before).map(([, props]) => props);
+    // The minted value lands in the framework-owned var...
+    expect(writes).toContainEqual({
+      projectId: 'shop-project#cloud-id',
+      key: 'COMPOSER_AUTH_INSTANCEKEY_MINTED',
+      value: 'minted-secret-stub',
+      class: 'production',
+    });
+    // ...and the slot's pointer row names that var, so boot's double-lookup
+    // is identical to the envSecret path.
+    expect(writes).toContainEqual({
+      projectId: 'shop-project#cloud-id',
+      key: 'COMPOSER_AUTH_INSTANCEKEY',
+      value: 'COMPOSER_AUTH_INSTANCEKEY_MINTED',
+      class: 'production',
+    });
   });
 
   test('an env-sourced param serializes a POINTER row — value is the bound platform NAME, never a value', async () => {

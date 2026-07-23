@@ -5,7 +5,7 @@ import { PrismaCloudContainer } from '../container.ts';
 import { compute } from '../exports/index.ts';
 import { envParam } from '../param.ts';
 import { runPreflight } from '../preflight.ts';
-import { envSecret } from '../secret.ts';
+import { envSecret, mintedSecret } from '../secret.ts';
 
 /** A resolved container matching `input.container` after the boundary move — preflight narrows it with `prismaCloudContainerOf`. */
 const fakeContainer = (projectId: string, branchId: string | undefined) =>
@@ -268,6 +268,25 @@ describe('runPreflight — secret manifest verification (ADR-0029)', () => {
   test('a graph with no pointer secrets is a pass-through — no platform calls at all', async () => {
     await runPreflight(
       { graph: noSecretGraph(), container: fakeContainer('proj', undefined), stage: undefined },
+      { client: fakeClient(state) },
+    );
+
+    expect(state.gets).toEqual([]);
+    expect(state.posts).toEqual([]);
+  });
+
+  test('a mintedSecret binding is skipped — the deploy provisions it, not the user', async () => {
+    const mintedGraph = Load(
+      module('app', ({ provision }) => {
+        provision(compute({ name: 'svc', deps: {}, secrets: { token: secret() }, build }), {
+          id: 'svc',
+          secrets: { token: mintedSecret() },
+        });
+      }),
+    );
+
+    await runPreflight(
+      { graph: mintedGraph, container: fakeContainer('proj', undefined), stage: undefined },
       { client: fakeClient(state) },
     );
 

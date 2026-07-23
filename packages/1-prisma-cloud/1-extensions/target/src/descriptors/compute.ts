@@ -5,12 +5,14 @@ import type { ServiceLowering } from '@internal/core/deploy';
 import * as Prisma from '@internal/lowering';
 import * as Output from 'alchemy/Output';
 import * as Effect from 'effect/Effect';
+import { MintedSecret } from '../minted-secret-resource.ts';
 import { paramBindingFor, paramName } from '../param.ts';
 import { provisionedEdges } from '../provisioned-edges.ts';
 import {
   configKey,
   encode,
   encodeParamPointer,
+  mintedSecretVarName,
   paramEntries,
   secretPointerRows,
 } from '../serializer.ts';
@@ -76,7 +78,9 @@ export function computeDescriptor(
 
     // Two channels of rows: PARAMS (service-own literals JSON-encoded; dependency
     // provisioning refs passed through, keeping their ordering edge) and SECRETS
-    // (a POINTER row per slot holding the bound platform NAME, never a value —
+    // (a POINTER row per slot holding the platform NAME the slot resolves
+    // through — the root-bound name for envSecret, a framework-minted-and-
+    // provisioned var for mintedSecret; a user value never enters a row —
     // ADR-0029). The class/branch scope is identical for both.
     serialize: (ctx, provisioned, config) =>
       Effect.gen(function* () {
@@ -115,12 +119,34 @@ export function computeDescriptor(
           );
         }
 
-        for (const { key, name } of secretPointerRows(svc, address, graph.secrets)) {
+        for (const row of secretPointerRows(svc, address, graph.secrets)) {
+          const { key } = row;
+          let name: string | undefined;
+          if (row.kind === 'minted') {
+            // A minted slot has no user-provisioned var to point at: mint the
+            // value (a MintedSecret resource — stable across deploys, its
+            // provider returns the persisted value) and provision it under
+            // the framework-owned var the pointer row then names. Boot's
+            // double-lookup is identical to the env-sourced path.
+            name = mintedSecretVarName(key);
+            const secret = yield* MintedSecret(`${key}-minted`, {});
+            records.push(
+              yield* Prisma.EnvironmentVariable(`${name}-var`, {
+                projectId,
+                key: name,
+                value: secret.value,
+                class: cls,
+                ...branch,
+              }),
+            );
+          } else {
+            name = row.name;
+          }
           records.push(
             yield* Prisma.EnvironmentVariable(`${key}-var`, {
               projectId,
               key,
-              // The pointer: the platform env-var NAME the root bound the slot to.
+              // The pointer: the platform env-var NAME the slot resolves through.
               value: name,
               class: cls,
               ...branch,

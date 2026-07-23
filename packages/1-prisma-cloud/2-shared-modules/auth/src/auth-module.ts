@@ -1,15 +1,16 @@
 /**
- * The `auth()` module (spec § Module factory, S1 shape — the `email`
- * boundary dep arrives with slice S2): a dedicated service wrapping Better
+ * The `auth()` module (spec § Module factory — the `email` boundary dep
+ * arrives with the email-flows slice): a dedicated service wrapping Better
  * Auth. The database is a BOUNDARY dependency — the root decides dedicated
- * vs shared (D2); the instance secret is provisioned inside, platform-minted
- * and invisible to consumers (D8). `baseUrl` is the PUBLIC origin of the
- * consumer app (scheme+host, no trailing slash, no path); roots bind it
+ * vs shared; the instance secret is the service's ordinary secret slot,
+ * bound to `mintedSecret()` here so it is platform-minted and invisible to
+ * consumers. `baseUrl` is the PUBLIC origin of the consumer app
+ * (scheme+host, no trailing slash, no path); roots bind it
  * `envParam('AUTH_BASE_URL')`.
  */
 import type { ModuleNode, ParamNeed } from '@internal/core';
 import { module, paramNeed } from '@internal/core';
-import { authSecret } from '@internal/prisma-cloud';
+import { mintedSecret } from '@internal/prisma-cloud';
 import { authService } from './auth-service.ts';
 import { authAdminContract, authApiContract, authDb, authSessionContract } from './contract.ts';
 
@@ -35,10 +36,10 @@ export function auth(opts?: { name?: string }): ModuleNode<
       },
     },
     ({ inputs, params, provision }) => {
-      const secret = provision(authSecret({ name: 'secret' }), { id: 'secret' });
       const service = provision(authService(), {
         id: 'service',
-        deps: { db: inputs.db, secret },
+        deps: { db: inputs.db },
+        secrets: { secret: mintedSecret() },
         params: { baseUrl: params.baseUrl },
       });
       return { api: service.api, session: service.session, admin: service.admin };

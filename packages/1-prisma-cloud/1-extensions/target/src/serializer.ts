@@ -24,7 +24,7 @@ import type { Config, ConfigParam, Params, SecretBinding, ServiceNode } from '@i
 import { blindCast } from '@internal/foundation/casts';
 import type { StandardSchemaV1 } from '@standard-schema/spec';
 import { type } from 'arktype';
-import { secretName } from './secret.ts';
+import { isMintedSecretBinding, secretName } from './secret.ts';
 
 // The ambient environment of whatever runtime hosts the bundle. Declared
 // structurally so this entry imports no runtime's types. Writable: stash()
@@ -215,27 +215,38 @@ export const stash = (node: ServiceNode, config: Config): void => {
 // ——— Secret channel (ADR-0029): a POINTER row per secret slot, boot double-lookup.
 //
 // A secret is NOT a param — it is its own slot on the node (`node.secretSlots`).
-// Deploy writes COMPOSER_<addr>_<slot> = <platform env-var NAME> (the name the
-// root bound it to, from `graph.secrets`); the value never enters this row or
-// deploy state. Boot reads that pointer, then the platform var it names, and
-// wraps the result in a SecretBox (core's `hydrateSecrets`). Writer (deploy) and
-// reader (boot) share `secretKey`, so they cannot drift.
+// Deploy writes COMPOSER_<addr>_<slot> = <platform env-var NAME>: for an
+// envSecret binding, the name the root bound it to (from `graph.secrets`; the
+// value never enters this row or deploy state); for a mintedSecret binding,
+// the framework-provisioned var the deploy minted the value into. Boot reads
+// that pointer, then the platform var it names, and wraps the result in a
+// SecretBox (core's `hydrateSecrets`). Writer (deploy) and reader (boot)
+// share `secretKey`, so they cannot drift.
 
 /** The pointer-row key for a secret slot: COMPOSER_<addr>_<slot> (secrets are service-level). */
 export const secretKey = (address: string, slot: string): string =>
   configKey(address, { owner: 'service', name: slot });
 
-/** One secret pointer row to write at deploy: the slot's key mapped to the bound platform NAME. */
-export interface SecretRow {
-  readonly key: string;
-  readonly name: string;
-}
+/** The platform var the deploy provisions for a minted slot's value. Lives in the framework's reserved COMPOSER_ namespace (envSecret rejects COMPOSER_ names), so it can never collide with a user-provisioned var. */
+export const mintedSecretVarName = (key: string): string => `${key}_MINTED`;
 
 /**
- * Deploy: the pointer rows for a node's secret slots — each slot's key mapped to
- * the platform NAME the root bound it to (looked up in `graph.secrets`). Never a
- * value. A declared slot with no binding is a Load-invariant violation (Load
- * binds every slot), surfaced loudly here rather than written as a blank row.
+ * One secret row to write at deploy, by how the slot was bound:
+ *   - `env` — a POINTER row only: the slot's key mapped to the platform NAME
+ *     the root bound it to; the value never touches the deploy.
+ *   - `minted` — the deploy mints the value itself, provisions it under
+ *     `mintedSecretVarName(key)`, and points the slot's key at that var.
+ * Boot's double-lookup (`deserializeSecrets`) is identical for both.
+ */
+export type SecretRow =
+  | { readonly kind: 'env'; readonly key: string; readonly name: string }
+  | { readonly kind: 'minted'; readonly key: string };
+
+/**
+ * Deploy: the secret rows for a node's secret slots (looked up in
+ * `graph.secrets`). A declared slot with no binding is a Load-invariant
+ * violation (Load binds every slot), surfaced loudly here rather than
+ * written as a blank row.
  */
 export function secretPointerRows(
   node: ServiceNode,
@@ -250,7 +261,12 @@ export function secretPointerRows(
         `secret slot "${slot}" of "${address}" has no bound platform name — Load should have bound it (ADR-0029).`,
       );
     }
-    rows.push({ key: secretKey(address, slot), name: secretName(binding) });
+    const key = secretKey(address, slot);
+    rows.push(
+      isMintedSecretBinding(binding)
+        ? { kind: 'minted', key }
+        : { kind: 'env', key, name: secretName(binding) },
+    );
   }
   return rows;
 }

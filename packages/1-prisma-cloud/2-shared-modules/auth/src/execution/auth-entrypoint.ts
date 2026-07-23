@@ -1,9 +1,9 @@
 // The reusable boot module the auth service's build points `entry` at (see
 // authService's `node({ entry: './auth-entrypoint.mjs' })`). Mirrors email's
-// entrypoint: load() hands the hydrated `db` + minted `secret` bindings,
-// config() the params — no env reads outside the framework accessors, and NO
-// schema work at boot: the deploy migrated and marker-signed the auth space
-// before this process exists (D5).
+// entrypoint: load() hands the hydrated `db` binding, config() the params,
+// secrets() the platform-minted instance secret — no env reads outside the
+// framework accessors, and NO schema work at boot: the deploy migrated and
+// marker-signed the auth space before this process exists.
 
 import { serve } from '@internal/service-rpc';
 import { betterAuth } from 'better-auth';
@@ -15,12 +15,15 @@ import { composeAuthFetch } from './fetch-router.ts';
 
 const service = authService();
 
-const { db, secret } = service.load();
+const { db } = service.load();
 const { baseUrl, port } = service.config();
+const { secret } = service.secrets();
 
-// S1: sendEmail absent — the three Better Auth send callbacks log the
-// pinned not-wired line; slice S2 wires the email module here.
-const auth = betterAuth(buildAuthOptions({ databaseUrl: db.url, secret: secret.value, baseUrl }));
+// sendEmail absent for now — the three Better Auth send callbacks log the
+// pinned not-wired line; the email-flows slice wires the email module here.
+const auth = betterAuth(
+  buildAuthOptions({ databaseUrl: db.url, secret: secret.expose(), baseUrl }),
+);
 
 // DB-direct handlers (D12): the ports authorize via wiring, never via
 // Better Auth admin sessions — so they speak SQL through the service's own

@@ -28,7 +28,7 @@ import { prismaCloudContainerOf } from './container.ts';
 import { isEnvParamSource, paramName } from './param.ts';
 import { resolvePrismaNextConfig } from './pn-config.ts';
 import { isPnPostgresResourceNode, requiredPackHeadOf } from './prisma-next.ts';
-import { secretName } from './secret.ts';
+import { isMintedSecretBinding, secretName } from './secret.ts';
 
 type EnvClass = 'production' | 'preview';
 
@@ -203,6 +203,9 @@ export async function runPreflight(
   // env-sourced — a literal-bound param never touches the platform.
   const names = new Map<string, MissingBinding>();
   for (const binding of provisionManifest(input.graph)) {
+    // A minted binding has nothing to check: no user provisions its var —
+    // the deploy itself mints the value and writes it (compute's serialize).
+    if (isMintedSecretBinding(binding)) continue;
     const name = secretName(binding);
     if (!names.has(name)) names.set(name, { name, serviceAddress: binding.serviceAddress });
   }
