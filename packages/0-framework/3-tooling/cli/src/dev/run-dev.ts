@@ -228,46 +228,50 @@ export async function runDev(args: DevArgs, deps: DevRunDeps = {}): Promise<numb
     console.log(`[dev] ${address} has no watchable inputs`);
   }
 
+  const watch = startWatch(targets, () => {
+    void (async () => {
+      const rePipeline = await runPipeline(args.entry, args.name, cwd, pipelineDeps).catch(
+        (error: unknown) => {
+          console.error(
+            `[dev] rebuild failed: ${error instanceof Error ? error.message : String(error)}`,
+          );
+          return undefined;
+        },
+      );
+      if (rePipeline === undefined) return;
+      writeDevStackFile({
+        entryPath: rePipeline.entryModule.path,
+        cwd,
+        configPath: rePipeline.configPath,
+        name: rePipeline.name,
+        assembled: rePipeline.assembled,
+      });
+      const status = (deps.alchemy ?? runAlchemy)({
+        command: 'deploy',
+        stackFileRelativePath: DEV_STACK_RELATIVE_PATH,
+        cwd,
+        stage: 'dev',
+        containerEnv: containerEnv(containers),
+      });
+      if (status !== 0) {
+        console.error('[dev] converge failed — the running app is untouched; still watching.');
+        return;
+      }
+      printFrontDoor(await mergedEndpoints(attachments));
+    })();
+  });
+  // A rebuild finishing before the OS-level watches attach would otherwise
+  // be missed entirely — wait until watching is real before handing over.
+  await watch.ready;
+
   await new Promise<void>((resolve) => {
     let stopping = false;
-    const stopWatch = startWatch(targets, () => {
-      void (async () => {
-        const rePipeline = await runPipeline(args.entry, args.name, cwd, pipelineDeps).catch(
-          (error: unknown) => {
-            console.error(
-              `[dev] rebuild failed: ${error instanceof Error ? error.message : String(error)}`,
-            );
-            return undefined;
-          },
-        );
-        if (rePipeline === undefined) return;
-        writeDevStackFile({
-          entryPath: rePipeline.entryModule.path,
-          cwd,
-          configPath: rePipeline.configPath,
-          name: rePipeline.name,
-          assembled: rePipeline.assembled,
-        });
-        const status = (deps.alchemy ?? runAlchemy)({
-          command: 'deploy',
-          stackFileRelativePath: DEV_STACK_RELATIVE_PATH,
-          cwd,
-          stage: 'dev',
-          containerEnv: containerEnv(containers),
-        });
-        if (status !== 0) {
-          console.error('[dev] converge failed — the running app is untouched; still watching.');
-          return;
-        }
-        printFrontDoor(await mergedEndpoints(attachments));
-      })();
-    });
 
     const finish = (): void => {
       if (stopping) return;
       stopping = true;
       console.log("[dev] stopping — the app's services are stopping; emulators and data stay up.");
-      stopWatch();
+      watch.stop();
       void (async () => {
         logsController.abort();
         for (const attachment of attachments) {

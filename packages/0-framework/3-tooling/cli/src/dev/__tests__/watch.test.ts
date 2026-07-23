@@ -12,6 +12,12 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** Polls until `cond` holds or the deadline passes — assertions stay exact, only the waiting adapts to a loaded runner. */
+async function until(cond: () => boolean, timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!cond() && Date.now() < deadline) await sleep(25);
+}
+
 describe('watchTargetsFrom()', () => {
   test('a bundle with no watch field is reported unwatchable, not a target', () => {
     const { targets, unwatchable } = watchTargetsFrom({
@@ -31,7 +37,7 @@ describe('startWatch()', () => {
     fs.writeFileSync(fileB, 'b');
 
     let calls = 0;
-    const stop = startWatch(
+    const watch = startWatch(
       [
         { address: 'a', paths: [fileA] },
         { address: 'b', paths: [fileB] },
@@ -40,6 +46,7 @@ describe('startWatch()', () => {
         calls += 1;
       },
     );
+    await watch.ready;
 
     try {
       // A burst across both files, all inside the 300ms debounce window.
@@ -54,10 +61,10 @@ describe('startWatch()', () => {
       expect(calls).toBe(0);
 
       // Past the 300ms debounce from the last write.
-      await sleep(300);
+      await until(() => calls === 1, 2000);
       expect(calls).toBe(1);
     } finally {
-      stop();
+      watch.stop();
       fs.rmSync(dir, { recursive: true, force: true });
     }
   }, 10_000);
@@ -68,10 +75,10 @@ describe('startWatch()', () => {
     fs.writeFileSync(file, 'a');
 
     let calls = 0;
-    const stop = startWatch([{ address: 'a', paths: [file] }], () => {
+    const watch = startWatch([{ address: 'a', paths: [file] }], () => {
       calls += 1;
     });
-    stop();
+    watch.stop();
 
     fs.writeFileSync(file, 'a2');
     await sleep(500);
@@ -95,28 +102,28 @@ describe('startWatch()', () => {
     fs.writeFileSync(file, 'v1');
 
     let calls = 0;
-    const stop = startWatch([{ address: 'catalog', paths: [file] }], () => {
+    const watch = startWatch([{ address: 'catalog', paths: [file] }], () => {
       calls += 1;
     });
-    // chokidar's own watch setup is asynchronous (it returns synchronously,
-    // then finishes attaching OS-level watches shortly after) — a grace
-    // window before the first change, not a change to what's asserted.
-    await sleep(100);
+    // chokidar attaches its OS-level watches asynchronously — a change made
+    // before `ready` can be missed entirely, so wait for real attachment
+    // rather than guessing a grace period.
+    await watch.ready;
 
     try {
       fs.rmSync(file);
       fs.writeFileSync(file, 'v2');
-      await sleep(400);
+      await until(() => calls === 1, 3000);
       expect(calls).toBe(1);
 
       // A SECOND delete+recreate — the exact case that broke a
       // file-bound (not directory-bound) watch.
       fs.rmSync(file);
       fs.writeFileSync(file, 'v3');
-      await sleep(400);
+      await until(() => calls === 2, 3000);
       expect(calls).toBe(2);
     } finally {
-      stop();
+      watch.stop();
       fs.rmSync(dir, { recursive: true, force: true });
     }
   }, 10_000);

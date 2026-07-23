@@ -43,14 +43,20 @@ export function watchTargetsFrom(bundles: Readonly<Record<string, Bundle>>): {
   return { targets, unwatchable };
 }
 
+export interface WatchHandle {
+  /** Resolves once chokidar's OS-level watches are attached — a change made before this can be missed entirely. Also resolves on `stop()` so an awaiting caller can never hang. */
+  readonly ready: Promise<void>;
+  stop(): void;
+}
+
 /**
  * Watches every target's paths via chokidar, debounced 300 ms and coalesced
- * across every service, invoking `onChange` once per burst. Returns a stop
- * function. A path that doesn't exist on disk is simply never reported by
- * chokidar (nothing to watch) — no explicit existence check needed, unlike
- * the old `fs.watch`-based implementation.
+ * across every service, invoking `onChange` once per burst. A path that
+ * doesn't exist on disk is simply never reported by chokidar (nothing to
+ * watch) — no explicit existence check needed, unlike the old
+ * `fs.watch`-based implementation.
  */
-export function startWatch(targets: readonly WatchTarget[], onChange: () => void): () => void {
+export function startWatch(targets: readonly WatchTarget[], onChange: () => void): WatchHandle {
   let timer: ReturnType<typeof setTimeout> | undefined;
 
   const trigger = (): void => {
@@ -65,8 +71,18 @@ export function startWatch(targets: readonly WatchTarget[], onChange: () => void
   const watcher: FSWatcher = chokidar.watch(allPaths, { ignoreInitial: true });
   watcher.on('all', () => trigger());
 
-  return () => {
-    if (timer !== undefined) clearTimeout(timer);
-    void watcher.close();
+  let markReady: () => void = () => {};
+  const ready = new Promise<void>((resolve) => {
+    markReady = resolve;
+  });
+  watcher.on('ready', () => markReady());
+
+  return {
+    ready,
+    stop: () => {
+      if (timer !== undefined) clearTimeout(timer);
+      markReady();
+      void watcher.close();
+    },
   };
 }
