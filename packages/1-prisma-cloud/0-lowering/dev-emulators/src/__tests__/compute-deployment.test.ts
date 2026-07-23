@@ -10,6 +10,7 @@ import { computeClient, type ServiceInfo } from '../client.ts';
 import { ensureDaemon, stopDaemon } from '../daemon.ts';
 import {
   CRASHING_BOOTSTRAP,
+  entryFor,
   servingBootstrap,
   tempDir,
   waitFor,
@@ -22,7 +23,7 @@ let daemonUrl: string;
 
 beforeEach(async () => {
   registryRoot = tempDir('compute-deploy-registry');
-  const { url } = await ensureDaemon('compute', { registryRoot });
+  const { url } = await ensureDaemon('compute', entryFor('compute'), { registryRoot });
   daemonUrl = url;
 });
 

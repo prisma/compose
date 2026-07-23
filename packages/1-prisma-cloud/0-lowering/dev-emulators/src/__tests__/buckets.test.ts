@@ -17,14 +17,14 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { bucketsClient } from '../client.ts';
 import { ensureDaemon, stopDaemon } from '../daemon.ts';
-import { tempDir } from './helpers.ts';
+import { entryFor, tempDir } from './helpers.ts';
 
 let registryRoot: string;
 let daemonUrl: string;
 
 beforeEach(async () => {
   registryRoot = tempDir('buckets-registry');
-  const { url } = await ensureDaemon('buckets', { registryRoot });
+  const { url } = await ensureDaemon('buckets', entryFor('buckets'), { registryRoot });
   daemonUrl = url;
 });
 
@@ -108,7 +108,7 @@ describe('bucket + credential admin', () => {
     await client.putCredentials('myapp', 'AKIARESTART', 'restartsecret');
 
     await stopDaemon('buckets', { registryRoot });
-    const restarted = await ensureDaemon('buckets', { registryRoot });
+    const restarted = await ensureDaemon('buckets', entryFor('buckets'), { registryRoot });
     daemonUrl = restarted.url;
 
     // The secret survived: the original app's own credential still works.

@@ -18,7 +18,7 @@ import {
   registryFilePath,
   stopDaemon,
 } from '../daemon.ts';
-import { tempDir, waitFor } from './helpers.ts';
+import { entryFor, tempDir, waitFor } from './helpers.ts';
 
 let registryRoot: string;
 const started = new Set<DaemonName>();
@@ -36,7 +36,7 @@ afterEach(async () => {
 });
 
 async function ensure(name: DaemonName): Promise<{ url: string }> {
-  const result = await ensureDaemon(name, { registryRoot });
+  const result = await ensureDaemon(name, entryFor(name), { registryRoot });
   started.add(name);
   return result;
 }
@@ -99,7 +99,7 @@ describe('ensureDaemon', () => {
   test('is idempotent — a second call returns the same daemon without restarting it', async () => {
     const first = await ensure('compute');
     const before = readEntry('compute');
-    const second = await ensureDaemon('compute', { registryRoot });
+    const second = await ensureDaemon('compute', entryFor('compute'), { registryRoot });
     expect(second.url).toBe(first.url);
     const after = readEntry('compute');
     expect(after.pid).toBe(before.pid);
@@ -152,7 +152,7 @@ describe('ensureDaemon', () => {
       JSON.stringify({ pid: fakePid, port, version: '0.0.0-stale', logPath }),
     );
 
-    const second = await ensureDaemon('compute', { registryRoot });
+    const second = await ensureDaemon('compute', entryFor('compute'), { registryRoot });
     started.add('compute');
 
     expect(isPidAlive(fakePid)).toBe(false);
@@ -183,7 +183,7 @@ describe('ensureDaemon', () => {
               logPath: path.join(registryRoot, 'compute.log'),
             }),
           );
-          return ensureDaemon('compute', { registryRoot });
+          return ensureDaemon('compute', entryFor('compute'), { registryRoot });
         })(),
       ).rejects.toThrow(
         new RegExp(
@@ -325,7 +325,7 @@ describe('concurrent-ensure protocol', () => {
     fs.writeFileSync(path.join(lockDir, 'pid'), String(holderPid));
 
     try {
-      await expect(ensureDaemon('compute', { registryRoot })).rejects.toThrow(
+      await expect(ensureDaemon('compute', entryFor('compute'), { registryRoot })).rejects.toThrow(
         `timed out waiting for another process ensuring the compute emulator — remove ${lockDir} if stale.`,
       );
     } finally {

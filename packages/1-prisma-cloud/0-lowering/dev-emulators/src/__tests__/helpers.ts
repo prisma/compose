@@ -2,6 +2,18 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import type { DaemonName } from '../daemon.ts';
+
+/**
+ * `ensureDaemon` no longer resolves its own entry (spec § 2's publish note —
+ * the caller does, so the published dist can point at its own public
+ * subpaths). In-repo tests resolve the in-repo `@internal/dev-emulators/*-main`
+ * subpaths directly — the same resolution `daemon.ts` used to do internally.
+ */
+export function entryFor(name: DaemonName): string {
+  return fileURLToPath(import.meta.resolve(`@internal/dev-emulators/${name}-main`));
+}
 
 export function tempDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), `dev-emulators-${prefix}-`));

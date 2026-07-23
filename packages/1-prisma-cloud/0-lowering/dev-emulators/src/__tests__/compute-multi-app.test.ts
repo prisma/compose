@@ -7,13 +7,20 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { computeClient } from '../client.ts';
 import { ensureDaemon, stopDaemon } from '../daemon.ts';
-import { servingBootstrap, tempDir, waitFor, waitForHttp, writeBootstrap } from './helpers.ts';
+import {
+  entryFor,
+  servingBootstrap,
+  tempDir,
+  waitFor,
+  waitForHttp,
+  writeBootstrap,
+} from './helpers.ts';
 
 let registryRoot: string;
 
 beforeEach(async () => {
   registryRoot = tempDir('compute-multi-app-registry');
-  await ensureDaemon('compute', { registryRoot });
+  await ensureDaemon('compute', entryFor('compute'), { registryRoot });
 });
 
 afterEach(async () => {
@@ -116,14 +123,14 @@ test('deleting one app leaves the other app registered', async () => {
 
 describe('path-segment hygiene', () => {
   test('an app name with an uppercase letter is rejected with 400', async () => {
-    const { url } = await ensureDaemon('compute', { registryRoot });
+    const { url } = await ensureDaemon('compute', entryFor('compute'), { registryRoot });
     const res = await fetch(`${url}/apps/BadApp/services/web`, { method: 'PUT' });
     expect(res.status).toBe(400);
     expect(await res.text()).toContain('BadApp');
   });
 
   test('a service id over 63 characters is rejected with 400', async () => {
-    const { url } = await ensureDaemon('compute', { registryRoot });
+    const { url } = await ensureDaemon('compute', entryFor('compute'), { registryRoot });
     const longId = 'a'.repeat(64);
     const res = await fetch(`${url}/apps/tenant-one/services/${longId}`, { method: 'PUT' });
     expect(res.status).toBe(400);

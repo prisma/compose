@@ -120,16 +120,40 @@ export function healthPathFor(name: DaemonName): string {
   return name === 'compute' ? '/health' : '/_pcdev/health';
 }
 
-/** `@internal/dev-emulators`'s own `package.json` version — what "version" means everywhere in this package. */
+/**
+ * The version of whichever package this compiled `daemon.ts` copy ended up
+ * shipped inside — "this package's own version" everywhere in this module.
+ * Walks UP from this file's own location to the nearest `package.json`,
+ * rather than assuming a fixed directory depth: `ensureDaemon` (the caller
+ * side) and the daemon program (`compute-main.mjs`/`buckets-main.mjs`) are
+ * two separately bundled outputs that can land at different depths under
+ * their package's `dist/` — in-repo, both are one level under
+ * `@internal/dev-emulators/dist/`; published, `ensureDaemon`'s caller is one
+ * level under `@prisma/composer-prisma-cloud/dist/` but the re-emitted
+ * daemon program is two levels under `dist/dev/` (spec § 2's publish note).
+ * Both still resolve to the SAME nearest package.json — their shared
+ * package's — so the two sides' version strings agree.
+ */
 export function readOwnVersion(): string {
-  const here = path.dirname(fileURLToPath(import.meta.url));
-  const pkgPath = path.join(here, '..', 'package.json');
-  const raw = fs.readFileSync(pkgPath, 'utf8');
-  const parsed: unknown = JSON.parse(raw);
-  if (!isPackageJson(parsed)) {
-    throw new Error(`could not read a version string from ${pkgPath}`);
+  let dir = path.dirname(fileURLToPath(import.meta.url));
+  for (;;) {
+    const pkgPath = path.join(dir, 'package.json');
+    if (fs.existsSync(pkgPath)) {
+      const raw = fs.readFileSync(pkgPath, 'utf8');
+      const parsed: unknown = JSON.parse(raw);
+      if (!isPackageJson(parsed)) {
+        throw new Error(`could not read a version string from ${pkgPath}`);
+      }
+      return parsed.version;
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) {
+      throw new Error(
+        `could not find a package.json above ${path.dirname(fileURLToPath(import.meta.url))}`,
+      );
+    }
+    dir = parent;
   }
-  return parsed.version;
 }
 
 /** `process.kill(pid, 0)` existence probe — true unless the pid is provably gone (ESRCH). */
@@ -321,9 +345,19 @@ async function releaseLock(registryRoot: string, name: DaemonName): Promise<void
  * machine, and safe under concurrent callers across processes: the
  * observe→spawn→persist critical section is serialized per daemon name by
  * an atomic directory lock (the "Concurrent-ensure protocol").
+ *
+ * `entry` is the resolved absolute path to the daemon program to spawn —
+ * the CALLER resolves it (local-dev spec § 2's publish note). This module
+ * used to resolve it itself via `import.meta.resolve('@internal/dev-emulators/…')`,
+ * which only works in-repo: `@internal/*` are private workspace packages a
+ * published npm consumer never receives. The target extension resolves its
+ * entries against the PUBLIC `@prisma/composer-prisma-cloud/dev/*` subpaths
+ * instead, so the published dist is self-contained; tests resolve the
+ * in-repo `@internal/dev-emulators/*-main` subpaths directly.
  */
 export async function ensureDaemon(
   name: DaemonName,
+  entry: string,
   opts: DaemonRootOptions = {},
 ): Promise<{ url: string }> {
   const registryRoot = opts.registryRoot ?? defaultRegistryRoot();
@@ -366,7 +400,6 @@ export async function ensureDaemon(
     await fsp.mkdir(stateDir, { recursive: true });
     await fsp.mkdir(path.dirname(logPath), { recursive: true });
 
-    const entry = fileURLToPath(import.meta.resolve(`@internal/dev-emulators/${name}-main`));
     const logFd = fs.openSync(logPath, 'a');
     let child: ChildProcess;
     try {

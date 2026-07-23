@@ -38,6 +38,7 @@ const cronDist = '../../1-prisma-cloud/2-shared-modules/cron/dist';
 const storageDist = '../../1-prisma-cloud/2-shared-modules/storage/dist';
 const emailDist = '../../1-prisma-cloud/2-shared-modules/email/dist';
 const streamsDist = '../../1-prisma-cloud/2-shared-modules/streams/dist';
+const devEmulatorsDist = '../../1-prisma-cloud/0-lowering/dev-emulators/dist';
 export default defineConfig([
   {
     ...baseConfig,
@@ -196,6 +197,27 @@ export default defineConfig([
     clean: false,
     skipNodeModulesBundle: false,
     external: [/^bun$/, /^bun:/],
+    noExternal: [/^@internal\//],
+    plugins: [externalizeFramework],
+  },
+  {
+    // The dev emulator daemon programs (local-dev spec § 2's publish note):
+    // re-emitted from @internal/dev-emulators' dist, so `ensureDaemon`'s
+    // caller (the target extension's dev/emulators.ts) can resolve them at
+    // `@prisma/composer-prisma-cloud/dev/*` — a subpath a real npm install
+    // actually has, unlike the private `@internal/dev-emulators` package
+    // these come from. Plain `node:http` daemons — no `bun` runtime
+    // dependency to keep external (unlike storage/email/streams).
+    ...baseConfig,
+    dts: false,
+    entry: {
+      'compute-main': `${devEmulatorsDist}/compute-main.mjs`,
+      'buckets-main': `${devEmulatorsDist}/buckets-main.mjs`,
+    },
+    outDir: 'dist/dev',
+    exports: false,
+    clean: false,
+    skipNodeModulesBundle: false,
     noExternal: [/^@internal\//],
     plugins: [externalizeFramework],
   },

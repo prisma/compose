@@ -19,6 +19,8 @@
     "./streams": "./dist/streams/index.mjs",
     "./streams/streams-entrypoint": "./dist/streams/streams-entrypoint.mjs",
     "./streams/testing": "./dist/streams/testing.mjs",
+    "./dev/compute-main": "./dist/dev/compute-main.mjs",
+    "./dev/buckets-main": "./dist/dev/buckets-main.mjs",
     "./package.json": "./package.json"
   },
   "files": [
@@ -33,7 +35,6 @@
   "dependencies": {
     "@effect/platform-bun": "4.0.0-beta.97",
     "@effect/platform-node": "4.0.0-beta.92",
-    "@internal/dev-emulators": "workspace:0.2.0",
     "@prisma-next/cli": "0.16.0",
     "@prisma-next/config-loader": "0.16.0",
     "@prisma-next/contract": "0.16.0",
@@ -54,6 +55,7 @@
   "devDependencies": {
     "@internal/core": "workspace:0.2.0",
     "@internal/cron": "workspace:0.2.0",
+    "@internal/dev-emulators": "workspace:0.2.0",
     "@internal/email": "workspace:0.2.0",
     "@internal/foundation": "workspace:0.2.0",
     "@internal/lowering": "workspace:0.2.0",

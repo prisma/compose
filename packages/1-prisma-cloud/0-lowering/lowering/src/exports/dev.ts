@@ -6,4 +6,5 @@ export * from '../dev/dev-store.ts';
 export * from '../dev/postgres.ts';
 export * from '../dev/providers.ts';
 export * from '../dev/resolve-bin.ts';
+export * from '../dev/resolve-package-entry.ts';
 export * from '../dev/teardown.ts';
