@@ -407,12 +407,25 @@ function main(): void {
   // connection string is), so they need no persisted identity across a
   // restart, just uniqueness among servers live RIGHT NOW in this one
   // process (several servers share one daemon).
-  const liveAuxPorts = new Set<number>();
-  const auxPortsByInstance = new Map<string, readonly number[]>();
-
-  function releaseAuxPorts(instanceName: string): void {
-    for (const p of auxPortsByInstance.get(instanceName) ?? []) liveAuxPorts.delete(p);
-    auxPortsByInstance.delete(instanceName);
+  /**
+   * Server starts run ONE AT A TIME. `@prisma/dev`'s start is not
+   * concurrency-safe within a process: two simultaneous calls pick their
+   * ports without seeing each other and one fails with a port refusal
+   * (verified directly — two concurrent starts with distinct, pinned
+   * database ports fail; the same two started in sequence both succeed).
+   * The daemon issues concurrent starts whenever an app converges more than
+   * one database, which is what produced the port refusals, the retries
+   * whose half-started servers held their own name's lock, and every
+   * "already running" failure downstream of that.
+   */
+  let startQueue: Promise<unknown> = Promise.resolve();
+  function serializeStart<T>(run: () => Promise<T>): Promise<T> {
+    const next = startQueue.then(run, run);
+    startQueue = next.then(
+      () => undefined,
+      () => undefined,
+    );
+    return next;
   }
 
   function schedulePersist(): void {
@@ -444,30 +457,6 @@ function main(): void {
       port: portNumbers(min, MAX_DATABASE_PORT),
       exclude: [...usedDatabasePorts(), ...alsoExclude],
     });
-  }
-
-  /** Three fresh, mutually distinct ports for a server's own HTTP/shadow-database/streams listeners — never persisted, only unique right now. */
-  async function allocateAuxPorts(excluding: ReadonlySet<number>): Promise<{
-    readonly httpPort: number;
-    readonly shadowDatabasePort: number;
-    readonly streamsPort: number;
-  }> {
-    const taken = new Set([...usedDatabasePorts(), ...liveAuxPorts, ...excluding]);
-    const httpPort = await getPort({
-      port: portNumbers(MIN_DATABASE_PORT, MAX_DATABASE_PORT),
-      exclude: taken,
-    });
-    taken.add(httpPort);
-    const shadowDatabasePort = await getPort({
-      port: portNumbers(MIN_DATABASE_PORT, MAX_DATABASE_PORT),
-      exclude: taken,
-    });
-    taken.add(shadowDatabasePort);
-    const streamsPort = await getPort({
-      port: portNumbers(MIN_DATABASE_PORT, MAX_DATABASE_PORT),
-      exclude: taken,
-    });
-    return { httpPort, shadowDatabasePort, streamsPort };
   }
 
   const inflightEnsures = new Map<string, Promise<{ url: string }>>();
@@ -546,26 +535,21 @@ function main(): void {
     const conflicted = new Set<number>();
     let alreadyRunningRetries = 0;
     for (let attempt = 1; ; attempt++) {
-      const aux = await allocateAuxPorts(new Set([dbPort, ...conflicted]));
       try {
-        const server = await prismaDev.startPrismaDevServer({
-          name: instanceName,
-          databasePort: dbPort,
-          port: aux.httpPort,
-          shadowDatabasePort: aux.shadowDatabasePort,
-          streamsPort: aux.streamsPort,
-          persistenceMode: 'stateful',
-        });
+        // Only the DATABASE port is ours to pin (endpoints in deploy state
+        // reference it). The http/shadow/streams listeners are internal to
+        // `@prisma/dev`, and its own picker is the only one that consults
+        // its registry of other servers — ours could not, which is what
+        // produced the "belongs to another Prisma Dev server" refusals.
+        const server = await serializeStart(() =>
+          prismaDev.startPrismaDevServer({
+            name: instanceName,
+            databasePort: dbPort,
+            persistenceMode: 'stateful',
+          }),
+        );
         const url = server.database.connectionString;
         runtimes.set(instanceName, server);
-        liveAuxPorts.add(aux.httpPort);
-        liveAuxPorts.add(aux.shadowDatabasePort);
-        liveAuxPorts.add(aux.streamsPort);
-        auxPortsByInstance.set(instanceName, [
-          aux.httpPort,
-          aux.shadowDatabasePort,
-          aux.streamsPort,
-        ]);
         appRec.databases[id] = { id, instanceName, databasePort: dbPort, url };
         schedulePersist();
         return { url };
@@ -607,12 +591,7 @@ function main(): void {
           }
           continue;
         }
-        const conflictPort = portConflictOf(err, [
-          dbPort,
-          aux.httpPort,
-          aux.shadowDatabasePort,
-          aux.streamsPort,
-        ]);
+        const conflictPort = portConflictOf(err, [dbPort]);
         // The aux listener ports are never persisted, so a refusal of one is
         // always retryable with fresh candidates. The DATABASE port is frozen
         // once a record exists (endpoints in deploy state reference it) —
@@ -653,7 +632,6 @@ function main(): void {
       if (server) {
         await server.close().catch(() => undefined);
         runtimes.delete(db.instanceName);
-        releaseAuxPorts(db.instanceName);
       }
     }
 

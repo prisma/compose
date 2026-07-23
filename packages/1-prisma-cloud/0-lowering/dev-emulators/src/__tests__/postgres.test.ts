@@ -308,3 +308,31 @@ setInterval(() => {}, 1 << 30);
     }
   }, 60_000);
 });
+
+describe('concurrent ensures for different databases', () => {
+  test('two databases requested at once both come up — starts are serialized', async () => {
+    // An app converges its databases in parallel, so the daemon receives
+    // simultaneous ensures for different names. `@prisma/dev`'s start is not
+    // concurrency-safe within a process — two at once pick ports without
+    // seeing each other and one fails — so the daemon runs starts one at a
+    // time. Before that, this pair raced and produced the port refusals whose
+    // retries left half-started servers holding their own name's lock.
+    await ensureFreshDaemon('postgres', registryRoot);
+    const client = postgresClient({ registryRoot });
+
+    const [a, b] = await Promise.all([
+      client.ensureDatabase('pgtest-concurrent', 'alpha', prismaDevModulePath()),
+      client.ensureDatabase('pgtest-concurrent', 'beta', prismaDevModulePath()),
+    ]);
+
+    expect(a.url).not.toBe(b.url);
+    for (const url of [a.url, b.url]) {
+      const pg = new PgClient({ connectionString: url });
+      await pg.connect();
+      await pg.query('select 1');
+      await pg.end();
+    }
+
+    await client.deleteApp('pgtest-concurrent');
+  }, 90_000);
+});
