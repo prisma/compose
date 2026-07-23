@@ -10,7 +10,7 @@
  * bootstrap can re-import it as `main` and call `main.run(address, boot)`;
  * `entry` resolves the sibling entrypoint pass in the same dist directory.
  */
-import { isSecretString } from '@internal/core';
+import { secretString } from '@internal/foundation/arktype';
 import node from '@internal/node';
 import { compute, postgres } from '@internal/prisma-cloud';
 import { type } from 'arktype';
@@ -20,7 +20,7 @@ const emailInputSchema = type({
   deliveryMode: "'resend'|'smtp'|'none'",
   deliveryUrl: 'string',
   from: 'string',
-  deliveryCredential: type('unknown').narrow(isSecretString),
+  deliveryCredential: secretString(),
 });
 
 export function emailService() {

@@ -1,15 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import type { ConfigDeclaration, Contract } from '@internal/core';
-import {
-  configOf,
-  hydrateSync,
-  isNode,
-  number,
-  param,
-  SecretBox,
-  service,
-  string,
-} from '@internal/core';
+import type { ConfigDeclaration, Contract, SecretBox } from '@internal/core';
+import { configOf, hydrateSync, isNode, number, param, service, string } from '@internal/core';
+import { secretString } from '@internal/foundation/arktype';
 import { RPC_ACCEPTED_KEYS_ENV } from '@internal/service-rpc';
 import { type } from 'arktype';
 import { compute, postgres, postgresContract } from '../exports/index.ts';
@@ -739,8 +731,6 @@ describe('structured params + target-owned serialization (ADR-0018/0019)', () =>
 });
 
 describe('the input document — run() re-stash → input() (ADR-0041)', () => {
-  // ADR-0041's secretString() sugar, spelled in arktype: box-ness only.
-  const secretString = () => type.instanceOf(SecretBox);
   const inputSchema = type({ stripeEnabled: 'boolean', 'stripeKey?': secretString() });
 
   test('run() re-stashes the address-scoped input row address-free; input() hydrates, validates, and boxes the secret', async () => {

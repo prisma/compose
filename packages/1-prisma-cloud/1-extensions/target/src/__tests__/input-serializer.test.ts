@@ -6,6 +6,7 @@
  */
 import { describe, expect, test } from 'bun:test';
 import { SecretBox, service } from '@internal/core';
+import { secretString } from '@internal/foundation/arktype';
 import type { StandardSchemaV1 } from '@standard-schema/spec';
 import { type } from 'arktype';
 import { envParam } from '../param.ts';
@@ -18,9 +19,6 @@ const build = {
   module: 'file:///test/service.ts',
   entry: 'server.js',
 };
-
-/** ADR-0041's `secretString()` sugar, spelled in arktype: box-ness only, content opaque. */
-const secretString = () => type.instanceOf(SecretBox);
 
 const svc = (schema: StandardSchemaV1) =>
   service({

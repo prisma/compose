@@ -391,10 +391,8 @@ garbage config is a loud failure, not a runtime surprise. A credential is
 simply a field typed as the framework's redacting `SecretString` box:
 
 ```ts
-import { isSecretString } from '@prisma/composer';
+import { secretString } from '@prisma/composer/arktype';
 import { type } from 'arktype';
-
-const secretString = () => type('unknown').narrow(isSecretString);
 
 const schedulerInput = type({
   jobs: type({ jobId: 'string', every: 'string' }).array(),

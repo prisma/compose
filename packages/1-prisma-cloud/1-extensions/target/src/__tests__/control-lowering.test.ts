@@ -3,6 +3,7 @@ import type { Contract } from '@internal/core';
 import type { NodeDescriptor } from '@internal/core/config';
 import { containerEnvVarName } from '@internal/core/config';
 import type { LowerContext, LoweredResult, Outputs } from '@internal/core/deploy';
+import { secretString } from '@internal/foundation/arktype';
 // Import the REAL modules the mocks below stub, so each mock can spread them.
 // This matters beyond convenience: `bun test` runs every test file in ONE
 // process and `mock.module` is process-global. When the real module is already
@@ -157,7 +158,7 @@ const { prismaCloud } = await import('../exports/control.ts');
 const { compute, envParam, envSecret, postgres, postgresContract, s3StoreService } = await import(
   '../exports/index.ts'
 );
-const { dependency, module, provisionNeed, SecretBox, string } = await import('@internal/core');
+const { dependency, module, provisionNeed, string } = await import('@internal/core');
 const { lowering } = await import('@internal/core/deploy');
 const { RPC_PEER_KEY } = await import('@internal/service-rpc');
 const { STREAMS_API_KEY } = await import('../streams-keys.ts');
@@ -700,7 +701,7 @@ describe("prismaCloud().nodes['compute'] — the service descriptor", () => {
         const node = compute({
           name: 'ingest',
           deps: {},
-          input: type({ stripeEnabled: 'boolean', stripeKey: type.instanceOf(SecretBox) }),
+          input: type({ stripeEnabled: 'boolean', stripeKey: secretString() }),
           build: {
             extension: '@prisma/composer/node',
             type: 'node',

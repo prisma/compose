@@ -48,7 +48,7 @@ Two packages, and only two, appear in your `package.json`:
 
 | Package | Provides |
 | --- | --- |
-| `@prisma/composer` | Core authoring: `module`, `secret`, `isSecretString`, `/rpc`, `/node`, `/nextjs`, `/config`, `/testing`, the `prisma-composer` CLI |
+| `@prisma/composer` | Core authoring: `module`, `secret`, `isSecretString`, `/arktype` (the `secretString()` schema leaf), `/rpc`, `/node`, `/nextjs`, `/config`, `/testing`, the `prisma-composer` CLI |
 | `@prisma/composer-prisma-cloud` | The Prisma Cloud target: `compute`, `postgres`, `envSecret`, `envParam`, `/control`, `/testing`, and the shared `/cron`, `/storage`, `/streams`, `/prisma-next` modules |
 
 ## Anatomy of a service
@@ -419,10 +419,8 @@ schema union:
 
 ```ts
 // service.ts — the shapes that are legal
-import { isSecretString } from '@prisma/composer';
+import { secretString } from '@prisma/composer/arktype';
 import { type } from 'arktype';
-
-const secretString = () => type('unknown').narrow(isSecretString);
 
 compute({
   name: 'scheduler',

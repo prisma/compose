@@ -1,4 +1,4 @@
-import { isSecretString } from '@prisma/composer';
+import { secretString } from '@prisma/composer/arktype';
 import node from '@prisma/composer/node';
 import { compute, postgres } from '@prisma/composer-prisma-cloud';
 import { type } from 'arktype';
@@ -18,7 +18,7 @@ export default compute({
   // names the platform var via `envSecret` — this service never knows the
   // name. Read via `input().signingKey.expose()`.
   input: type({
-    signingKey: type('unknown').narrow(isSecretString),
+    signingKey: secretString(),
   }),
   build: node({ module: import.meta.url, entry: '../dist/server.mjs' }),
   expose: { rpc: authContract },

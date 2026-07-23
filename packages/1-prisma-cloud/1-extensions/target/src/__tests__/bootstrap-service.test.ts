@@ -5,7 +5,8 @@
  * (mirroring run(), the channel an entry reads its port from).
  */
 import { describe, expect, test } from 'bun:test';
-import { isSecretString, type SecretString } from '@internal/core';
+import type { SecretString } from '@internal/core';
+import { secretString } from '@internal/foundation/arktype';
 import { type } from 'arktype';
 import { compute } from '../compute.ts';
 import { envSecret } from '../secret.ts';
@@ -54,7 +55,7 @@ describe('bootstrapService', () => {
     const app = compute({
       name: 'web',
       deps: {},
-      input: type({ greeting: 'string', apiKey: type('unknown').narrow(isSecretString) }),
+      input: type({ greeting: 'string', apiKey: secretString() }),
       build,
     });
     let rowAtBoot: string | undefined;

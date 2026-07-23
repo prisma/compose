@@ -43,13 +43,14 @@ if (input.stripeEnabled) stripe(input.stripeSecretKey.expose());
 ```
 
 Fields whose values are secret are simply fields **typed** as the framework's
-redacting `SecretString` box (`secretString()` is sugar for
+redacting `SecretString` box. `secretString()` is sugar for
 `z.custom<SecretString>(isSecretString)` — every schema library can express
-"must be an instance of X" natively). Secretness is enforced by validation,
-not annotated as metadata: binding a plain literal where the schema expects a
-`SecretString` fails at deploy (a credential almost landed in a plain config
-row), and binding `envSecret` where the schema expects a string fails the
-same way.
+"must be an instance of X" natively, and the arktype spelling ships as
+`@prisma/composer/arktype`, an opt-in entry point no other surface imports.
+Secretness is enforced by validation, not annotated as metadata: binding a
+plain literal where the schema expects a `SecretString` fails at deploy (a
+credential almost landed in a plain config row), and binding `envSecret`
+where the schema expects a string fails the same way.
 
 ## The mechanism: traverse the binding, validate with the schema
 
