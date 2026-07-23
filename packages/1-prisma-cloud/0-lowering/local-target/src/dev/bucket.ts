@@ -7,13 +7,12 @@
 import * as path from 'node:path';
 import type { DevProvidersInput } from '@internal/core/config';
 import { bucketsClient } from '@internal/dev-emulators';
+import { Bucket, BucketKey } from '@internal/lowering/buckets';
 import { mintKeyPair } from '@internal/s3-protocol';
 import * as Provider from 'alchemy/Provider';
 import * as Effect from 'effect/Effect';
 import type * as Layer from 'effect/Layer';
 import * as Redacted from 'effect/Redacted';
-import { Bucket } from '../buckets/Bucket.ts';
-import { BucketKey } from '../buckets/BucketKey.ts';
 import { appNameOf } from './app-name.ts';
 
 /** `Bucket` → registers `<app>--<news.name>` with the bucket emulator, backed by an in-project data root. */

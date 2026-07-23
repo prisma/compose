@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as zlib from 'node:zlib';
-import { packageComputeArtifact } from '../compute/artifact.ts';
+import { packageComputeArtifact } from '@internal/lowering/compute';
 import { extractComputeArtifact } from '../compute/artifact-extract.ts';
 
 function makeBundle(files: Record<string, string>): string {
@@ -29,6 +29,12 @@ function readAll(dir: string): Record<string, string> {
   return out;
 }
 
+// Format-drift protection: `packageComputeArtifact` (`@internal/lowering`,
+// imported downward — production source) and `extractComputeArtifact`
+// (this package — emulation-only) are now maintained in two different
+// packages by two different mechanisms (a hand-rolled deterministic writer;
+// the maintained `tar` package for reading). This round-trip is what proves
+// they still agree on the wire format.
 describe('extractComputeArtifact', () => {
   test('round-trips packageComputeArtifact output: every packaged file lands byte-identical', () => {
     const bundleDir = makeBundle({
@@ -55,13 +61,14 @@ describe('extractComputeArtifact', () => {
     expect(JSON.parse(extracted['compute.manifest.json'] ?? '{}')).toEqual({
       manifestVersion: '1',
       entrypoint: 'bootstrap.js',
+      address: 'auth',
     });
     expect(extracted['bunfig.toml']).toContain('auto = "disable"');
   });
 
-  test('rejects a tar entry with a non-regular-file typeflag', () => {
+  test('rejects a tar entry with a non-regular-file type', () => {
     // Hand-build a one-entry ustar archive with typeflag '5' (directory) to
-    // prove the reader rejects anything packageComputeArtifact never writes.
+    // prove extraction rejects anything packageComputeArtifact never writes.
     const header = Buffer.alloc(512);
     header.write('somedir/', 0, 100, 'utf8');
     header.write('0000644\0', 100, 8, 'utf8');
@@ -86,6 +93,6 @@ describe('extractComputeArtifact', () => {
     fs.writeFileSync(tmpGz, gz);
     const destDir = path.join(path.dirname(tmpGz), 'dest');
 
-    expect(() => extractComputeArtifact(tmpGz, destDir)).toThrow(/typeflag "5"/);
+    expect(() => extractComputeArtifact(tmpGz, destDir)).toThrow(/has type "Directory"/);
   });
 });

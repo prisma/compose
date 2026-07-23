@@ -1,4 +1,4 @@
-/** `@internal/lowering/dev`'s public surface: the local dev provider bundle plus the dev-instance store and shared plumbing. Implementation lives in `../dev/*`. */
+/** `@internal/local-target`'s public surface (local-dev spec § 4): the local deploy target's provider suite — the dev provider bundle plus the dev-instance store and shared plumbing. Implementation lives in `../dev/*`. */
 export * from '../dev/app-name.ts';
 export * from '../dev/bucket.ts';
 export * from '../dev/compute.ts';

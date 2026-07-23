@@ -11,14 +11,17 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { DevProvidersInput } from '@internal/core/config';
 import { computeClient } from '@internal/dev-emulators';
+import {
+  ComputeService,
+  Deployment,
+  type DeploymentAttributes,
+  EnvironmentVariable,
+} from '@internal/lowering/compute';
+import { Project } from '@internal/lowering/postgres';
 import * as Provider from 'alchemy/Provider';
 import * as Effect from 'effect/Effect';
 import type * as Layer from 'effect/Layer';
 import { extractComputeArtifact } from '../compute/artifact-extract.ts';
-import { ComputeService } from '../compute/ComputeService.ts';
-import { Deployment, type DeploymentAttributes } from '../compute/Deployment.ts';
-import { EnvironmentVariable } from '../compute/EnvironmentVariable.ts';
-import { Project } from '../postgres/Project.ts';
 import { appNameOf } from './app-name.ts';
 import { envStore, secretsStore } from './dev-store.ts';
 
@@ -27,8 +30,8 @@ import { envStore, secretsStore } from './dev-store.ts';
  * `port` service param — `COMPOSER_<ADDRESS SEGMENTS>_PORT`. Mirrors
  * `@prisma/composer-prisma-cloud`'s serializer.ts `configKey(address, {
  * owner: 'service', name: 'port' })` byte-for-byte; duplicated rather than
- * imported because `@internal/lowering` sits below the extensions layer and
- * cannot import a target's serializer (ADR-0028's layer order) — the two
+ * imported because `@internal/local-target` sits below the extensions layer
+ * and cannot import a target's serializer (ADR-0028's layer order) — the two
  * encode one shared wire protocol (ADR-0029) and must never diverge.
  */
 function servicePortEnvKey(address: string): string {
@@ -36,11 +39,48 @@ function servicePortEnvKey(address: string): string {
   return ['COMPOSER', ...segments, 'PORT'].join('_').toUpperCase();
 }
 
-function missingServiceAddressError(computeServiceId: string): Error {
+function manifestMissingAddressError(): Error {
   return new Error(
-    `Deployment for "${computeServiceId}" carries no serviceAddress — the lowering predates ` +
-      'local dev support.',
+    'artifact manifest carries no address — repackage with a current @prisma/composer.',
   );
+}
+
+interface ComputeManifest {
+  readonly manifestVersion: string;
+  readonly entrypoint: string;
+  readonly address?: string;
+}
+
+function isComputeManifest(value: unknown): value is ComputeManifest {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'manifestVersion' in value &&
+    typeof value.manifestVersion === 'string' &&
+    'entrypoint' in value &&
+    typeof value.entrypoint === 'string'
+  );
+}
+
+/**
+ * Reads the address the artifact was packaged for out of its own
+ * `compute.manifest.json` — intrinsic artifact metadata (the SAME manifest
+ * `bootstrap.js` was baked from), never dev config threaded through the
+ * platform's `Deployment` primitive (local-dev spec § 4, REVERTED —
+ * operator review of #162).
+ */
+function readManifestAddress(artifactDir: string): string {
+  const manifestPath = path.join(artifactDir, 'compute.manifest.json');
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  } catch {
+    throw manifestMissingAddressError();
+  }
+  if (!isComputeManifest(parsed) || parsed.address === undefined) {
+    throw manifestMissingAddressError();
+  }
+  return parsed.address;
 }
 
 async function materializeEnv(
@@ -130,13 +170,12 @@ export function LocalDeploymentProvider(
         try: async (): Promise<DeploymentAttributes> => {
           const app = appNameOf(input.container);
           const id = news.computeServiceId;
-          if (news.serviceAddress === undefined) throw missingServiceAddressError(id);
-          const address = news.serviceAddress;
 
           const artifactDir = path.join(input.devDir, 'artifacts', news.artifactHash);
           if (!fs.existsSync(artifactDir)) {
             extractComputeArtifact(news.artifactPath, artifactDir);
           }
+          const address = readManifestAddress(artifactDir);
 
           const { port } = await computeClient().ensureService(app, id);
           const env = await materializeEnv(input.devDir, address, port);

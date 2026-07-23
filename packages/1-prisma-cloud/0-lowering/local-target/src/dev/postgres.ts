@@ -8,12 +8,11 @@
 import { spawnSync } from 'node:child_process';
 import * as net from 'node:net';
 import type { DevProvidersInput } from '@internal/core/config';
+import { Connection, Database } from '@internal/lowering/postgres';
 import * as Provider from 'alchemy/Provider';
 import * as Effect from 'effect/Effect';
 import type * as Layer from 'effect/Layer';
 import * as Redacted from 'effect/Redacted';
-import { Connection } from '../postgres/Connection.ts';
-import { Database } from '../postgres/Database.ts';
 import { appNameOf } from './app-name.ts';
 import { postgresStore } from './dev-store.ts';
 import { resolveLocalBin } from './resolve-bin.ts';

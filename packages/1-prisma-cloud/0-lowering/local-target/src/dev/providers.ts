@@ -5,17 +5,12 @@
  * no credentials layer — the dev bundle must typecheck without either.
  */
 import type { DevProvidersInput } from '@internal/core/config';
+import { Providers } from '@internal/lowering';
+import { Bucket, BucketKey } from '@internal/lowering/buckets';
+import { ComputeService, Deployment, EnvironmentVariable } from '@internal/lowering/compute';
+import { Connection, Database, Project } from '@internal/lowering/postgres';
 import * as Provider from 'alchemy/Provider';
 import * as Layer from 'effect/Layer';
-import { Bucket } from '../buckets/Bucket.ts';
-import { BucketKey } from '../buckets/BucketKey.ts';
-import { ComputeService } from '../compute/ComputeService.ts';
-import { Deployment } from '../compute/Deployment.ts';
-import { EnvironmentVariable } from '../compute/EnvironmentVariable.ts';
-import { Connection } from '../postgres/Connection.ts';
-import { Database } from '../postgres/Database.ts';
-import { Project } from '../postgres/Project.ts';
-import { Providers } from '../providers.ts';
 import { LocalBucketKeyProvider, LocalBucketProvider } from './bucket.ts';
 import {
   LocalComputeServiceProvider,

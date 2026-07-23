@@ -3,9 +3,9 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import type { ContainerInstance, DevProvidersInput } from '@internal/core/config';
+import { Database } from '@internal/lowering/postgres';
 import * as Effect from 'effect/Effect';
 import { LocalDatabaseProvider } from '../dev/postgres.ts';
-import { Database } from '../postgres/Database.ts';
 
 /**
  * A failing `prisma dev --name ... --detach` never leaks the connection
