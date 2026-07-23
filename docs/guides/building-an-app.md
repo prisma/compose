@@ -413,6 +413,8 @@ and `service.input()` narrows it like any other TypeScript union:
 const chatInput = type({ stripeEnabled: 'false' }).or(
   type({ stripeEnabled: 'true', stripeSecretKey: secretString() }),
 );
+
+const chat = compute({ name: 'chat', input: chatInput, /* ... */ });
 ```
 
 Every service also gets a reserved `port` (default 3000), outside the input
