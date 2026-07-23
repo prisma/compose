@@ -13,7 +13,7 @@
  * in the CLI parent, so it builds its own Management API client from env — the
  * same credential path `container.ts`'s `ensure`/`locate` use.
  */
-import { paramManifest, provisionManifest } from '@internal/core';
+import { inputManifest, isSecretSource, paramManifest } from '@internal/core';
 import type { PreflightInput } from '@internal/core/config';
 import { blindCast } from '@internal/foundation/casts';
 import {
@@ -181,12 +181,26 @@ async function managementClient(): Promise<ManagementApiClient> {
   );
 }
 
+/** Every `envSecret` leaf of one input binding: its platform name, found by the same dumb recursive descent the serializer uses (ADR-0041). */
+function collectSecretLeafNames(binding: unknown, serviceAddress: string, out: string[]): void {
+  if (isSecretSource(binding)) {
+    out.push(secretName(binding, `an input-binding secret leaf of service "${serviceAddress}"`));
+    return;
+  }
+  if (typeof binding !== 'object' || binding === null) return;
+  const members = Array.isArray(binding) ? binding : Object.values(binding);
+  for (const member of members) collectSecretLeafNames(member, serviceAddress, out);
+}
+
 /**
  * The Prisma Cloud extension's `preflight`. Aggregates the target-agnostic
- * manifests (core's `provisionManifest` for secrets, `paramManifest` filtered
- * to env-sourced bindings for params), checks each pointer name against the
- * platform, fills from the shell where possible, and fails loudly on anything
- * absent from both. Accepts an injected client for tests; otherwise builds one
+ * manifests (core's `inputManifest` walked for `envSecret` leaves — ADR-0041;
+ * `paramManifest` filtered to env-sourced bindings for reserved params),
+ * checks each platform name against the platform, fills from the shell where
+ * possible, and fails loudly on anything absent from both. `envParam` leaves
+ * of an input binding are NOT checked here — they resolve from the deploy
+ * shell at serialize, and an unset one is an omitted key the schema
+ * arbitrates. Accepts an injected client for tests; otherwise builds one
  * from env.
  */
 export async function runPreflight(
@@ -195,14 +209,18 @@ export async function runPreflight(
 ): Promise<void> {
   const { projectId, branchId } = prismaCloudContainerOf(input.container);
 
-  // One check per platform NAME (many slots/services, secret or param, may
-  // bind the same one). Every wired secret is required — the forwarding model
-  // has no optional slot; a param binding is only checked when it is
-  // env-sourced — a literal-bound param never touches the platform.
+  // One check per platform NAME (many leaves/services, secret or param, may
+  // bind the same one). Every bound secret leaf is required — absence is
+  // expressed by omitting the key from the binding, never by an unprovisioned
+  // var; a reserved-param binding is only checked when it is env-sourced — a
+  // literal-bound param never touches the platform.
   const names = new Map<string, MissingBinding>();
-  for (const binding of provisionManifest(input.graph)) {
-    const name = secretName(binding);
-    if (!names.has(name)) names.set(name, { name, serviceAddress: binding.serviceAddress });
+  for (const { serviceAddress, binding } of inputManifest(input.graph)) {
+    const leafNames: string[] = [];
+    collectSecretLeafNames(binding, serviceAddress, leafNames);
+    for (const name of leafNames) {
+      if (!names.has(name)) names.set(name, { name, serviceAddress });
+    }
   }
   for (const binding of paramManifest(input.graph)) {
     if (!isEnvParamSource(binding.binding)) continue;

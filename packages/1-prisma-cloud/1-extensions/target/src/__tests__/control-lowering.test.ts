@@ -157,7 +157,7 @@ const { prismaCloud } = await import('../exports/control.ts');
 const { compute, envParam, envSecret, postgres, postgresContract, s3StoreService } = await import(
   '../exports/index.ts'
 );
-const { dependency, module, provisionNeed, secret, string } = await import('@internal/core');
+const { dependency, module, provisionNeed, SecretBox, string } = await import('@internal/core');
 const { lowering } = await import('@internal/core/deploy');
 const { RPC_PEER_KEY } = await import('@internal/service-rpc');
 const { STREAMS_API_KEY } = await import('../streams-keys.ts');
@@ -573,7 +573,7 @@ describe("prismaCloud().nodes['compute'] — the service descriptor", () => {
       const ctx = {
         address: 'auth',
         node,
-        graph: { secrets: [], edges: [] },
+        graph: { inputBindings: [], edges: [] },
         application: { projectId: 'shop-project#cloud-id', branchId: undefined },
       } as unknown as LowerContext;
       const provisioned = {
@@ -657,7 +657,7 @@ describe("prismaCloud().nodes['compute'] — the service descriptor", () => {
       const ctx = {
         address: 'consumer',
         node,
-        graph: { secrets: [], edges: [] },
+        graph: { inputBindings: [], edges: [] },
         application: { projectId: 'shop-project#cloud-id', branchId: undefined },
       } as unknown as LowerContext;
       const provisioned = {
@@ -690,7 +690,7 @@ describe("prismaCloud().nodes['compute'] — the service descriptor", () => {
     });
   });
 
-  test('a secret slot serializes to a POINTER row — value is the bound platform NAME, never a value (ADR-0029)', async () => {
+  test('the input document serializes to ONE row — secret leaves are $secret pointers, never values (ADR-0041)', async () => {
     await withEnv(
       // The real secret value is present in the deploy shell, proving it still
       // cannot reach the serialized row.
@@ -700,7 +700,7 @@ describe("prismaCloud().nodes['compute'] — the service descriptor", () => {
         const node = compute({
           name: 'ingest',
           deps: {},
-          secrets: { stripeKey: secret() },
+          input: type({ stripeEnabled: 'boolean', stripeKey: type.instanceOf(SecretBox) }),
           build: {
             extension: '@prisma/composer/node',
             type: 'node',
@@ -708,10 +708,13 @@ describe("prismaCloud().nodes['compute'] — the service descriptor", () => {
             entry: 'server.js',
           },
         });
-        // The root bound the slot to STRIPE_SECRET_KEY — it rides on graph.secrets.
+        // The provision call bound the input — it rides on graph.inputBindings.
         const graph = {
-          secrets: [
-            { serviceAddress: 'ingest', slot: 'stripeKey', source: envSecret('STRIPE_SECRET_KEY') },
+          inputBindings: [
+            {
+              serviceAddress: 'ingest',
+              binding: { stripeEnabled: true, stripeKey: envSecret('STRIPE_SECRET_KEY') },
+            },
           ],
           edges: [],
         };
@@ -733,11 +736,12 @@ describe("prismaCloud().nodes['compute'] — the service descriptor", () => {
         );
 
         const writes = recorded.envVar.slice(before).map(([, props]) => props);
-        // The pointer row holds the bound platform NAME, never a value.
+        // One self-describing document; the secret leaf is a pointer naming
+        // the platform var, never a value.
         expect(writes).toContainEqual({
           projectId: 'shop-project#cloud-id',
-          key: 'COMPOSER_INGEST_STRIPEKEY',
-          value: 'STRIPE_SECRET_KEY',
+          key: 'COMPOSER_INGEST_INPUT',
+          value: '{"stripeEnabled":true,"stripeKey":{"$secret":"STRIPE_SECRET_KEY"}}',
           class: 'production',
         });
         // No serialized EnvironmentVariable output carries the secret's value.
@@ -746,17 +750,16 @@ describe("prismaCloud().nodes['compute'] — the service descriptor", () => {
     );
   });
 
-  test('an env-sourced param serializes a POINTER row — value is the bound platform NAME, never a value', async () => {
+  test('an env-sourced reserved param serializes a POINTER row — value is the bound platform NAME, never a value', async () => {
     await withEnv(
       // The real value is present in the deploy shell, proving it still cannot
       // reach the serialized row — buildConfig never resolved a source's value.
-      { APP_ORIGIN: 'https://should-not-leak.example.com' },
+      { PLATFORM_PORT: '8443' },
       () => {
         const target = prismaCloud({ workspaceId: 'ws_1' });
         const node = compute({
           name: 'web',
           deps: {},
-          params: { appOrigin: string() },
           build: {
             extension: '@prisma/composer/node',
             type: 'node',
@@ -764,10 +767,10 @@ describe("prismaCloud().nodes['compute'] — the service descriptor", () => {
             entry: 'server.js',
           },
         });
-        // The root bound the slot to APP_ORIGIN — it rides on graph.params.
+        // The provision call bound the reserved port to PLATFORM_PORT — it rides on graph.params.
         const graph = {
-          secrets: [],
-          params: [{ serviceAddress: 'web', slot: 'appOrigin', binding: envParam('APP_ORIGIN') }],
+          inputBindings: [],
+          params: [{ serviceAddress: 'web', slot: 'port', binding: envParam('PLATFORM_PORT') }],
           edges: [],
         };
         const ctx = {
@@ -782,7 +785,7 @@ describe("prismaCloud().nodes['compute'] — the service descriptor", () => {
         };
         // buildConfig resolved the param to the opaque ParamSource, unvalidated — exactly what
         // deploy.ts's resolveParam does for a source-bound param.
-        const config = { service: { port: 3000, appOrigin: envParam('APP_ORIGIN') }, inputs: {} };
+        const config = { service: { port: envParam('PLATFORM_PORT') }, inputs: {} };
         const before = recorded.envVar.length;
 
         run<MockedSerialized>(
@@ -793,23 +796,22 @@ describe("prismaCloud().nodes['compute'] — the service descriptor", () => {
         // The pointer row holds the bound platform NAME, never a value.
         expect(writes).toContainEqual({
           projectId: 'shop-project#cloud-id',
-          key: 'COMPOSER_WEB_APPORIGIN',
-          value: '@composer-param-pointer:APP_ORIGIN',
+          key: 'COMPOSER_WEB_PORT',
+          value: '@composer-param-pointer:PLATFORM_PORT',
           class: 'production',
         });
         // No serialized EnvironmentVariable output carries the actual value.
-        expect(JSON.stringify(writes)).not.toContain('should-not-leak');
+        expect(JSON.stringify(writes)).not.toContain('8443');
       },
     );
   });
 
-  test('a literal-bound param still serializes as a plain JSON-encoded value row (unchanged)', async () => {
+  test('a literal-bound reserved param still serializes as a plain JSON-encoded value row (unchanged)', async () => {
     await withEnv({}, () => {
       const target = prismaCloud({ workspaceId: 'ws_1' });
       const node = compute({
         name: 'web',
         deps: {},
-        params: { appOrigin: string() },
         build: {
           extension: '@prisma/composer/node',
           type: 'node',
@@ -817,7 +819,7 @@ describe("prismaCloud().nodes['compute'] — the service descriptor", () => {
           entry: 'server.js',
         },
       });
-      const graph = { secrets: [], params: [], edges: [] };
+      const graph = { inputBindings: [], params: [], edges: [] };
       const ctx = {
         address: 'web',
         node,
@@ -829,7 +831,7 @@ describe("prismaCloud().nodes['compute'] — the service descriptor", () => {
         endpointDomain: 'https://svc.example',
       };
       const config = {
-        service: { port: 3000, appOrigin: 'https://literal.example.com' },
+        service: { port: 4100 },
         inputs: {},
       };
       const before = recorded.envVar.length;
@@ -841,8 +843,8 @@ describe("prismaCloud().nodes['compute'] — the service descriptor", () => {
       const writes = recorded.envVar.slice(before).map(([, props]) => props);
       expect(writes).toContainEqual({
         projectId: 'shop-project#cloud-id',
-        key: 'COMPOSER_WEB_APPORIGIN',
-        value: '"https://literal.example.com"',
+        key: 'COMPOSER_WEB_PORT',
+        value: '4100',
         class: 'production',
       });
     });
@@ -864,7 +866,7 @@ describe("prismaCloud().nodes['compute'] — the service descriptor", () => {
       const ctx = {
         address: 'auth3',
         node,
-        graph: { secrets: [], edges: [] },
+        graph: { inputBindings: [], edges: [] },
         application: { projectId: 'shop-project#cloud-id', branchId: 'branch_1' },
       } as unknown as LowerContext;
       const provisioned = {
@@ -919,7 +921,7 @@ describe("prismaCloud().nodes['compute'] — the service descriptor", () => {
       const ctx = {
         address: 'auth',
         node,
-        graph: { secrets: [], edges: [] },
+        graph: { inputBindings: [], edges: [] },
         application: { projectId: 'shop-project#cloud-id', branchId: undefined },
       } as unknown as LowerContext;
       const provisioned = {
@@ -1020,7 +1022,7 @@ describe("prismaCloud().nodes['s3-store'] — the service descriptor with extend
       const ctx = {
         address: 'store',
         node,
-        graph: { secrets: [], edges: [] },
+        graph: { inputBindings: [], edges: [] },
         application: { projectId: 'shop-project#cloud-id', branchId: undefined },
       } as unknown as LowerContext;
       const provisioned = {
@@ -1055,7 +1057,7 @@ describe("prismaCloud().nodes['s3-store'] — the service descriptor with extend
       const ctx = {
         address: 'store',
         node,
-        graph: { secrets: [], edges: [] },
+        graph: { inputBindings: [], edges: [] },
         application: { projectId: 'shop-project#cloud-id', branchId: undefined },
       } as unknown as LowerContext;
       const provisioned = {
@@ -1152,7 +1154,7 @@ describe('s3StoreService() authoring factory', () => {
     entry: 'server.js',
   };
 
-  test("routes to the 's3-store' lowering but keeps compute's deps/params/expose/load", () => {
+  test("routes to the 's3-store' lowering but keeps compute's deps/expose/load", () => {
     const node = s3StoreService({
       name: 'store',
       deps: { db: postgres() },
@@ -1164,7 +1166,7 @@ describe('s3StoreService() authoring factory', () => {
     expect(Object.keys(node.inputs)).toEqual(['db']);
     expect(node.expose).toEqual({ store: postgresContract });
     expect(typeof node.load).toBe('function');
-    expect(typeof node.config).toBe('function');
+    expect(typeof node.input).toBe('function');
     // The reserved compute param survives the type override.
     expect(node.params.port).toBeDefined();
   });
@@ -1535,7 +1537,7 @@ describe("streams' provisioned bearer key — one value per PROVIDER, stored on 
         { kind: 'dependency', from: 'events', to: 'reader', input: 'events' },
         { kind: 'dependency', from: 'events', to: 'writer', input: 'events' },
       ],
-      secrets: [],
+      inputBindings: [],
     };
     const ctx = {
       address: 'events',
@@ -1640,7 +1642,7 @@ describe("descriptors/compute.ts's provider-param loop is generic over the regis
       const ctx = {
         address: 'multi',
         node,
-        graph: { secrets: [], edges: [] },
+        graph: { inputBindings: [], edges: [] },
         application: { projectId: 'shop-project#cloud-id', branchId: undefined },
         provisioned: new Map(),
       } as unknown as LowerContext;

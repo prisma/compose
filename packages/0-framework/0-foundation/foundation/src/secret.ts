@@ -46,3 +46,16 @@ export class SecretBox<T> {
 
 /** The common case: a secret string. */
 export type SecretString = SecretBox<string>;
+
+/**
+ * True for a redacting secret box — what a schema's secret leaf checks
+ * (ADR-0041). `instanceof` first; falls back to the box's structural signature
+ * (an `expose()` reader that still stringifies redacted) so a box from a
+ * duplicated module copy in a bundle still counts.
+ */
+export function isSecretString(value: unknown): value is SecretString {
+  if (value instanceof SecretBox) return true;
+  if (typeof value !== 'object' || value === null) return false;
+  if (!('expose' in value) || typeof value.expose !== 'function') return false;
+  return String(value) === REDACTED;
+}

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { inspect } from 'node:util';
-import { SecretBox } from './secret.ts';
+import { isSecretString, SecretBox } from './secret.ts';
 
 describe('SecretBox', () => {
   test('expose() round-trips the wrapped value', () => {
@@ -33,5 +33,29 @@ describe('SecretBox', () => {
     expect(inspect(box)).toBe('[REDACTED]');
     expect(inspect({ key: box })).toContain('[REDACTED]');
     expect(inspect(box)).not.toContain('sk_live');
+  });
+});
+
+describe('isSecretString', () => {
+  test('true for a SecretBox instance', () => {
+    expect(isSecretString(new SecretBox('sk_live_abc'))).toBe(true);
+    expect(isSecretString(new SecretBox(''))).toBe(true);
+  });
+
+  test('true for a structural twin (a box from a duplicated module copy)', () => {
+    const twin = {
+      expose: () => 'sk_live_abc',
+      toString: () => '[REDACTED]',
+    };
+    expect(isSecretString(twin)).toBe(true);
+  });
+
+  test('false for plain values and non-redacting lookalikes', () => {
+    expect(isSecretString('sk_live_abc')).toBe(false);
+    expect(isSecretString(undefined)).toBe(false);
+    expect(isSecretString(null)).toBe(false);
+    expect(isSecretString({})).toBe(false);
+    // exposes but does NOT redact — not a secret box
+    expect(isSecretString({ expose: () => 'x', toString: () => 'x' })).toBe(false);
   });
 });

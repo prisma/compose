@@ -12,7 +12,7 @@ import {
   encode,
   encodeParamPointer,
   paramEntries,
-  secretPointerRows,
+  serializeInput,
 } from '../serializer.ts';
 import {
   cloudApplicationOf,
@@ -74,10 +74,11 @@ export function computeDescriptor(
         return { serviceId: svc.id, projectId, endpointDomain: svc.endpointDomain };
       }),
 
-    // Two channels of rows: PARAMS (service-own literals JSON-encoded; dependency
-    // provisioning refs passed through, keeping their ordering edge) and SECRETS
-    // (a POINTER row per slot holding the bound platform NAME, never a value —
-    // ADR-0029). The class/branch scope is identical for both.
+    // Two channels of rows: PARAMS (reserved-param literals JSON-encoded;
+    // dependency provisioning refs passed through, keeping their ordering
+    // edge) and the INPUT document (one JSON row per service, secret leaves
+    // as `$secret` pointers, never a value — ADR-0041). The class/branch
+    // scope is identical for both.
     serialize: (ctx, provisioned, config) =>
       Effect.gen(function* () {
         const { address, node, graph } = ctx;
@@ -115,13 +116,19 @@ export function computeDescriptor(
           );
         }
 
-        for (const { key, name } of secretPointerRows(svc, address, graph.secrets)) {
+        const inputRow = serializeInput(
+          svc,
+          address,
+          graph.inputBindings.find((b) => b.serviceAddress === address)?.binding,
+        );
+        if (inputRow !== undefined) {
           records.push(
-            yield* Prisma.EnvironmentVariable(`${key}-var`, {
+            yield* Prisma.EnvironmentVariable(`${inputRow.key}-var`, {
               projectId,
-              key,
-              // The pointer: the platform env-var NAME the root bound the slot to.
-              value: name,
+              key: inputRow.key,
+              // The defaults-applied document — secret leaves are `$secret`
+              // pointers naming platform vars, never values (ADR-0041).
+              value: inputRow.value,
               class: cls,
               ...branch,
             }),
