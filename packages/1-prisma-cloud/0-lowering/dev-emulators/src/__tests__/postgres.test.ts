@@ -12,6 +12,7 @@ import * as net from 'node:net';
 import { Client as PgClient } from 'pg';
 import { postgresClient } from '../client.ts';
 import { stopDaemon } from '../daemon.ts';
+import { instanceNameFor } from '../instance-name.ts';
 import { ensureFreshDaemon, prismaDevModulePath, tempDir } from './helpers.ts';
 
 let registryRoot: string;
@@ -207,4 +208,20 @@ describe('fresh-allocation port retry (spec § 2 step 5, applied to databasePort
 
     await client.deleteApp('pgtest-retry');
   }, 30_000);
+});
+
+describe('instance name derivation is linear, not polynomial', () => {
+  test('a pathological run of separators slugs correctly and stays fast', () => {
+    const pathological = `a${'-'.repeat(10_000)}b`;
+
+    const start = performance.now();
+    const name = instanceNameFor(pathological, pathological);
+    const elapsedMs = performance.now() - start;
+
+    // A run of separators collapses to one `-`, same as any other run —
+    // no special case for length. `pcdev-a-b-a-b`.slice(0, 63) is still
+    // well within the cap, so nothing else about the shape changes.
+    expect(name).toBe('pcdev-a-b-a-b');
+    expect(elapsedMs).toBeLessThan(100);
+  });
 });

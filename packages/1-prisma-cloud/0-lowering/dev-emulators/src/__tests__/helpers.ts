@@ -41,7 +41,8 @@ export function writeBootstrap(source: string): string {
 
 /** A tiny HTTP server on `process.env['PORT']` that answers with `body`. */
 export function servingBootstrap(body: string): string {
-  return `Bun.serve({ port: Number(process.env['PORT']), fetch: () => new Response(${JSON.stringify(body)}) });\nconsole.log('booted: ${body}');\n`;
+  const literal = JSON.stringify(body);
+  return `Bun.serve({ port: Number(process.env['PORT']), fetch: () => new Response(${literal}) });\nconsole.log('booted: ' + ${literal});\n`;
 }
 
 /** Exits immediately with a nonzero code — a fast-crashing service. */

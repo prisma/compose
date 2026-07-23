@@ -19,6 +19,7 @@ import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import getPort, { portNumbers } from 'get-port';
 import { readOwnVersion } from './daemon.ts';
+import { instanceNameFor } from './instance-name.ts';
 import { isValidSegment } from './segments.ts';
 import { readJsonFile, StateFile } from './state-file.ts';
 
@@ -99,18 +100,6 @@ function isDatabaseBody(value: unknown): value is DatabaseBody {
     'prismaDevModulePath' in value &&
     typeof value.prismaDevModulePath === 'string'
   );
-}
-
-/** `pcdev-<app>-<database-id>` (spec § 2): each half lowercased, every char outside `[a-z0-9]` replaced by `-`, runs collapsed, the combined name trimmed to 63 chars. */
-function slug(segment: string): string {
-  return segment
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-}
-
-export function instanceNameFor(app: string, id: string): string {
-  return `pcdev-${slug(app)}-${slug(id)}`.slice(0, 63);
 }
 
 // --- `@prisma/dev`, resolved from the caller-given path -------------------
