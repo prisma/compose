@@ -28,6 +28,10 @@ export default defineConfig([
     exports: false,
     clean: false,
     skipNodeModulesBundle: false,
+    // better-auth lazy-imports optional kysely dialects; without this the
+    // bundle splits into sibling chunk files the deploy packager never
+    // ships. One entry, one file.
+    outputOptions: { inlineDynamicImports: true },
     external: [/^bun$/, /^bun:/],
     noExternal: [
       /^@internal\//,
@@ -46,6 +50,8 @@ export default defineConfig([
     exports: false,
     clean: false,
     skipNodeModulesBundle: false,
+    // Same single-file requirement as the entrypoint pass (see above).
+    outputOptions: { inlineDynamicImports: true },
     external: [/^bun$/, /^bun:/],
     noExternal: [
       /^@internal\//,
