@@ -39,6 +39,43 @@ function servicePortEnvKey(address: string): string {
   return ['COMPOSER', ...segments, 'PORT'].join('_').toUpperCase();
 }
 
+/** The `COMPOSER_<ADDRESS SEGMENTS>_` prefix every env row this address OWNS carries — `configKey`'s convention (see `servicePortEnvKey`'s doc comment). */
+function ownEnvKeyPrefix(address: string): string {
+  const segments = address.split('.').filter((s) => s.length > 0);
+  return `${['COMPOSER', ...segments].join('_').toUpperCase()}_`;
+}
+
+const COMPOSER_NAMESPACE_PREFIX = 'COMPOSER_';
+
+/**
+ * Scopes `env.json` to what THIS service is allowed to see: rows it owns
+ * (`COMPOSER_<its address>_*`) plus every row OUTSIDE the `COMPOSER_`
+ * namespace entirely — the poison `DATABASE_URL(_POOLED)` rows are
+ * deliberately unprefixed and app-wide (local-dev spec § 4's pinned parity
+ * note). The hosted platform materializes the app-wide row set into every
+ * deployment but DIFFS a deployment only on its own referenced rows; an
+ * app-wide LOCAL materialization restart-amplifies instead — an
+ * early-deployed service's snapshot is incomplete on the first converge,
+ * "completes" on the second, and diffs as changed. Scoping the content here
+ * aligns local restart behavior with the platform's diff scope. The dropped
+ * sibling rows have no sanctioned reader: `run()`/`load()` consume only
+ * own-address rows, and ambient sibling reads are exactly what the poison
+ * rows exist to punish.
+ */
+export function scopedEnvRows(
+  allRows: Readonly<Record<string, string>>,
+  address: string,
+): Record<string, string> {
+  const ownPrefix = ownEnvKeyPrefix(address);
+  const scoped: Record<string, string> = {};
+  for (const [key, value] of Object.entries(allRows)) {
+    if (key.startsWith(ownPrefix) || !key.startsWith(COMPOSER_NAMESPACE_PREFIX)) {
+      scoped[key] = value;
+    }
+  }
+  return scoped;
+}
+
 function manifestMissingAddressError(): Error {
   return new Error(
     'artifact manifest carries no address — repackage with a current @prisma/composer.',
@@ -108,7 +145,7 @@ async function materializeEnv(
   address: string,
   port: number,
 ): Promise<Record<string, string>> {
-  const env: Record<string, string> = { ...(await envStore(devDir).read()) };
+  const env: Record<string, string> = scopedEnvRows(await envStore(devDir).read(), address);
   env[servicePortEnvKey(address)] = JSON.stringify(port);
   const secrets = await secretsStore(devDir).read();
   for (const [key, value] of Object.entries(secrets)) env[key] = value;
