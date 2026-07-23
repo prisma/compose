@@ -18,7 +18,7 @@ import * as http from 'node:http';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import getPort, { portNumbers } from 'get-port';
-import { readOwnVersion } from './daemon.ts';
+import { isPidAlive, readOwnVersion } from './daemon.ts';
 import { instanceNameFor } from './instance-name.ts';
 import { isValidSegment } from './segments.ts';
 import { readJsonFile, StateFile } from './state-file.ts';
@@ -160,34 +160,6 @@ function portConflictOf(err: unknown, ports: readonly number[]): number | undefi
   return typeof port === 'number' && ports.includes(port) ? port : undefined;
 }
 
-function isPrismaDevServer(value: unknown): value is PrismaDevServer {
-  if (!isStringKeyedRecord(value) || typeof value['close'] !== 'function') return false;
-  const database = value['database'];
-  return isStringKeyedRecord(database) && typeof database['connectionString'] === 'string';
-}
-
-/**
- * The live server behind a "name is already running" refusal, when there is
- * one. A start that fails mid-boot (e.g. on a port another server's
- * registry claims) can leave its state entry behind, so OUR OWN next
- * attempt for the same name is refused. `@prisma/dev`'s
- * `ServerAlreadyRunningError` carries the running server as a `.server`
- * getter (duck-typed — `instanceof` fails across the dynamic-import
- * boundary); its parent class (state entry exists but nothing actually
- * runs) has no such getter, and a dead ghost resolves to null — both mean
- * "nothing to adopt".
- */
-async function adoptableServerOf(err: unknown): Promise<PrismaDevServer | undefined> {
-  if (!isStringKeyedRecord(err) || !('server' in err)) return undefined;
-  if (err['name'] !== 'ServerAlreadyRunningError') return undefined;
-  try {
-    const server: unknown = await err['server'];
-    return isPrismaDevServer(server) ? server : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 function isNameAlreadyTaken(err: unknown): boolean {
   return (
     isStringKeyedRecord(err) &&
@@ -242,8 +214,11 @@ function isStringKeyedRecord(value: unknown): value is StringKeyedRecord {
 }
 
 interface PrismaDevInternalStateModule {
+  /** Removes the server's persisted state AND its PGlite data. */
   deleteServer(name: string, debug?: boolean): Promise<void>;
-  /** `{ status, pid, ... }`; `status` is `"running"`/`"starting_up"` for a live server (verified live: while up it reports `running` with THIS process's pid, after `close()` it reports `not_running`). */
+  /** Stops the process behind a server's recorded state, leaving its data. */
+  killServer(name: string, debug?: boolean): Promise<unknown>;
+  /** The server's recorded state — see `ServerStatus` for the fields this daemon reads. */
   getServerStatus(name: string, opts?: unknown): Promise<unknown>;
 }
 
@@ -251,13 +226,57 @@ function isPrismaDevInternalStateModule(value: unknown): value is PrismaDevInter
   return (
     isStringKeyedRecord(value) &&
     typeof value['deleteServer'] === 'function' &&
+    typeof value['killServer'] === 'function' &&
     typeof value['getServerStatus'] === 'function'
   );
 }
 
-function isLiveStatus(status: unknown): boolean {
-  if (!isStringKeyedRecord(status)) return false;
-  return status['status'] === 'running' || status['status'] === 'starting_up';
+/**
+ * What `getServerStatus(name)` reports, narrowed to the fields this daemon
+ * uses. Verified live against `@prisma/dev`: while a server is up it reports
+ * `status: "running"` with the owning process's `pid` and the full
+ * `exports.database.connectionString`; after `close()` the same call reports
+ * `status: "not_running"` with the record otherwise intact.
+ *
+ * This is how the daemon learns about a server it does not itself hold — the
+ * "already running" error's own `server` accessor resolves to a `ServerState`
+ * with no `database` field at all (verified: its own properties are
+ * `databaseDumpPath`, `exports`, `experimental`, `pgliteDataDirPath`,
+ * `close`, `writeServerDump`), so reading status is both simpler and correct.
+ */
+interface ServerStatus {
+  readonly live: boolean;
+  readonly pid: number | undefined;
+  readonly url: string | undefined;
+  readonly databasePort: number | undefined;
+}
+
+function readServerStatus(status: unknown): ServerStatus {
+  if (!isStringKeyedRecord(status)) {
+    return { live: false, pid: undefined, url: undefined, databasePort: undefined };
+  }
+  const exports = status['exports'];
+  const database = isStringKeyedRecord(exports) ? exports['database'] : undefined;
+  const url = isStringKeyedRecord(database) ? database['connectionString'] : undefined;
+  const pid = status['pid'];
+  const databasePort = status['databasePort'];
+  return {
+    live: status['status'] === 'running' || status['status'] === 'starting_up',
+    pid: typeof pid === 'number' ? pid : undefined,
+    url: typeof url === 'string' ? url : undefined,
+    databasePort: typeof databasePort === 'number' ? databasePort : undefined,
+  };
+}
+
+async function serverStatusOf(
+  internalState: PrismaDevInternalStateModule,
+  instanceName: string,
+): Promise<ServerStatus> {
+  try {
+    return readServerStatus(await internalState.getServerStatus(instanceName));
+  } catch {
+    return { live: false, pid: undefined, url: undefined, databasePort: undefined };
+  }
 }
 
 const CLOSE_SETTLE_ATTEMPTS = 40;
@@ -269,12 +288,7 @@ async function settledAfterClose(
   instanceName: string,
 ): Promise<boolean> {
   for (let attempt = 1; attempt <= CLOSE_SETTLE_ATTEMPTS; attempt += 1) {
-    let live = false;
-    try {
-      live = isLiveStatus(await internalState.getServerStatus(instanceName));
-    } catch {
-      return true;
-    }
+    const live = (await serverStatusOf(internalState, instanceName)).live;
     if (!live) return true;
     if (attempt < CLOSE_SETTLE_ATTEMPTS) {
       await new Promise((resolve) => setTimeout(resolve, CLOSE_SETTLE_DELAY_MS));
@@ -482,7 +496,42 @@ function main(): void {
       return { url: existingRecord.url };
     }
 
+    // Resolved first: its failure carries the pinned "add prisma to your
+    // devDependencies" message, which a caller with a bad path must see
+    // rather than the internal-state resolver's own wording.
     const prismaDev = await importPrismaDev(prismaDevModulePath);
+
+    // Reconcile with `@prisma/dev`'s own record BEFORE trying to start.
+    // This daemon's state and that record can disagree — a daemon replaced
+    // for version skew leaves its in-process servers' records claiming
+    // "running" behind a dead pid, and a teardown that declined to delete
+    // (see `deleteApp`) leaves a live one. Starting into either produces the
+    // "already running" refusal; reading the record first turns both into
+    // ordinary cases.
+    const internalState = await importPrismaDevInternalState(prismaDevModulePath);
+    const recorded = await serverStatusOf(internalState, instanceName);
+    if (recorded.live && recorded.pid !== undefined && isPidAlive(recorded.pid)) {
+      // A live server under our own name: the name is namespaced to this
+      // app+database, so this IS the database being asked for. Adopt its
+      // URL. (No handle to close it — `deleteApp` uses `killServer` for
+      // exactly this case.)
+      if (recorded.url !== undefined) {
+        appRec.databases[id] = {
+          id,
+          instanceName,
+          databasePort: recorded.databasePort ?? databasePortOf(recorded.url) ?? MIN_DATABASE_PORT,
+          url: recorded.url,
+        };
+        schedulePersist();
+        return { url: recorded.url };
+      }
+    } else if (recorded.live) {
+      // Recorded live, but nothing is running — the owning process died
+      // (daemon replacement, a crash). Clear the process record; `killServer`
+      // never touches the persisted data, so the database survives.
+      await internalState.killServer(instanceName).catch(() => undefined);
+    }
+
     const isFreshAllocation = existingRecord === undefined;
     let dbPort =
       existingRecord?.databasePort ?? (await smallestUnusedDatabasePort(MIN_DATABASE_PORT));
@@ -514,33 +563,30 @@ function main(): void {
         return { url };
       } catch (err) {
         if (isNameAlreadyTaken(err)) {
-          // "Already running" is thrown on ELOCKED — a LIVE process holds
-          // this server's state lock (verified in @prisma/dev's source; the
-          // parent stale-state error class is never thrown). The name is
-          // namespaced to this app+database, so that live server IS the goal:
-          // adopt it. The holder may still be mid-boot (its dump briefly
-          // unreadable), so adoption is retried with patience. NEVER delete
-          // the server's state or data here — the previous recovery did, and
-          // deleting pglite's files under a live holder wiped a migrated
-          // database's schema and crashed the daemon natively and silently.
+          // Lost a race with another holder between the reconcile above and
+          // this start. Re-read the record with patience: a holder still
+          // mid-boot has no connection string yet, and a dead holder's lock
+          // is only released once proper-lockfile's stale threshold passes.
           for (let adoptAttempt = 1; adoptAttempt <= MAX_ADOPT_ATTEMPTS; adoptAttempt += 1) {
-            const ghost = await adoptableServerOf(err);
-            if (ghost !== undefined) {
-              const url = ghost.database.connectionString;
-              runtimes.set(instanceName, ghost);
+            const now = await serverStatusOf(internalState, instanceName);
+            if (now.live && now.pid !== undefined && isPidAlive(now.pid) && now.url !== undefined) {
               appRec.databases[id] = {
                 id,
                 instanceName,
-                databasePort: databasePortOf(url) ?? dbPort,
-                url,
+                databasePort: now.databasePort ?? databasePortOf(now.url) ?? dbPort,
+                url: now.url,
               };
               schedulePersist();
-              return { url };
+              return { url: now.url };
             }
-            if (adoptAttempt < MAX_ADOPT_ATTEMPTS) {
-              await new Promise((resolve) => setTimeout(resolve, ADOPT_RETRY_DELAY_MS));
+            if (now.live && (now.pid === undefined || !isPidAlive(now.pid))) {
+              await internalState.killServer(instanceName).catch(() => undefined);
+              break;
             }
+            if (!now.live) break;
+            await new Promise((resolve) => setTimeout(resolve, ADOPT_RETRY_DELAY_MS));
           }
+          if (attempt < MAX_FRESH_PORT_CANDIDATES) continue;
         }
         const conflictPort = portConflictOf(err, [
           dbPort,
@@ -600,6 +646,11 @@ function main(): void {
     if (entries.length > 0 && prismaDevModulePathHint) {
       const internalState = await importPrismaDevInternalState(prismaDevModulePathHint);
       for (const db of entries) {
+        // A server this daemon adopted rather than started has no handle to
+        // close, so stop it by its record first (`killServer` leaves data).
+        if (!runtimes.has(db.instanceName)) {
+          await internalState.killServer(db.instanceName).catch(() => undefined);
+        }
         // `deleteServer`'s kill path targets the pid in the server's persisted
         // state — for an in-daemon server that pid is THIS DAEMON's own. The
         // close above marks the state stopped, but the write is asynchronous:

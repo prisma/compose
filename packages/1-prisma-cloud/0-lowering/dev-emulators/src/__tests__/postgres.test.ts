@@ -7,8 +7,11 @@
  * `@prisma/dev` usage elsewhere on this machine, and every test cleans up
  * via `DELETE /apps/<app>` so it never leaves persisted PGlite data behind.
  */
+
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import * as net from 'node:net';
+import { startPrismaDevServer } from '@prisma/dev';
+import { deleteServer } from '@prisma/dev/internal/state';
 import { Client as PgClient } from 'pg';
 import { postgresClient } from '../client.ts';
 import { stopDaemon } from '../daemon.ts';
@@ -236,4 +239,45 @@ describe('instance name derivation is linear, not polynomial', () => {
     expect(name).toBe('pcdev-a-b-a-b');
     expect(elapsedMs).toBeLessThan(100);
   });
+});
+
+describe("a server that exists in @prisma/dev's records but not the daemon's", () => {
+  test('a live server under the daemon-derived name is adopted, not restarted or deleted', async () => {
+    // The daemon's own state and `@prisma/dev`'s records can disagree: a
+    // daemon replaced for version skew, or a teardown that declined to
+    // delete, leaves a server registered under a name the daemon has no
+    // record of. Starting into that used to surface "already running" as a
+    // 500 — and the recovery that deleted the state took the data (and the
+    // daemon) with it. This test creates exactly that mismatch, first-hand.
+    const app = 'pgtest-adopt';
+    const id = 'db';
+    const instanceName = instanceNameFor(app, id);
+
+    // A server the daemon knows nothing about, under the name it derives.
+    const foreign = await startPrismaDevServer({ name: instanceName, persistenceMode: 'stateful' });
+    const foreignUrl = foreign.database.connectionString;
+
+    try {
+      await ensureFreshDaemon('postgres', registryRoot);
+      const client = postgresClient({ registryRoot });
+
+      const ensured = await client.ensureDatabase(app, id, prismaDevModulePath());
+
+      // Adopted: the same live server, reachable, not a second one on a
+      // different port.
+      expect(ensured.url).toBe(foreignUrl);
+      const pg = new PgClient({ connectionString: ensured.url });
+      await pg.connect();
+      await pg.query('select 1');
+      await pg.end();
+
+      // And the daemon stayed up — the failure this guards against killed it.
+      expect((await client.health()).version.length).toBeGreaterThan(0);
+
+      await client.deleteApp(app);
+    } finally {
+      await foreign.close().catch(() => undefined);
+      await deleteServer(instanceName).catch(() => undefined);
+    }
+  }, 60_000);
 });
