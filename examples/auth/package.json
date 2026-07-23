@@ -14,7 +14,9 @@
   "dependencies": {
     "@prisma-next/postgres": "0.15.0",
     "@prisma/composer": "workspace:0.2.0",
-    "@prisma/composer-prisma-cloud": "workspace:0.2.0"
+    "@prisma/composer-prisma-cloud": "workspace:0.2.0",
+    "arktype": "^2.2.3",
+    "hono": "^4.12.31"
   },
   "devDependencies": {
     "@prisma-next/cli": "0.15.0",

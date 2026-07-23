@@ -50,6 +50,12 @@ importers:
       '@prisma/composer-prisma-cloud':
         specifier: workspace:0.2.0
         version: link:../../packages/9-public/composer-prisma-cloud
+      arktype:
+        specifier: ^2.2.3
+        version: 2.2.3
+      hono:
+        specifier: ^4.12.31
+        version: 4.12.31
     devDependencies:
       '@prisma-next/cli':
         specifier: 0.15.0

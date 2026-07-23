@@ -1,54 +1,42 @@
 /**
  * The ops service's request handling — a minimal admin passthrough proving
- * the admin port wires to a SECOND service (least-privilege by wiring):
+ * the admin port wires to a SECOND service (least-privilege by wiring).
+ * Routing is Hono, the email example's pattern.
  *
  *   /admin/find-user             → POST { email } → findUser
  *   /admin/revoke-user-sessions  → POST { userId } → revokeUserSessions
  *   /health                      → 200
  */
+import type { Client } from '@prisma/composer/service-rpc';
+import type { authAdminContract } from '@prisma/composer-prisma-cloud/auth';
+import { type } from 'arktype';
+import { Hono } from 'hono';
 
-export interface AdminPort {
-  findUser(input: { email: string }): Promise<{ user: { id: string; email: string } | null }>;
-  revokeUserSessions(input: { userId: string }): Promise<{ revokedCount: number }>;
+const findUserBody = type({ email: 'string' });
+const revokeBody = type({ userId: 'string' });
+
+export interface OpsDeps {
+  /** The admin rpc port, typed straight off its contract — the same client shape `rpc(authAdminContract)` hydrates. */
+  readonly admin: Client<typeof authAdminContract>;
 }
 
-export function createOpsApp(deps: { admin: AdminPort }): (request: Request) => Promise<Response> {
-  const json = (body: unknown, status = 200) =>
-    new Response(JSON.stringify(body), {
-      status,
-      headers: { 'content-type': 'application/json' },
-    });
+export function createOpsApp(deps: OpsDeps): (request: Request) => Promise<Response> {
+  const app = new Hono();
 
-  return async (request) => {
-    const { pathname } = new URL(request.url);
+  app.post('/admin/find-user', async (c) => {
+    const body = findUserBody(await c.req.json().catch(() => undefined));
+    if (body instanceof type.errors) return c.json({ error: 'email required' }, 400);
+    return c.json(await deps.admin.findUser({ email: body.email }));
+  });
 
-    if (pathname === '/admin/find-user' && request.method === 'POST') {
-      const body: unknown = await request.json();
-      const email =
-        typeof body === 'object' &&
-        body !== null &&
-        'email' in body &&
-        typeof body.email === 'string'
-          ? body.email
-          : undefined;
-      if (email === undefined) return json({ error: 'email required' }, 400);
-      return json(await deps.admin.findUser({ email }));
-    }
+  app.post('/admin/revoke-user-sessions', async (c) => {
+    const body = revokeBody(await c.req.json().catch(() => undefined));
+    if (body instanceof type.errors) return c.json({ error: 'userId required' }, 400);
+    return c.json(await deps.admin.revokeUserSessions({ userId: body.userId }));
+  });
 
-    if (pathname === '/admin/revoke-user-sessions' && request.method === 'POST') {
-      const body: unknown = await request.json();
-      const userId =
-        typeof body === 'object' &&
-        body !== null &&
-        'userId' in body &&
-        typeof body.userId === 'string'
-          ? body.userId
-          : undefined;
-      if (userId === undefined) return json({ error: 'userId required' }, 400);
-      return json(await deps.admin.revokeUserSessions({ userId }));
-    }
+  app.all('/health', (c) => c.json({ ok: true }));
+  app.notFound((c) => c.json({ error: 'not found' }, 404));
 
-    if (pathname === '/health') return json({ ok: true });
-    return json({ error: 'not found' }, 404);
-  };
+  return async (request) => app.fetch(request);
 }
