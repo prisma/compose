@@ -155,18 +155,28 @@ function renderDevStackFile(bundles: Record<string, FixtureBundle>): string {
         `    ${JSON.stringify(id)}: { dir: ${JSON.stringify(b.dir)}, entry: ${JSON.stringify(b.entry)} },`,
     )
     .join('\n');
-  return `// Hand-written for the S4 integration proof — S5 owns generate-dev-stack.ts.
+  // Hand-written for the S4 integration proof — S5 owns generate-dev-stack.ts.
+  // This module IS the one orchestration point (deploy.ts's REVISED —
+  // operator review of #162): `lower()` itself learns nothing about dev;
+  // this file resolves the app's dev descriptors and containers itself and
+  // passes `providers:` + `state:` explicitly, exactly like the real
+  // generated dev stack module will.
+  return `import { deserializeContainers } from '@prisma/composer/config';
 import { lower } from '@prisma/composer/deploy';
+import { DEV_DIR, devProviders, resolveDevDescriptors } from '@prisma/composer/dev';
 import { localState } from 'alchemy/State/LocalState';
 import config from ${JSON.stringify(configImport)};
 import app from ${JSON.stringify(appImport)};
+
+const containers = deserializeContainers(config.extensions, process.env);
+const resolved = await resolveDevDescriptors(config);
 
 export default lower(app, config, {
   name: ${JSON.stringify(APP_NAME)},
   bundles: {
 ${bundleLines}
   },
-  dev: true,
+  providers: devProviders(resolved, containers, \`\${process.cwd()}/\${DEV_DIR}\`),
   state: localState(),
 });
 `;
@@ -361,9 +371,13 @@ async function main(): Promise<void> {
     }
     assert(descriptor.dev !== undefined, 'prismaCloud() must declare a dev descriptor');
 
-    // 2. The dev container — a purely local identity, no platform call.
-    const dev = descriptor.dev;
-    if (dev === undefined) throw new Error('expected a dev descriptor');
+    // 2. The dev container — a purely local identity, no platform call. The
+    // `dev` field is a lazy thunk (ADR-0041's lazy dev reference) — resolve
+    // it once, mirroring what `resolveDevDescriptors` does for the stack
+    // module above.
+    const devThunk = descriptor.dev;
+    if (devThunk === undefined) throw new Error('expected a dev descriptor');
+    const dev = await devThunk();
     devContainer = await dev.container.ensure({ appName: APP_NAME, stage: undefined });
 
     // 3. Load the graph (mirrors the CLI pipeline's own Load step).
@@ -546,10 +560,13 @@ async function main(): Promise<void> {
     // App-scoped teardown through the extension's own public dev.teardown —
     // never stops the daemons themselves (D4/D12), just this app's records
     // and its `prisma dev` instance(s).
-    if (descriptor?.dev?.teardown !== undefined) {
-      await descriptor.dev
-        .teardown({ container: devContainer, stage: undefined })
-        .catch(() => undefined);
+    if (descriptor?.dev !== undefined) {
+      const resolvedDev = await descriptor.dev().catch(() => undefined);
+      if (resolvedDev?.teardown !== undefined) {
+        await resolvedDev
+          .teardown({ container: devContainer, stage: undefined })
+          .catch(() => undefined);
+      }
     }
 
     // Stop only the daemon(s) THIS run caused to start (per the baseline
