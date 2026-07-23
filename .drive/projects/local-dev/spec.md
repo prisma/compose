@@ -503,6 +503,17 @@ allocated from our registry (stable, persisted), admin over the same
 loopback pattern as the other daemons (create/ensure database instance,
 list, remove). The local Database/Connection providers become its clients;
 teardown removes the app's instances through the daemon's admin API.
+`postgres-main`'s admin surface (loopback, same daemon layer/registry as
+the other two): `GET /health`; `PUT /apps/<app>/databases/<id>` body
+`{ "prismaDevModulePath": string }` → ensure a named persistent server
+(instance name per the derivation below; `databasePort` from the daemon's
+own persisted state, fresh-allocation retry per the § 2 pattern; the
+`@prisma/dev` module is imported from the CALLER-RESOLVED path so the app
+owns the version) → `{ "url": string }`, idempotent; `GET
+/apps/<app>/databases` → listing; `DELETE /apps/<app>` → close the app's
+servers and delete their persisted data (this is `--fresh`'s path). A
+server that fails to start surfaces the underlying error text verbatim
+(credential-masked) in the 500 body.
 Version ownership: `@prisma/dev` resolves from the APP's node_modules
 (passed into the daemon as a resolved path), keeping the app in charge of
 its Prisma version; absent →
