@@ -137,7 +137,13 @@ scripts. Implementer dispatches use Sonnet-4.6-mid, reviewers Opus-4.8-mid
   test (an ignores-SIGTERM fixture: the listing never says `stopped` while
   the pid lives, and the stop measurably takes the grace period).
 
-### S7 — adopt @prisma/dev programmatically (decided follow-up, post-stack)
+### S7 — MERGED INTO THE #162 REWORK WAVE (operator review, 2026-07-23)
+
+Will's #162 review mandated the programmatic adoption in-place ("replace
+it with programmatic use of prisma dev") — the section below is executed
+as part of the rework, not post-stack.
+
+### (was S7) — adopt @prisma/dev programmatically
 
 Operator decision (2026-07-23): replace the Postgres CLI shell-out with
 `@prisma/dev`'s programmatic API, hosted in our own `postgres-main`
