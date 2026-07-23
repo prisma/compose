@@ -97,7 +97,18 @@ export function buildAuthOptions(inputs: AuthOptionsInputs): BetterAuthOptions {
     // signup fails with "Failed to create user". Omitting it gives the
     // spec's stated intent: Better Auth's default generator, text ids.
     plugins: [
-      jwt({ jwt: { expirationTime: '15m' }, jwks: {} }),
+      jwt({
+        jwt: {
+          expirationTime: '15m',
+          // The default payload is the user object ALONE — no session claim
+          // at better-auth 1.6.24. The wire contract pins `sid`
+          // (VerifiedSession.sessionId; the per-call instant-logout opt-in
+          // resolves it against the session port), so the payload is the
+          // default shape plus that one claim.
+          definePayload: ({ user, session }) => ({ ...user, sid: session.id }),
+        },
+        jwks: {},
+      }),
       bearer(),
       admin(),
       magicLink({

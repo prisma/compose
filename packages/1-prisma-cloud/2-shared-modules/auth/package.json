@@ -13,9 +13,17 @@
       "types": "./dist/auth-service.d.mts",
       "default": "./dist/auth-service.mjs"
     },
+    "./auth-entrypoint": {
+      "types": "./dist/auth-entrypoint.d.mts",
+      "default": "./dist/auth-entrypoint.mjs"
+    },
     "./pack": {
       "types": "./dist/pack.d.mts",
       "default": "./dist/pack.mjs"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.mts",
+      "default": "./dist/testing.mjs"
     },
     "./package.json": "./package.json"
   },

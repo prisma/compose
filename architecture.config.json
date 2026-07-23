@@ -451,6 +451,24 @@
       "plane": "shared"
     },
     {
+      "glob": "packages/1-prisma-cloud/2-shared-modules/auth/src/execution/**",
+      "domain": "prisma-cloud",
+      "layer": "modules",
+      "plane": "execution"
+    },
+    {
+      "glob": "packages/1-prisma-cloud/2-shared-modules/auth/src/exports/auth-entrypoint.ts",
+      "domain": "prisma-cloud",
+      "layer": "modules",
+      "plane": "execution"
+    },
+    {
+      "glob": "packages/1-prisma-cloud/2-shared-modules/auth/src/exports/testing.ts",
+      "domain": "prisma-cloud",
+      "layer": "modules",
+      "plane": "execution"
+    },
+    {
       "glob": "packages/1-prisma-cloud/2-shared-modules/auth/src/exports/index.ts",
       "domain": "prisma-cloud",
       "layer": "modules",

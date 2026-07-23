@@ -78,24 +78,24 @@ describe('session handlers', () => {
   });
 });
 
-describe('admin.getUser — exactly one of id, email', () => {
-  const message = 'auth admin getUser: pass exactly one of id, email';
+describe('admin.findUser — exactly one of id, email', () => {
+  const message = 'auth admin findUser: pass exactly one of id, email';
 
   test('both set → the pinned error', async () => {
     const { admin } = createAuthHandlers(fakeStore());
-    await expect(admin.getUser({ id: 'u1', email: 'a@b.c' })).rejects.toThrow(message);
+    await expect(admin.findUser({ id: 'u1', email: 'a@b.c' })).rejects.toThrow(message);
   });
 
   test('neither set → the pinned error', async () => {
     const { admin } = createAuthHandlers(fakeStore());
-    await expect(admin.getUser({})).rejects.toThrow(message);
+    await expect(admin.findUser({})).rejects.toThrow(message);
   });
 
   test('id alone and email alone both pass through to the store', async () => {
     const store = fakeStore();
     const { admin } = createAuthHandlers(store);
-    await admin.getUser({ id: 'u1' });
-    await admin.getUser({ email: 'a@b.c' });
+    await admin.findUser({ id: 'u1' });
+    await admin.findUser({ email: 'a@b.c' });
     expect(store.calls).toEqual([
       ['getUser', { id: 'u1' }],
       ['getUser', { email: 'a@b.c' }],

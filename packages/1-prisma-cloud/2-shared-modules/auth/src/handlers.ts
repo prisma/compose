@@ -20,7 +20,7 @@ export interface SessionHandlers {
 }
 
 export interface AdminHandlers {
-  getUser(input: { id?: string; email?: string }): Promise<{ user: UserRecord | null }>;
+  findUser(input: { id?: string; email?: string }): Promise<{ user: UserRecord | null }>;
   listUsers(input: {
     query?: string;
     banned?: boolean;
@@ -61,9 +61,11 @@ export function createAuthHandlers(store: AuthStore): AuthHandlers {
   };
 
   const admin: AdminHandlers = {
-    async getUser({ id, email }) {
+    // Named findUser (not getUser): rpc dispatch is flat across a service's
+    // ports, and session.getUser already owns that method name.
+    async findUser({ id, email }) {
       if ((id === undefined) === (email === undefined)) {
-        throw new Error('auth admin getUser: pass exactly one of id, email');
+        throw new Error('auth admin findUser: pass exactly one of id, email');
       }
       const user = await store.getUser(id !== undefined ? { id } : { email: email ?? '' });
       return { user };

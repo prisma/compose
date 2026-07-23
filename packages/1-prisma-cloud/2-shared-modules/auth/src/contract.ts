@@ -190,7 +190,7 @@ export const authSessionContract = contract({
 // ——— Port `admin` — the tier-1 admin path ———
 
 export const authAdminContract = contract({
-  getUser: rpc({
+  findUser: rpc({
     input: type({ 'id?': 'string', 'email?': 'string' }),
     output: type({ user: userRecord.or('null') }),
   }),

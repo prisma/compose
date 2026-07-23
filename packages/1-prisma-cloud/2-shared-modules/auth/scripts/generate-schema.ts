@@ -70,8 +70,24 @@ export function renderSchemaSql(): string {
   return `${lines.join('\n').trimEnd()}\n`;
 }
 
+/** The generated TS twin of schema.sql — what the testing export imports (a bundler-safe string; no runtime file read). */
+export function renderSchemaSqlModule(): string {
+  return [
+    '// GENERATED FILE - DO NOT EDIT (pnpm generate:schema)',
+    '// The TS twin of schema.sql for the testing export — a bundler-safe',
+    '// string instead of a runtime file read. The conformance test asserts',
+    '// the two never drift.',
+    '',
+    '/** Flat, idempotent DDL of the auth pack migration graph applied to an empty database. */',
+    `export const AUTH_SCHEMA_SQL = ${JSON.stringify(renderSchemaSql())};`,
+    '',
+  ].join('\n');
+}
+
 if (import.meta.main) {
-  const out = new URL('../src/pack/schema.sql', import.meta.url);
-  await Bun.write(out, renderSchemaSql());
-  console.log(`wrote ${out.pathname}`);
+  const sqlOut = new URL('../src/pack/schema.sql', import.meta.url);
+  await Bun.write(sqlOut, renderSchemaSql());
+  const tsOut = new URL('../src/pack/schema-sql.ts', import.meta.url);
+  await Bun.write(tsOut, renderSchemaSqlModule());
+  console.log(`wrote ${sqlOut.pathname}\nwrote ${tsOut.pathname}`);
 }

@@ -156,6 +156,11 @@ describe.skipIf(pgServer === undefined)('schema.sql (the testing-export bootstra
     expect(committed).toBe(renderSchemaSql());
   });
 
+  test('the committed TS twin (schema-sql.ts) has not drifted from schema.sql', async () => {
+    const { AUTH_SCHEMA_SQL } = await import('../pack/schema-sql.ts');
+    expect(AUTH_SCHEMA_SQL).toBe(renderSchemaSql());
+  });
+
   test('applies idempotently to a fresh database and conforms the same way', async () => {
     const db = await createTestDatabase(pgServer.url);
     try {
