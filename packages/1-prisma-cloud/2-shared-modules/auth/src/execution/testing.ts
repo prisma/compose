@@ -1,10 +1,11 @@
 /**
- * `startLocalAuthServer` (D16): the module's official local-dev surface —
- * real Better Auth + the real DB-direct handlers against a caller-supplied
- * local Postgres, composed through the SAME fetch topology as the deployed
- * entrypoint. No cloud credentials: the pack's schema applies idempotently
- * at boot, the secret is a fixed dev value, and serve() runs in its
- * no-keys pass-through (nothing provisioned the accepted-keys env).
+ * `startLocalAuthServer`: the module's official local-dev surface — real
+ * Better Auth + the real DB-direct handlers against a caller-supplied local
+ * Postgres, composed through the SAME fetch topology as the deployed
+ * entrypoint. No cloud credentials: the schema arrives through the real PN
+ * dbInit path at boot (`ensureLocalAuthSchema` — marker-signed, no-op when
+ * already at head), the secret is a fixed dev value, and serve() runs in
+ * its no-keys pass-through (nothing provisioned the accepted-keys env).
  *
  * Email: by default the S1 send seam captures `{ template, to, url }` into
  * `capturedEmails`, so a local flow can read its live verification /
@@ -15,12 +16,11 @@ import node from '@internal/node';
 import { compute } from '@internal/prisma-cloud';
 import { composeServiceFetch, serve } from '@internal/service-rpc';
 import { betterAuth } from 'better-auth';
-import pg from 'pg';
 import { type AuthEmailSender, buildAuthOptions } from '../auth-options.ts';
 import { authAdminContract, authApiContract, authSessionContract } from '../contract.ts';
 import { createAuthHandlers } from '../handlers.ts';
-import { AUTH_SCHEMA_SQL } from '../pack/schema-sql.ts';
 import { createPgAuthStore } from '../pg-auth-store.ts';
+import { ensureLocalAuthSchema } from './local-schema.ts';
 
 /** One captured email touchpoint — `url` is the live link (verification/reset/magic). */
 export interface CapturedAuthEmail {
@@ -49,14 +49,9 @@ export async function startLocalAuthServer(opts: {
   /** Default: capture into `capturedEmails`. */
   email?: AuthEmailSender;
 }): Promise<LocalAuthServer> {
-  // The pack's schema, applied idempotently (every statement is IF NOT
-  // EXISTS-guarded) — the local stand-in for the deploy's migration step.
-  const bootstrap = new pg.Pool({ connectionString: opts.databaseUrl, max: 1 });
-  try {
-    await bootstrap.query(AUTH_SCHEMA_SQL);
-  } finally {
-    await bootstrap.end();
-  }
+  // The real deploy path in miniature: PN dbInit with the auth pack against
+  // the caller's database (no-op off the signed marker on repeat boots).
+  await ensureLocalAuthSchema(opts.databaseUrl);
 
   const capturedEmails: CapturedAuthEmail[] = [];
   const sendEmail: AuthEmailSender =

@@ -9,8 +9,7 @@
  *
  * Control policy is MANAGED (the emit default) — unlike Supabase's external
  * tables, OUR migrations create these. Regeneration: edit `contract.prisma`,
- * run `prisma-next contract emit`, re-author the migration, and
- * `pnpm generate:schema`.
+ * run `prisma-next contract emit`, and re-author the migration.
  */
 import { blindCast } from '@internal/foundation/casts';
 import type { SqlControlExtensionDescriptor } from '@prisma-next/family-sql/control';

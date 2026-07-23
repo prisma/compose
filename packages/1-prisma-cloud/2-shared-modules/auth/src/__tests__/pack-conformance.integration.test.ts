@@ -11,9 +11,9 @@
  *     `@better-auth/cli generate`) at the migrated schema and assert ZERO
  *     pending changes.
  *
- *  2. THE LOCAL-DEV PATH: `schema.sql` applied to a fresh DB (twice —
- *     idempotence is the file's contract) conforms the same way, and the
- *     committed file equals `pnpm generate:schema`'s output byte-for-byte.
+ *  2. THE LOCAL-DEV PATH: `ensureLocalAuthSchema` (the testing export's
+ *     bootstrap) brings a fresh DB to the same conforming schema through the
+ *     same PN pipeline, and a second boot is a marker no-op.
  *
  * A better-auth version bump that changes the schema fails here first.
  */
@@ -30,9 +30,9 @@ import { createPostgresControlClient } from '@prisma-next/postgres/control';
 import { getMigrations } from 'better-auth/db/migration';
 import { admin, bearer, jwt, magicLink } from 'better-auth/plugins';
 import pg from 'pg';
-import { renderSchemaSql } from '../../scripts/generate-schema.ts';
+import emptyAppContractJson from '../execution/empty-app-contract.json' with { type: 'json' };
+import { ensureLocalAuthSchema } from '../execution/local-schema.ts';
 import { AUTH_PACK_ID, AUTH_SCHEMA, authPack } from '../pack/index.ts';
-import emptyAppContractJson from './fixtures/empty-app/emitted/contract.json' with { type: 'json' };
 import {
   createTestDatabase,
   startTestPostgres,
@@ -144,40 +144,48 @@ describe.skipIf(pgServer === undefined)('auth pack schema conformance', () => {
   });
 });
 
-describe.skipIf(pgServer === undefined)('schema.sql (the testing-export bootstrap)', () => {
-  if (pgServer === undefined) return;
+describe.skipIf(pgServer === undefined)(
+  'ensureLocalAuthSchema (the testing-export bootstrap)',
+  () => {
+    if (pgServer === undefined) return;
 
-  afterAll(() => {
-    pgServer.stop();
-  });
+    afterAll(() => {
+      pgServer.stop();
+    });
 
-  test('the committed schema.sql equals the regenerated output', () => {
-    const committed = fs.readFileSync(path.join(packDir, 'schema.sql'), 'utf8');
-    expect(committed).toBe(renderSchemaSql());
-  });
-
-  test('the committed TS twin (schema-sql.ts) has not drifted from schema.sql', async () => {
-    const { AUTH_SCHEMA_SQL } = await import('../pack/schema-sql.ts');
-    expect(AUTH_SCHEMA_SQL).toBe(renderSchemaSql());
-  });
-
-  test('applies idempotently to a fresh database and conforms the same way', async () => {
-    const db = await createTestDatabase(pgServer.url);
-    try {
-      const sql = fs.readFileSync(path.join(packDir, 'schema.sql'), 'utf8');
-      const client = new pg.Client({ connectionString: db.url });
-      await client.connect();
+    test('boots a fresh database to a conforming schema; a second boot is a marker no-op', async () => {
+      const db = await createTestDatabase(pgServer.url);
       try {
-        await client.query(sql);
-        // Idempotence IS the file's contract (the local server applies it on
-        // every boot): a second apply must be a clean no-op.
-        await client.query(sql);
+        await ensureLocalAuthSchema(db.url);
+        // Repeat boots are the local server's contract: the signed marker
+        // makes the second call a clean no-op.
+        await ensureLocalAuthSchema(db.url);
+        await expectZeroPendingChanges(db.url);
       } finally {
-        await client.end();
+        await db.drop().catch(() => {});
       }
-      await expectZeroPendingChanges(db.url);
-    } finally {
-      await db.drop().catch(() => {});
-    }
-  });
-});
+    });
+
+    test('refuses a database that carries other contract spaces without the auth pack', async () => {
+      const db = await createTestDatabase(pgServer.url);
+      try {
+        const client = new pg.Client({ connectionString: db.url });
+        await client.connect();
+        try {
+          await client.query('CREATE SCHEMA prisma_contract');
+          await client.query(
+            'CREATE TABLE prisma_contract.marker (space text PRIMARY KEY, core_hash text NOT NULL)',
+          );
+          await client.query(
+            "INSERT INTO prisma_contract.marker VALUES ('app', 'sha256:some-app')",
+          );
+        } finally {
+          await client.end();
+        }
+        await expect(ensureLocalAuthSchema(db.url)).rejects.toThrow(/extensionPacks/);
+      } finally {
+        await db.drop().catch(() => {});
+      }
+    });
+  },
+);

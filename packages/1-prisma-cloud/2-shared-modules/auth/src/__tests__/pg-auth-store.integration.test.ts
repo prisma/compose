@@ -1,16 +1,16 @@
 /**
- * The `AuthStore` over a real local Postgres, bootstrapped with the pack's
- * own `schema.sql` (the same DDL a deploy migrates to): per-op SQL semantics
+ * The `AuthStore` over a real local Postgres, bootstrapped through the same
+ * PN dbInit path the local server uses (the DDL a deploy migrates to):
+ * per-op SQL semantics
  * — session expiry and the banned-owner null, case-insensitive email lookup,
  * the effective-ban filter both ways (including a lapsed ban), ILIKE
  * escaping, keyset pagination edges, revocation idempotency, and
  * ban-implies-revoke atomicity.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
 import { SQL } from 'bun';
 import type { AuthStore } from '../auth-store.ts';
+import { ensureLocalAuthSchema } from '../execution/local-schema.ts';
 import { createPgAuthStore } from '../pg-auth-store.ts';
 import {
   createTestDatabase,
@@ -82,9 +82,8 @@ describe.skipIf(pgServer === undefined)('PgAuthStore', () => {
 
   beforeAll(async () => {
     db = await createTestDatabase(pgServer.url);
+    await ensureLocalAuthSchema(db.url);
     sql = new SQL({ url: db.url, max: 1 });
-    const schema = fs.readFileSync(path.join(import.meta.dir, '..', 'pack', 'schema.sql'), 'utf8');
-    await sql.unsafe(schema);
     store = createPgAuthStore(db.url);
   });
   afterAll(async () => {
@@ -170,10 +169,8 @@ describe.skipIf(pgServer === undefined)('PgAuthStore', () => {
 
     beforeAll(async () => {
       pagedDb = await createTestDatabase(pgServer.url);
+      await ensureLocalAuthSchema(pagedDb.url);
       pagedSql = new SQL({ url: pagedDb.url, max: 1 });
-      await pagedSql.unsafe(
-        fs.readFileSync(path.join(import.meta.dir, '..', 'pack', 'schema.sql'), 'utf8'),
-      );
       const insert = async (
         id: string,
         createdAt: string,

@@ -56,6 +56,11 @@ export default defineConfig([
     noExternal: [
       /^@internal\//,
       /^@prisma\//,
+      // The local bootstrap runs the real PN dbInit path, so the control
+      // client (and the rest of the @prisma-next graph it reaches) must ride
+      // inside the bundle — @prisma-next/postgres is a devDependency here
+      // precisely because consumers never resolve it themselves.
+      /^@prisma-next\//,
       /^arktype/,
       /^@standard-schema\//,
       /^better-auth/,

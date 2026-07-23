@@ -31,7 +31,6 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test src",
     "build": "tsdown",
-    "generate:schema": "bun scripts/generate-schema.ts",
     "clean": "rm -rf dist"
   },
   "dependencies": {
