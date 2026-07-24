@@ -1089,6 +1089,37 @@ describe("prismaCloud().nodes['compute'] — the service descriptor", () => {
       },
     ]);
   });
+
+  test('deploy omits the absent detail when no key is absent (the common case) — no spurious blank report line (ADR-0042)', () => {
+    const target = prismaCloud({ workspaceId: 'ws_1' });
+    const ctx = { id: 'auth' } as unknown as LowerContext;
+    const provisioned = { serviceId: 'auth-svc#cloud-id', projectId: 'shop-project#cloud-id' };
+    const artifact = { path: '/tmp/auth.tar.gz', sha256: 'sha-auth' };
+    const serialized = {
+      environment: [],
+      port: 3000,
+      input: {
+        key: 'COMPOSER_AUTH_INPUT',
+        value: '{"stripeKey":{"$secret":"STRIPE_SECRET_KEY"}}',
+        absent: [],
+      },
+    };
+
+    const result = run<LoweredResult>(
+      serviceDescriptorOf(target, 'compute').deploy(ctx, provisioned, artifact, serialized),
+    );
+
+    expect(result.entities).toEqual([
+      {
+        kind: 'compute-service',
+        id: 'auth-svc#cloud-id',
+        url: 'https://auth-deploy.example',
+        details: {
+          input: '{"stripeKey":{"$secret":"STRIPE_SECRET_KEY"}}',
+        },
+      },
+    ]);
+  });
 });
 
 describe("prismaCloud().nodes['s3-store'] — the service descriptor with extended outputs (§ 5)", () => {
