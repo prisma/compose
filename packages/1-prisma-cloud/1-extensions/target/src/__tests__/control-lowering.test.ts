@@ -753,6 +753,7 @@ describe("prismaCloud().nodes['compute'] — the service descriptor", () => {
           key: 'COMPOSER_INGEST_INPUT',
           value: '{"stripeEnabled":true,"stripeKey":{"$secret":"STRIPE_SECRET_KEY"}}',
           absent: [],
+          generated: [],
         });
       },
     );
@@ -798,6 +799,7 @@ describe("prismaCloud().nodes['compute'] — the service descriptor", () => {
         key: 'COMPOSER_INGEST_INPUT',
         value: '{}',
         absent: ['greeting → NOT_SET_GREETING_VAR'],
+        generated: [],
       });
     });
   });

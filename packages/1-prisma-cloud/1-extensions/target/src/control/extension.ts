@@ -30,6 +30,7 @@ import type {
   ResolvedCloudOptions,
   ServiceProviderParam,
 } from '../descriptors/shared.ts';
+import { GeneratedParamProvider } from '../generated-param-resource.ts';
 import { SELF_ORIGIN } from '../origin-key.ts';
 import { PgWarmProvider } from '../pg-warm-resource.ts';
 import { PnMigrationProvider } from '../pn-migration-resource.ts';
@@ -329,6 +330,7 @@ export const prismaCloud = (opts: PrismaCloudOptions = {}): ExtensionDescriptor 
           PgWarmProvider(),
           PnMigrationProvider(),
           S3CredentialsProvider(),
+          GeneratedParamProvider(),
           Prisma.ServiceKeyProvider(),
         ),
       ),

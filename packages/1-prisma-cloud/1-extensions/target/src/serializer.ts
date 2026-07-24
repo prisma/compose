@@ -26,7 +26,7 @@ import { blindCast } from '@internal/foundation/casts';
 import { SecretBox, type SecretString } from '@internal/foundation/secret';
 import type { StandardSchemaV1 } from '@standard-schema/spec';
 import { type } from 'arktype';
-import { isEnvParamSource } from './param.ts';
+import { isEnvParamSource, isGeneratedParamSource } from './param.ts';
 import { secretName } from './secret.ts';
 
 // The ambient environment of whatever runtime hosts the bundle. Declared
@@ -234,14 +234,30 @@ export const INPUT_KEY_NAME = 'INPUT';
 export const inputKey = (address: string): string =>
   configKey(address, { owner: 'service', name: INPUT_KEY_NAME });
 
-// The document's one reserved key. User data may legitimately contain a
-// "$secret" key, so the writer escapes any key matching /^\$+secret$/ by
-// prefixing one more "$" ("$secret" → "$$secret", "$$secret" → "$$$secret"),
-// and the reader strips one "$" back off — a round-trip under which only the
-// framework can put a literal single-"$" marker in the document.
+/**
+ * The platform var the deploy provisions for a generated input leaf's value:
+ * COMPOSER_<addr>_<KEY>_GENERATED, where <KEY> is the leaf's input-document
+ * path normalized the way `configKey` normalizes its keys (segments joined
+ * with "_", uppercased). Lives in the framework's reserved COMPOSER_ namespace
+ * (envParam/envSecret reject COMPOSER_ names), so it can never collide with a
+ * user-provisioned var.
+ */
+export const generatedParamVarName = (address: string, path: string): string => {
+  const segments = address.split('.').filter((s) => s.length > 0);
+  const pathSegments = path.split('.').filter((s) => s.length > 0);
+  return ['COMPOSER', ...segments, ...pathSegments, 'GENERATED'].join('_').toUpperCase();
+};
+
+// The document's two reserved keys, "$secret" and "$generated". User data may
+// legitimately contain such a key, so the writer escapes any key matching
+// /^\$+(secret|generated)$/ by prefixing one more "$" ("$secret" → "$$secret",
+// "$$secret" → "$$$secret"), and the reader strips one "$" back off — a
+// round-trip under which only the framework can put a literal single-"$" marker
+// in the document.
 const SECRET_MARKER = '$secret';
-const ESCAPABLE_KEY = /^\$+secret$/;
-const ESCAPED_KEY = /^\$\$+secret$/;
+const GENERATED_MARKER = '$generated';
+const ESCAPABLE_KEY = /^\$+(?:secret|generated)$/;
+const ESCAPED_KEY = /^\$\$+(?:secret|generated)$/;
 
 /** True for the framework's secret pointer: `{ "$secret": "<PLATFORM_VAR>" }` and nothing else. */
 function isSecretPointer(value: unknown): value is { readonly $secret: string } {
@@ -255,6 +271,18 @@ function isSecretPointer(value: unknown): value is { readonly $secret: string } 
   );
 }
 
+/** True for the framework's generated pointer: `{ "$generated": "<PLATFORM_VAR>" }` and nothing else. */
+function isGeneratedPointer(value: unknown): value is { readonly $generated: string } {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.keys(value).length === 1 &&
+    GENERATED_MARKER in value &&
+    typeof value[GENERATED_MARKER] === 'string'
+  );
+}
+
 /** A plain data object (not an array, not a class instance) — the only object shape a binding/document may nest. */
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
@@ -264,13 +292,57 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 const ABSENT: unique symbol = Symbol('composer-input-absent');
 
-/** What `resolveInputBinding` hands back: the schema-ready object plus the sentinel→platform-name map and every key path that resolved absent. */
+/** One generated input leaf the walk records: the descriptor provisions a `GeneratedParam` resource + an env row per entry, and the substitution emits its `$generated` pointer at `path`. */
+export interface GeneratedLeaf {
+  readonly varName: string;
+  readonly bytes: number;
+  readonly redacted: boolean;
+  readonly path: string;
+}
+
+/** One pointer var name and the input path that produced it — the collision guard's unit. */
+export interface PointerName {
+  readonly path: string;
+  readonly varName: string;
+}
+
+/** What `resolveInputBinding` hands back: the schema-ready object plus the sentinel→platform-name map, the generated leaves, and every key path that resolved absent. */
 export interface ResolvedInputBinding {
   readonly resolved: unknown;
   /** Each secret leaf's sentinel box, mapped to the platform var it points to — identity is the lever `serializeInput` substitutes by. */
   readonly sentinels: ReadonlyMap<SecretString, string>;
+  /** Every generated leaf — provisioned by the descriptor, substituted to a `$generated` pointer by path. */
+  readonly generated: readonly GeneratedLeaf[];
   /** Dot-joined binding paths whose env-bound leaf resolved absent (unset/empty deploy-shell var) — deploy-report fodder. */
   readonly absent: readonly string[];
+}
+
+/**
+ * Deploy guard (ADR-0041, closing review finding F02): every pointer var name a
+ * service's input binding produces — `$secret` names AND `$generated` names —
+ * must be distinct after normalization. Env var names compare case-insensitively
+ * (the platform uppercases), so two input paths whose names differ only in case
+ * would silently overwrite each other at deploy; fail loudly naming both. One
+ * general check over both pointer kinds, not a per-marker special case (it also
+ * covers the pre-existing `foo`/`FOO` class for secrets).
+ */
+export function assertDistinctPointerNames(
+  pointers: readonly PointerName[],
+  address: string,
+): void {
+  const seen = new Map<string, PointerName>();
+  for (const pointer of pointers) {
+    const normalized = pointer.varName.toUpperCase();
+    const prior = seen.get(normalized);
+    if (prior !== undefined) {
+      throw new Error(
+        `invalid input for service "${address}": input paths "${prior.path}" and "${pointer.path}" ` +
+          `both resolve to the platform variable "${normalized}" — pointer variable names must be ` +
+          'distinct (env var names compare case-insensitively).',
+      );
+    }
+    seen.set(normalized, pointer);
+  }
 }
 
 /**
@@ -284,11 +356,27 @@ export interface ResolvedInputBinding {
 export function resolveInputBinding(
   binding: unknown,
   env: Record<string, string | undefined>,
+  address = '',
 ): ResolvedInputBinding {
   const sentinels = new Map<SecretString, string>();
+  const generated: GeneratedLeaf[] = [];
+  const pointers: PointerName[] = [];
   const absent: string[] = [];
 
   const walk = (value: unknown, path: string): unknown => {
+    // A generated leaf is a ParamSource too, so it MUST be recognized before
+    // the param/secret branches. It resolves to a sentinel the schema
+    // validates — a redacting box when redacted, the empty string otherwise
+    // (mirroring the deploy sentinel a secret leaf uses). The substitution
+    // later swaps the sentinel for a `{ "$generated": VAR }` pointer by path;
+    // the walk itself provisions nothing.
+    if (isGeneratedParamSource(value)) {
+      const { bytes, redacted } = value.payload;
+      const varName = generatedParamVarName(address, path);
+      generated.push({ varName, bytes, redacted, path });
+      pointers.push({ path, varName });
+      return redacted ? new SecretBox('') : '';
+    }
     if (isSecretSource(value)) {
       const name = secretName(
         value,
@@ -296,6 +384,7 @@ export function resolveInputBinding(
       );
       const sentinel = new SecretBox('');
       sentinels.set(sentinel, name);
+      pointers.push({ path, varName: name });
       return sentinel;
     }
     if (isParamSource(value)) {
@@ -353,16 +442,19 @@ export function resolveInputBinding(
   };
 
   const resolved = walk(binding, '');
-  return { resolved: resolved === ABSENT ? undefined : resolved, sentinels, absent };
+  assertDistinctPointerNames(pointers, address);
+  return { resolved: resolved === ABSENT ? undefined : resolved, sentinels, generated, absent };
 }
 
 /** One serialized input document, ready to write as an env row. */
 export interface InputDocumentRow {
   readonly key: string;
-  /** The JSON document — defaults-applied, secret leaves as `$secret` pointers, secret-free by construction. */
+  /** The JSON document — defaults-applied, secret leaves as `$secret` pointers, generated leaves as `$generated` pointers, secret-free by construction. */
   readonly value: string;
   /** Dot-joined binding paths whose env-bound leaf resolved absent — deploy-report fodder. */
   readonly absent: readonly string[];
+  /** Generated leaves the descriptor must provision (a `GeneratedParam` resource + env row each). */
+  readonly generated: readonly GeneratedLeaf[];
 }
 
 /**
@@ -395,7 +487,7 @@ export function serializeInput(
       `service "${address}" declares an input schema but has no recorded input binding — Load should have required it (ADR-0042).`,
     );
   }
-  const { resolved, sentinels, absent } = resolveInputBinding(binding, env);
+  const { resolved, sentinels, generated, absent } = resolveInputBinding(binding, env, address);
   let validated: unknown;
   try {
     validated = standardValidateSync(schema, resolved);
@@ -408,23 +500,31 @@ export function serializeInput(
         'secretness, or the schema refines on secret content — which ADR-0042 forbids.)',
     );
   }
-  const document = substituteSecretPointers(validated, sentinels, address);
-  return { key: inputKey(address), value: JSON.stringify(document), absent };
+  const document = substitutePointers(validated, sentinels, generated, address);
+  return { key: inputKey(address), value: JSON.stringify(document), absent, generated };
 }
 
 /**
- * Walks the VALIDATED output, mapping each sentinel box (by identity) back to
- * its `{ "$secret": name }` pointer and escaping any user key that matches
- * the reserved marker. A `SecretString` the walk does not recognize came from
- * the schema itself (a default or transform minting a box) — there is no
- * platform var behind it, so it is rejected rather than serialized.
+ * Walks the VALIDATED output, mapping each generated leaf (by input path) to
+ * its `{ "$generated": VAR }` pointer and each sentinel box (by identity) to
+ * its `{ "$secret": name }` pointer, escaping any user key that matches a
+ * reserved marker. The generated check runs FIRST, so a redacted generated
+ * leaf's sentinel box becomes `$generated`, never mistaken for a secret. A
+ * `SecretString` the walk does not recognize came from the schema itself (a
+ * default or transform minting a box) — there is no platform var behind it, so
+ * it is rejected rather than serialized. The path format matches
+ * `resolveInputBinding`'s exactly, so generated leaves are found by path.
  */
-function substituteSecretPointers(
+function substitutePointers(
   value: unknown,
   sentinels: ReadonlyMap<SecretString, string>,
+  generated: readonly GeneratedLeaf[],
   address: string,
 ): unknown {
+  const generatedByPath = new Map(generated.map((leaf) => [leaf.path, leaf.varName]));
   const walk = (v: unknown, path: string): unknown => {
+    const generatedVar = generatedByPath.get(path);
+    if (generatedVar !== undefined) return { [GENERATED_MARKER]: generatedVar };
     if (v instanceof SecretBox) {
       const name = sentinels.get(v);
       if (name === undefined) {
@@ -436,7 +536,7 @@ function substituteSecretPointers(
       }
       return { [SECRET_MARKER]: name };
     }
-    if (Array.isArray(v)) return v.map((m, i) => walk(m, `${path}[${i}]`));
+    if (Array.isArray(v)) return v.map((m, i) => walk(m, path === '' ? String(i) : `${path}.${i}`));
     if (isPlainObject(v)) {
       const out: Record<string, unknown> = {};
       for (const [key, member] of Object.entries(v)) {
@@ -508,7 +608,7 @@ export function readInput(node: ServiceNode, address: string): unknown {
   }
 }
 
-/** Reverses the document encoding: `$secret` pointers become redacting boxes over the named platform vars; escaped reserved keys drop one "$". */
+/** Reverses the document encoding: `$secret` and `$generated` pointers become redacting boxes over the named platform vars; escaped reserved keys drop one "$". */
 function hydrateInputDocument(value: unknown, key: string): unknown {
   if (isSecretPointer(value)) {
     const name = value[SECRET_MARKER];
@@ -519,6 +619,22 @@ function hydrateInputDocument(value: unknown, key: string): unknown {
       );
     }
     return new SecretBox(secret);
+  }
+  if (isGeneratedPointer(value)) {
+    const varName = value[GENERATED_MARKER];
+    const generated = process.env[varName];
+    if (generated === undefined || generated === '') {
+      throw new Error(
+        `generated input is not provisioned (env ${key} → ${varName}): the platform variable ` +
+          `"${varName}" is unset or empty — the deploy provisions this variable, so its absence ` +
+          'means the deploy and the running service disagree.',
+      );
+    }
+    // A generated leaf's value hydrates wrapped in the redacting box, matching
+    // the redacted facet — the only facet with a boot caller (the auth signing
+    // value). The `secretString()` schema field a redacted generated leaf
+    // pairs with requires exactly this box.
+    return new SecretBox(generated);
   }
   if (Array.isArray(value)) return value.map((member) => hydrateInputDocument(member, key));
   if (isPlainObject(value)) {
