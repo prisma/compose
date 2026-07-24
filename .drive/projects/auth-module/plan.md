@@ -194,14 +194,17 @@ Two operator decisions:
   nor the S2 email smoke has run since the rework, which changed the
   secret's resource identity. Re-run both before either PR merges.
 
-- **envParam value changes never reach running services (framework gap).**
-  The Deployment lowering claims a new deployment "when any upstream value
-  changes", but `EnvironmentVariable` attributes carry only `{id, key}` —
-  the value never enters the diff, so changing an env param and redeploying
-  is a no-op. Surfaced by the S2 deployed smoke (`AUTH_BASE_URL`). Fix needs
-  a design decision (fold a value hash into deployment props, or derive
-  `baseUrl` from the api service's own origin like `COMPOSER_*_ORIGIN`).
-  Not an auth-project change — route to a framework ticket/design pass.
+- **envParam value changes never reach running services (framework gap) —
+  NARROWER than first recorded.** For a direct `envParam` param *row*, the
+  Deployment's `EnvironmentVariable` attributes carry only `{id, key}`, so a
+  value change never enters the diff and a redeploy is a no-op. BUT under
+  ADR-0042 an `envParam` bound in a service `input` is a leaf of the one
+  `COMPOSER_<addr>_INPUT` document var, whose VALUE the Deployment does
+  depend on — so changing it DOES roll the service. Proven on the 2026-07-24
+  ADR-0042 deployed smoke: correcting `AUTH_BASE_URL` and redeploying rolled
+  `auth.service` (while the `GeneratedParam` resource no-op'd). So the gap
+  bites only direct param rows, not input-document leaves; auth on ADR-0042
+  is unaffected. Any framework fix is still for the direct-row path.
 - **`AUTH_BASE_URL` chicken-and-egg on first deploy.** The platform assigns
   the api domain at first deploy, so the deployed smoke needs two passes
   (deploy with placeholder → read real URL → update var → roll the auth
