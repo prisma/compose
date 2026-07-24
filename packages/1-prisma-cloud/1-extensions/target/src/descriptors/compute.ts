@@ -5,6 +5,7 @@ import type { ServiceLowering } from '@internal/core/deploy';
 import * as Prisma from '@internal/lowering';
 import * as Output from 'alchemy/Output';
 import * as Effect from 'effect/Effect';
+import { GeneratedParam } from '../generated-param-resource.ts';
 import { paramBindingFor, paramName } from '../param.ts';
 import { provisionedEdges } from '../provisioned-edges.ts';
 import {
@@ -129,12 +130,32 @@ export function computeDescriptor(
               projectId,
               key: inputRow.key,
               // The defaults-applied document — secret leaves are `$secret`
-              // pointers naming platform vars, never values (ADR-0042).
+              // pointers, generated leaves are `$generated` pointers, naming
+              // platform vars, never values (ADR-0042).
               value: inputRow.value,
               class: cls,
               ...branch,
             }),
           );
+          // Each generated leaf: generate its value ONCE (the resource keeps it
+          // stable across redeploys via its persisted output) and provision it
+          // under the framework var the document's `$generated` pointer names.
+          // The resource id is stable per service+leaf so reconcile finds the
+          // existing value instead of regenerating.
+          for (const leaf of inputRow.generated) {
+            const resource = yield* GeneratedParam(`${inputRow.key}:${leaf.path}-generated`, {
+              bytes: leaf.bytes,
+            });
+            records.push(
+              yield* Prisma.EnvironmentVariable(`${leaf.varName}-var`, {
+                projectId,
+                key: leaf.varName,
+                value: resource.value,
+                class: cls,
+                ...branch,
+              }),
+            );
+          }
         }
 
         // ADR-0031: this node's own faceted inputs already got their edge's

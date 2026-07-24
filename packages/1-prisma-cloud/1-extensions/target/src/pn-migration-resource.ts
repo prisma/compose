@@ -1,5 +1,5 @@
 /**
- * The `PnMigration` Alchemy resource (ADR-0022, slice 2 D2) — the migration
+ * The `PnMigration` Alchemy resource (ADR-0022) — the migration
  * step modeled as a tracked resource so it participates in deploy state: keyed
  * on the target REF identity (`targetHash` + sorted `invariants`), an
  * unchanged redeploy is an Alchemy-level no-op (on top of the marker read),
@@ -21,6 +21,7 @@
 import { Resource } from 'alchemy';
 import * as Provider from 'alchemy/Provider';
 import * as Effect from 'effect/Effect';
+import { resolvePrismaNextConfig } from './pn-config.ts';
 import { applyPnMigration } from './prisma-next-migrate.ts';
 
 export interface PnMigrationProps {
@@ -41,6 +42,21 @@ export interface PnMigrationProps {
   readonly invariants: readonly string[];
   /** The named ref (`targetRef`) this deploy pinned, when set — threaded to PN's migrate. */
   readonly refName?: string;
+  /**
+   * `"<packId>:<headRefHash>"` per declared extension pack, SORTED by pack id
+   * (`packHeadRefHashes`, pn-config.ts) — folded into the diff key so a pack
+   * upgrade at an unchanged app contract still produces a distinct deploy
+   * step. Only the identity rides in props: pack DESCRIPTORS carry functions,
+   * which cannot live in persisted Alchemy state — reconcile reloads them
+   * from `configPath`.
+   */
+  readonly packHeadRefHashes: readonly string[];
+  /**
+   * The resource's `prisma-next.config.ts` path — where reconcile reloads the
+   * declared extension-pack descriptors from when `packHeadRefHashes` is
+   * non-empty.
+   */
+  readonly configPath: string;
 }
 
 export interface PnMigrationAttributes {
@@ -68,14 +84,24 @@ export const pnMigrationProviderService: Provider.ProviderService<PnMigration> =
   list: () => Effect.succeed([]),
   reconcile: ({ news }) =>
     Effect.tryPromise({
-      try: () =>
-        applyPnMigration({
+      try: async () => {
+        // Descriptors are reloaded here, not carried in props: props persist
+        // in Alchemy state and a descriptor is live code. Loaded only when
+        // the key says packs are declared, so a pack-free project never pays
+        // (or depends on) the config load at apply time.
+        const extensionPacks =
+          news.packHeadRefHashes.length > 0
+            ? (await resolvePrismaNextConfig(news.configPath)).extensionPacks
+            : [];
+        return applyPnMigration({
           url: news.url,
           contractJson: news.contractJson,
           migrationsDir: news.migrationsDir,
           ref: { hash: news.targetHash, invariants: news.invariants },
+          extensionPacks,
           ...(news.refName !== undefined ? { refName: news.refName } : {}),
-        }),
+        });
+      },
       // Surface PnMigrationError (no-path / runner / init) as-is — it fails the
       // deploy with its clear message; nothing is swallowed.
       catch: (error) => error,

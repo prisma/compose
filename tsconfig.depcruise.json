@@ -23,6 +23,9 @@
       ],
       "@internal/core/testing": ["./packages/0-framework/1-core/core/src/exports/testing.ts"],
       "@internal/core": ["./packages/0-framework/1-core/core/src/exports/index.ts"],
+      "@internal/service-rpc/compose-fetch": [
+        "./packages/0-framework/2-authoring/service-rpc/src/exports/compose-fetch.ts"
+      ],
       "@internal/service-rpc": [
         "./packages/0-framework/2-authoring/service-rpc/src/exports/index.ts"
       ],
@@ -90,6 +93,13 @@
       "@internal/storage": [
         "./packages/1-prisma-cloud/2-shared-modules/storage/src/exports/index.ts"
       ],
+      "@internal/auth/pack": [
+        "./packages/1-prisma-cloud/2-shared-modules/auth/src/exports/pack.ts"
+      ],
+      "@internal/auth/testing": [
+        "./packages/1-prisma-cloud/2-shared-modules/auth/src/exports/testing.ts"
+      ],
+      "@internal/auth": ["./packages/1-prisma-cloud/2-shared-modules/auth/src/exports/index.ts"],
       "@internal/email/testing": [
         "./packages/1-prisma-cloud/2-shared-modules/email/src/exports/testing.ts"
       ],

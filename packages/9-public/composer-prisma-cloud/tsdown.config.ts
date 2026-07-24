@@ -29,11 +29,31 @@ const externalizeFramework = {
   },
 };
 
+// rpc contract satisfaction is nominal (a contract satisfies only itself),
+// so the auth bundles must share the ONE email-module instance the `email()`
+// module ships as — inlining @internal/email into dist/auth would mint a
+// second `emailSendContract` and every `auth()` ← `email()` wiring would
+// fail Load. Rewrites to this package's own ./email subpath (Node/Bun
+// package self-reference).
+const EMAIL_SELF: Record<string, string> = {
+  '@internal/email/testing': '@prisma/composer-prisma-cloud/email/testing',
+  '@internal/email': '@prisma/composer-prisma-cloud/email',
+};
+const externalizeEmailToSelf = {
+  name: 'externalize-email-to-self',
+  resolveId(id: string) {
+    const pub = EMAIL_SELF[id];
+    if (pub) return { id: pub, external: true as const };
+    return null;
+  },
+};
+
 // Three passes, mirroring the pre-consolidation layout: 1. library entries;
 // 2. cron index into dist/cron/ (cronScheduler resolves
 // `./scheduler-service.mjs` relative to the calling code's directory);
 // 3. the standalone programs, re-emitted from @internal/cron's dist where
 // scheduler-entrypoint was already fully inlined by that package's own build.
+const authDist = '../../1-prisma-cloud/2-shared-modules/auth/dist';
 const cronDist = '../../1-prisma-cloud/2-shared-modules/cron/dist';
 const storageDist = '../../1-prisma-cloud/2-shared-modules/storage/dist';
 const emailDist = '../../1-prisma-cloud/2-shared-modules/email/dist';
@@ -184,6 +204,49 @@ export default defineConfig([
     external: [/^bun$/, /^bun:/],
     noExternal: [/^@internal\//],
     plugins: [externalizeFramework],
+  },
+  {
+    ...baseConfig,
+    entry: { index: 'src/exports/auth.ts', pack: 'src/exports/auth-pack.ts' },
+    outDir: 'dist/auth',
+    exports: false,
+    clean: false,
+    skipNodeModulesBundle: false,
+    noExternal: [/^@internal\//],
+    plugins: [externalizeFramework, externalizeEmailToSelf],
+  },
+  {
+    // Re-emitted from @internal/auth's dist, where auth-entrypoint was
+    // already fully inlined (better-auth + jose + pg) by that package's own
+    // build; `bun` stays external (the store uses Bun's SQL, the server
+    // Bun.serve). auth-service.mjs ships as a FILE beside index.mjs —
+    // authService resolves `./auth-service.mjs` via import.meta.url.
+    ...baseConfig,
+    dts: false,
+    entry: {
+      'auth-service': `${authDist}/auth-service.mjs`,
+      'auth-entrypoint': `${authDist}/auth-entrypoint.mjs`,
+    },
+    outDir: 'dist/auth',
+    exports: false,
+    clean: false,
+    skipNodeModulesBundle: false,
+    external: [/^bun$/, /^bun:/],
+    noExternal: [/^@internal\//],
+    plugins: [externalizeFramework],
+  },
+  {
+    // The /auth/testing local stand-in — inlines @internal/auth/testing's
+    // engine; `bun` stays external (Bun.serve + Bun's SQL).
+    ...baseConfig,
+    entry: { testing: 'src/exports/auth-testing.ts' },
+    outDir: 'dist/auth',
+    exports: false,
+    clean: false,
+    skipNodeModulesBundle: false,
+    external: [/^bun$/, /^bun:/],
+    noExternal: [/^@internal\//],
+    plugins: [externalizeFramework, externalizeEmailToSelf],
   },
   {
     ...baseConfig,

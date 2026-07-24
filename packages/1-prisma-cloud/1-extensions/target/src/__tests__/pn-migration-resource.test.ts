@@ -1,5 +1,5 @@
 /**
- * The `PnMigration` Alchemy resource wiring (slice 2 D2), proven WITHOUT Prisma
+ * The `PnMigration` Alchemy resource wiring, proven WITHOUT Prisma
  * Cloud:
  *   - the merge/lookup MECHANISM the descriptor relies on — `Layer.mergeAll` of
  *     `Provider.effect` layers keeps EVERY provider tag reachable by
@@ -159,6 +159,10 @@ describe.skipIf(pg === undefined)('PnMigration reconcile routes through applyPnM
         migrationsDir,
         targetHash: targetStorageHash(contractJson),
         invariants: [],
+        // No packs declared: reconcile must not touch configPath (the path
+        // deliberately points nowhere).
+        packHeadRefHashes: [],
+        configPath: path.join(migrationsDir, 'no-such-prisma-next.config.ts'),
       },
       olds: undefined,
       output: undefined,

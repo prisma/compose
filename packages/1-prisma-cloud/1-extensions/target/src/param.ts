@@ -68,6 +68,84 @@ export function isEnvParamSource(value: unknown): value is ParamSource<EnvParamP
 }
 
 /**
+ * Brands the payload `generatedParam` builds — a distinct brand from
+ * `envParam`'s, so `isGeneratedParamSource` and `isEnvParamSource` are mutually
+ * exclusive even though both are `ParamSource`s.
+ */
+const PRISMA_CLOUD_GENERATED_PARAM_SOURCE: unique symbol = blindCast<
+  never,
+  'unique-symbol brand for the prisma-cloud generatedParam payload'
+>(Symbol.for('prisma:prisma-cloud-generated-param-source'));
+
+/** The Prisma Cloud generated param source payload: the generation parameters, under a brand only `generatedParam` sets. */
+export interface GeneratedParamPayload {
+  readonly [PRISMA_CLOUD_GENERATED_PARAM_SOURCE]: true;
+  readonly bytes: number;
+  readonly redacted: boolean;
+}
+
+/** Wiring info for a target-generated param value. */
+export interface GeneratedParamOptions {
+  /** Byte length of the generated value (base64-encoded). Default 32. */
+  readonly bytes?: number;
+  /** Redacted: boot wraps the value in the redacting box; the deploy report never prints it. Default true. */
+  readonly redacted?: boolean;
+}
+
+const GENERATED_PARAM_DEFAULT_BYTES = 32;
+const GENERATED_PARAM_MIN_BYTES = 16;
+const GENERATED_PARAM_MAX_BYTES = 1024;
+
+/**
+ * Binds an input leaf to a value the target GENERATES at deploy — the sibling
+ * of `envParam` whose value comes from deploy-time generation instead of the
+ * environment. The generated value is produced once and persisted in deploy
+ * state, so it is stable across redeploys (rotation is destroy/recreate). It is
+ * config, not a secret; `redacted` is an orthogonal facet (default `true`).
+ * `bytes` must be an integer between 16 and 1024 (default 32).
+ */
+export function generatedParam(
+  opts: GeneratedParamOptions = {},
+): ParamSource<GeneratedParamPayload> {
+  const bytes = opts.bytes ?? GENERATED_PARAM_DEFAULT_BYTES;
+  const redacted = opts.redacted ?? true;
+  if (
+    !Number.isInteger(bytes) ||
+    bytes < GENERATED_PARAM_MIN_BYTES ||
+    bytes > GENERATED_PARAM_MAX_BYTES
+  ) {
+    throw new Error(
+      `generatedParam() bytes must be an integer between ${GENERATED_PARAM_MIN_BYTES} and ` +
+        `${GENERATED_PARAM_MAX_BYTES} (got ${String(bytes)}).`,
+    );
+  }
+  return paramSource<GeneratedParamPayload>({
+    [PRISMA_CLOUD_GENERATED_PARAM_SOURCE]: true,
+    bytes,
+    redacted,
+  });
+}
+
+/** True only for a payload that `generatedParam` built — i.e. one carrying the brand. */
+function isGeneratedParamPayload(payload: unknown): payload is GeneratedParamPayload {
+  return (
+    typeof payload === 'object' &&
+    payload !== null &&
+    blindCast<
+      Record<PropertyKey, unknown>,
+      'reading the prisma-cloud generatedParam brand off an unknown payload'
+    >(payload)[PRISMA_CLOUD_GENERATED_PARAM_SOURCE] === true
+  );
+}
+
+/** True iff a resolved value is a generated-param source this target built (as opposed to a literal, an `envParam` source, or a foreign/raw `ParamSource`). */
+export function isGeneratedParamSource(
+  value: unknown,
+): value is ParamSource<GeneratedParamPayload> {
+  return isParamSource(value) && isGeneratedParamPayload(value.payload);
+}
+
+/**
  * Reads the Prisma Cloud env-var name back out of a param binding's opaque
  * source. A source not built by `envParam` (a raw `paramSource(...)` or
  * another target's source) carries no name — reject it here. `paramName` runs

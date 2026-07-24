@@ -18,6 +18,7 @@
 import type { Contract, Expose, RunnableServiceNode } from '@internal/core';
 import { blindCast } from '@internal/foundation/casts';
 import type { StandardSchemaV1 } from '@standard-schema/spec';
+import { isRpcContract } from './rpc.ts';
 import { standardValidate } from './standard-schema.ts';
 
 // The ambient environment of whatever runtime hosts the bundle. Declared
@@ -42,9 +43,19 @@ type HandlerFor<Fn, LoadedDeps> = Fn extends (input: infer I) => Promise<infer O
   ? (input: I, deps: LoadedDeps, ctx: RpcHandlerContext) => Promise<O>
   : never;
 
-/** Every exposed port's methods, turned into a handler map typed off S's own `expose` and `load()`. */
+/**
+ * The keys of `E` whose contract is an RPC contract. A service may expose
+ * non-rpc ports beside its rpc ones (e.g. a public HTTP surface whose
+ * contract carries connection config, not methods) — serve() has nothing to
+ * dispatch for those, so `Handlers<S>` must not demand a handler map for
+ * them. The runtime mirror is `methodTable`'s kind check.
+ */
+// biome-ignore lint/suspicious/noExplicitAny: matches contract()'s own Cmp bound — the filter cares about the kind, not the function map.
+type RpcPortKeys<E> = { [P in keyof E]: E[P] extends Contract<'rpc', any> ? P : never }[keyof E];
+
+/** Every exposed RPC port's methods, turned into a handler map typed off S's own `expose` and `load()`. Non-rpc exposed ports are skipped. */
 export type Handlers<S extends AnyRunnable> = {
-  [Port in keyof NonNullable<S['expose']>]: {
+  [Port in RpcPortKeys<NonNullable<S['expose']>>]: {
     [M in keyof CmpOf<NonNullable<S['expose']>[Port]>]: HandlerFor<
       CmpOf<NonNullable<S['expose']>[Port]>[M],
       ReturnType<S['load']>
@@ -261,6 +272,10 @@ function methodTable(
   const table = new Map<string, MethodSchemas & { handler: RpcHandler }>();
 
   for (const [port, contract] of Object.entries(expose)) {
+    // Only rpc ports carry dispatchable methods; a non-rpc exposed port
+    // (its __cmp is connection config, not a function map) is not serve()'s
+    // to handle — the type-level mirror is RpcPortKeys in Handlers<S>.
+    if (!isRpcContract(contract)) continue;
     const portHandlers = handlers[port] ?? {};
     for (const [method, fn] of Object.entries(contract.__cmp)) {
       if (table.has(method)) {
