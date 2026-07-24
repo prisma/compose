@@ -9,8 +9,8 @@ importers:
   .:
     devDependencies:
       '@biomejs/biome':
-        specifier: 2.5.3
-        version: 2.5.3
+        specifier: 2.5.4
+        version: 2.5.4
       '@clack/prompts':
         specifier: ^1.7.0
         version: 1.7.0
@@ -48,10 +48,10 @@ importers:
         specifier: 0.16.0
         version: 0.16.0(typanion@3.14.0)(typescript@6.0.3)
       '@prisma/composer':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../packages/9-public/composer
       '@prisma/composer-prisma-cloud':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../packages/9-public/composer-prisma-cloud
       arktype:
         specifier: ^2.2.3
@@ -185,10 +185,10 @@ importers:
         specifier: ^3.1085.0
         version: 3.1087.0
       '@prisma/composer':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../packages/9-public/composer
       '@prisma/composer-prisma-cloud':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../packages/9-public/composer-prisma-cloud
       alchemy:
         specifier: 2.0.0-beta.59
@@ -210,10 +210,10 @@ importers:
         specifier: 4.0.0-beta.97
         version: 4.0.0-beta.97(effect@4.0.0-beta.93)
       '@prisma/composer':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../packages/9-public/composer
       '@prisma/composer-prisma-cloud':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../packages/9-public/composer-prisma-cloud
       alchemy:
         specifier: 2.0.0-beta.59
@@ -235,10 +235,10 @@ importers:
   examples/email:
     dependencies:
       '@prisma/composer':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../packages/9-public/composer
       '@prisma/composer-prisma-cloud':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../packages/9-public/composer-prisma-cloud
       '@react-email/components':
         specifier: ^1.0.12
@@ -275,10 +275,10 @@ importers:
   examples/env-param:
     dependencies:
       '@prisma/composer':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../packages/9-public/composer
       '@prisma/composer-prisma-cloud':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../packages/9-public/composer-prisma-cloud
     devDependencies:
       '@types/bun':
@@ -294,10 +294,10 @@ importers:
         specifier: 0.16.0
         version: 0.16.0(typanion@3.14.0)(typescript@6.0.3)
       '@prisma/composer':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../packages/9-public/composer
       '@prisma/composer-prisma-cloud':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../packages/9-public/composer-prisma-cloud
       effect:
         specifier: 4.0.0-beta.93
@@ -322,10 +322,10 @@ importers:
         specifier: ^3.1085.0
         version: 3.1087.0
       '@prisma/composer':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../packages/9-public/composer
       '@prisma/composer-prisma-cloud':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../packages/9-public/composer-prisma-cloud
       alchemy:
         specifier: 2.0.0-beta.59
@@ -347,22 +347,22 @@ importers:
         specifier: 4.0.0-beta.97
         version: 4.0.0-beta.97(effect@4.0.0-beta.93)
       '@prisma/composer':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../packages/9-public/composer
       '@prisma/composer-prisma-cloud':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../packages/9-public/composer-prisma-cloud
       '@store/catalog':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:modules/catalog
       '@store/orders':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:modules/orders
       '@store/promotions':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:modules/promotions
       '@store/storefront':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:modules/storefront
       alchemy:
         specifier: 2.0.0-beta.59
@@ -394,10 +394,10 @@ importers:
         version: 8.22.0
     devDependencies:
       '@prisma/composer':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../../../packages/9-public/composer
       '@prisma/composer-prisma-cloud':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../../../packages/9-public/composer-prisma-cloud
       '@types/bun':
         specifier: ^1.3.13
@@ -412,7 +412,7 @@ importers:
         specifier: 0.16.0
         version: 0.16.0(typanion@3.14.0)(typescript@6.0.3)
       '@store/catalog':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../catalog
       arktype:
         specifier: ^2.2.3
@@ -422,10 +422,10 @@ importers:
         version: 8.22.0
     devDependencies:
       '@prisma/composer':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../../../packages/9-public/composer
       '@prisma/composer-prisma-cloud':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../../../packages/9-public/composer-prisma-cloud
       '@types/bun':
         specifier: ^1.3.13
@@ -437,17 +437,17 @@ importers:
   examples/store/modules/promotions:
     dependencies:
       '@store/catalog':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../catalog
       arktype:
         specifier: ^2.2.3
         version: 2.2.3
     devDependencies:
       '@prisma/composer':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../../../packages/9-public/composer
       '@prisma/composer-prisma-cloud':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../../../packages/9-public/composer-prisma-cloud
       '@types/bun':
         specifier: ^1.3.13
@@ -459,16 +459,16 @@ importers:
   examples/store/modules/storefront:
     dependencies:
       '@prisma/composer':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../../../packages/9-public/composer
       '@prisma/composer-prisma-cloud':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../../../packages/9-public/composer-prisma-cloud
       '@store/catalog':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../catalog
       '@store/orders':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../orders
       arktype:
         specifier: ^2.2.3
@@ -487,8 +487,8 @@ importers:
         specifier: ^1.3.13
         version: 1.3.14
       '@types/node':
-        specifier: ^25.9.3
-        version: 25.9.5
+        specifier: ^26.0.1
+        version: 26.1.1
       '@types/react':
         specifier: ^19.2.17
         version: 19.2.17
@@ -500,7 +500,7 @@ importers:
         version: 6.0.3
       vitest:
         specifier: ^4.1.10
-        version: 4.1.10(@types/node@25.9.5)(vite@8.1.2(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))
+        version: 4.1.10(@types/node@26.1.1)(vite@8.1.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))
 
   examples/storefront-auth:
     dependencies:
@@ -508,16 +508,16 @@ importers:
         specifier: 4.0.0-beta.97
         version: 4.0.0-beta.97(effect@4.0.0-beta.93)
       '@prisma/composer':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../packages/9-public/composer
       '@prisma/composer-prisma-cloud':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../packages/9-public/composer-prisma-cloud
       '@storefront-auth/auth':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:modules/auth
       '@storefront-auth/storefront':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:modules/storefront
       alchemy:
         specifier: 2.0.0-beta.59
@@ -543,10 +543,10 @@ importers:
         version: 2.2.3
     devDependencies:
       '@prisma/composer':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../../../packages/9-public/composer
       '@prisma/composer-prisma-cloud':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../../../packages/9-public/composer-prisma-cloud
       '@types/bun':
         specifier: ^1.3.13
@@ -558,13 +558,13 @@ importers:
   examples/storefront-auth/modules/storefront:
     dependencies:
       '@prisma/composer':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../../../packages/9-public/composer
       '@prisma/composer-prisma-cloud':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../../../packages/9-public/composer-prisma-cloud
       '@storefront-auth/auth':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../auth
       arktype:
         specifier: ^2.2.3
@@ -583,8 +583,8 @@ importers:
         specifier: ^1.3.13
         version: 1.3.14
       '@types/node':
-        specifier: ^25.9.3
-        version: 25.9.5
+        specifier: ^26.0.1
+        version: 26.1.1
       '@types/react':
         specifier: ^19.2.17
         version: 19.2.17
@@ -596,15 +596,15 @@ importers:
         version: 6.0.3
       vitest:
         specifier: ^4.1.10
-        version: 4.1.10(@types/node@25.9.5)(vite@8.1.2(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))
+        version: 4.1.10(@types/node@26.1.1)(vite@8.1.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))
 
   examples/streams:
     dependencies:
       '@prisma/composer':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../packages/9-public/composer
       '@prisma/composer-prisma-cloud':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../packages/9-public/composer-prisma-cloud
     devDependencies:
       '@types/bun':
@@ -624,7 +624,7 @@ importers:
         version: 2.2.3
     devDependencies:
       '@internal/tsdown-config':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../tsdown-config
       tsdown:
         specifier: ^0.22.7
@@ -645,7 +645,7 @@ importers:
   packages/0-framework/1-core/core:
     dependencies:
       '@internal/foundation':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../0-foundation/foundation
       '@standard-schema/spec':
         specifier: ^1.1.0
@@ -658,7 +658,7 @@ importers:
         version: 4.0.0-beta.93
     devDependencies:
       '@internal/tsdown-config':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../0-foundation/tsdown-config
       '@types/bun':
         specifier: ^1.3.13
@@ -676,21 +676,21 @@ importers:
   packages/0-framework/2-authoring/nextjs:
     dependencies:
       '@internal/core':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../1-core/core
       esbuild:
         specifier: ^0.28.1
         version: 0.28.1
     devDependencies:
       '@internal/tsdown-config':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../0-foundation/tsdown-config
       '@types/bun':
         specifier: ^1.3.13
         version: 1.3.14
       '@types/node':
-        specifier: ^25.9.3
-        version: 25.9.5
+        specifier: ^26.0.1
+        version: 26.1.1
       tsdown:
         specifier: ^0.22.7
         version: 0.22.12(typescript@6.0.3)
@@ -701,21 +701,21 @@ importers:
   packages/0-framework/2-authoring/node:
     dependencies:
       '@internal/core':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../1-core/core
       esbuild:
         specifier: ^0.28.1
         version: 0.28.1
     devDependencies:
       '@internal/tsdown-config':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../0-foundation/tsdown-config
       '@types/bun':
         specifier: ^1.3.13
         version: 1.3.14
       '@types/node':
-        specifier: ^25.9.3
-        version: 25.9.5
+        specifier: ^26.0.1
+        version: 26.1.1
       tsdown:
         specifier: ^0.22.7
         version: 0.22.12(typescript@6.0.3)
@@ -726,10 +726,10 @@ importers:
   packages/0-framework/2-authoring/service-rpc:
     dependencies:
       '@internal/core':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../1-core/core
       '@internal/foundation':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../0-foundation/foundation
       '@standard-schema/spec':
         specifier: ^1.1.0
@@ -739,7 +739,7 @@ importers:
         version: 2.2.3
     devDependencies:
       '@internal/tsdown-config':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../0-foundation/tsdown-config
       '@types/bun':
         specifier: ^1.3.13
@@ -757,18 +757,18 @@ importers:
   packages/0-framework/3-tooling/assemble:
     dependencies:
       '@internal/core':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../1-core/core
     devDependencies:
       '@internal/tsdown-config':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../0-foundation/tsdown-config
       '@types/bun':
         specifier: ^1.3.13
         version: 1.3.14
       '@types/node':
-        specifier: ^25.9.3
-        version: 25.9.5
+        specifier: ^26.0.1
+        version: 26.1.1
       tsdown:
         specifier: ^0.22.7
         version: 0.22.12(typescript@6.0.3)
@@ -779,13 +779,13 @@ importers:
   packages/0-framework/3-tooling/cli:
     dependencies:
       '@internal/assemble':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../assemble
       '@internal/core':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../1-core/core
       '@internal/foundation':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../0-foundation/foundation
       c12:
         specifier: ^3.3.4
@@ -798,14 +798,14 @@ importers:
         version: 3.2.1(typanion@3.14.0)
     devDependencies:
       '@internal/tsdown-config':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../0-foundation/tsdown-config
       '@types/bun':
         specifier: ^1.3.13
         version: 1.3.14
       '@types/node':
-        specifier: ^25.9.3
-        version: 25.9.5
+        specifier: ^26.0.1
+        version: 26.1.1
       tsdown:
         specifier: ^0.22.7
         version: 0.22.12(typescript@6.0.3)
@@ -816,7 +816,7 @@ importers:
   packages/1-prisma-cloud/0-lowering/dev-emulators:
     dependencies:
       '@internal/s3-protocol':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../s3-protocol
       get-port:
         specifier: ^7.2.0
@@ -832,7 +832,7 @@ importers:
         specifier: ^3.1085.0
         version: 3.1087.0
       '@internal/tsdown-config':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../../0-framework/0-foundation/tsdown-config
       '@prisma/dev':
         specifier: ^0.24.14
@@ -841,8 +841,8 @@ importers:
         specifier: ^1.3.13
         version: 1.3.14
       '@types/node':
-        specifier: ^25.9.3
-        version: 25.9.5
+        specifier: ^26.0.1
+        version: 26.1.1
       '@types/pg':
         specifier: ^8.20.0
         version: 8.20.0
@@ -862,20 +862,20 @@ importers:
   packages/1-prisma-cloud/0-lowering/local-target:
     dependencies:
       '@internal/core':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../../0-framework/1-core/core
       '@internal/dev-emulators':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../dev-emulators
       '@internal/lowering':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../lowering
       '@internal/s3-protocol':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../s3-protocol
       alchemy:
         specifier: 2.0.0-beta.59
-        version: 2.0.0-beta.59(@effect/platform-bun@4.0.0-beta.97(effect@4.0.0-beta.93))(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.93)(ioredis@5.11.1))(@types/node@25.9.5)(@types/react@19.2.17)(effect@4.0.0-beta.93)(vite@8.1.2(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))(vitest@4.1.10(@types/node@25.9.5)(vite@8.1.2(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0)))(workerd@1.20260617.1)(ws@8.21.1)
+        version: 2.0.0-beta.59(@effect/platform-bun@4.0.0-beta.97(effect@4.0.0-beta.93))(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.93)(ioredis@5.11.1))(@types/node@26.1.1)(@types/react@19.2.17)(effect@4.0.0-beta.93)(vite@8.1.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))(vitest@4.1.10(@types/node@26.1.1)(vite@8.1.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0)))(workerd@1.20260617.1)(ws@8.21.1)
       effect:
         specifier: 4.0.0-beta.93
         version: 4.0.0-beta.93
@@ -884,7 +884,7 @@ importers:
         version: 7.5.21
     devDependencies:
       '@internal/tsdown-config':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../../0-framework/0-foundation/tsdown-config
       '@prisma/dev':
         specifier: ^0.24.14
@@ -893,8 +893,8 @@ importers:
         specifier: ^1.3.13
         version: 1.3.14
       '@types/node':
-        specifier: ^25.9.3
-        version: 25.9.5
+        specifier: ^26.0.1
+        version: 26.1.1
       tsdown:
         specifier: ^0.22.7
         version: 0.22.12(typescript@6.0.3)
@@ -905,17 +905,17 @@ importers:
   packages/1-prisma-cloud/0-lowering/lowering:
     dependencies:
       '@internal/core':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../../0-framework/1-core/core
       '@internal/foundation':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../../0-framework/0-foundation/foundation
       '@prisma/management-api-sdk':
         specifier: ^1.50.0
         version: 1.50.0
       alchemy:
         specifier: 2.0.0-beta.59
-        version: 2.0.0-beta.59(@effect/platform-bun@4.0.0-beta.97(effect@4.0.0-beta.93))(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.93)(ioredis@5.11.1))(@types/node@25.9.5)(@types/react@19.2.17)(effect@4.0.0-beta.93)(vite@8.1.2(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))(vitest@4.1.10(@types/node@25.9.5)(vite@8.1.2(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0)))(workerd@1.20260617.1)(ws@8.21.1)
+        version: 2.0.0-beta.59(@effect/platform-bun@4.0.0-beta.97(effect@4.0.0-beta.93))(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.93)(ioredis@5.11.1))(@types/node@26.1.1)(@types/react@19.2.17)(effect@4.0.0-beta.93)(vite@8.1.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))(vitest@4.1.10(@types/node@26.1.1)(vite@8.1.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0)))(workerd@1.20260617.1)(ws@8.21.1)
       effect:
         specifier: 4.0.0-beta.93
         version: 4.0.0-beta.93
@@ -924,14 +924,14 @@ importers:
         version: 3.4.9
     devDependencies:
       '@internal/tsdown-config':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../../0-framework/0-foundation/tsdown-config
       '@types/bun':
         specifier: ^1.3.13
         version: 1.3.14
       '@types/node':
-        specifier: ^25.9.3
-        version: 25.9.5
+        specifier: ^26.0.1
+        version: 26.1.1
       tsdown:
         specifier: ^0.22.7
         version: 0.22.12(typescript@6.0.3)
@@ -948,14 +948,14 @@ importers:
         specifier: ^3.1085.0
         version: 3.1087.0
       '@internal/tsdown-config':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../../0-framework/0-foundation/tsdown-config
       '@types/bun':
         specifier: ^1.3.13
         version: 1.3.14
       '@types/node':
-        specifier: ^25.9.3
-        version: 25.9.5
+        specifier: ^26.0.1
+        version: 26.1.1
       tsdown:
         specifier: ^0.22.7
         version: 0.22.12(typescript@6.0.3)
@@ -966,28 +966,28 @@ importers:
   packages/1-prisma-cloud/1-extensions/target:
     dependencies:
       '@internal/core':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../../0-framework/1-core/core
       '@internal/dev-emulators':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../0-lowering/dev-emulators
       '@internal/foundation':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../../0-framework/0-foundation/foundation
       '@internal/local-target':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../0-lowering/local-target
       '@internal/lowering':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../0-lowering/lowering
       '@internal/node':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../../0-framework/2-authoring/node
       '@internal/s3-protocol':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../0-lowering/s3-protocol
       '@internal/service-rpc':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../../0-framework/2-authoring/service-rpc
       '@prisma-next/cli':
         specifier: 0.16.0
@@ -1027,7 +1027,7 @@ importers:
         version: 8.22.0
     devDependencies:
       '@internal/tsdown-config':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../../0-framework/0-foundation/tsdown-config
       '@prisma-next/target-postgres':
         specifier: 0.16.0
@@ -1051,22 +1051,22 @@ importers:
   packages/1-prisma-cloud/2-shared-modules/auth:
     dependencies:
       '@internal/core':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../../0-framework/1-core/core
       '@internal/email':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../email
       '@internal/foundation':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../../0-framework/0-foundation/foundation
       '@internal/node':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../../0-framework/2-authoring/node
       '@internal/prisma-cloud':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../1-extensions/target
       '@internal/service-rpc':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../../0-framework/2-authoring/service-rpc
       '@prisma-next/adapter-postgres':
         specifier: 0.16.0
@@ -1100,7 +1100,7 @@ importers:
         version: 8.22.0
     devDependencies:
       '@internal/tsdown-config':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../../0-framework/0-foundation/tsdown-config
       '@prisma-next/cli':
         specifier: 0.16.0
@@ -1127,26 +1127,26 @@ importers:
   packages/1-prisma-cloud/2-shared-modules/cron:
     dependencies:
       '@internal/core':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../../0-framework/1-core/core
       '@internal/foundation':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../../0-framework/0-foundation/foundation
       '@internal/node':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../../0-framework/2-authoring/node
       '@internal/prisma-cloud':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../1-extensions/target
       '@internal/service-rpc':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../../0-framework/2-authoring/service-rpc
       arktype:
         specifier: ^2.2.3
         version: 2.2.3
     devDependencies:
       '@internal/tsdown-config':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../../0-framework/0-foundation/tsdown-config
       '@types/bun':
         specifier: ^1.3.13
@@ -1164,19 +1164,19 @@ importers:
   packages/1-prisma-cloud/2-shared-modules/email:
     dependencies:
       '@internal/core':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../../0-framework/1-core/core
       '@internal/foundation':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../../0-framework/0-foundation/foundation
       '@internal/node':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../../0-framework/2-authoring/node
       '@internal/prisma-cloud':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../1-extensions/target
       '@internal/service-rpc':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../../0-framework/2-authoring/service-rpc
       arktype:
         specifier: ^2.2.3
@@ -1186,7 +1186,7 @@ importers:
         version: 9.0.3
     devDependencies:
       '@internal/tsdown-config':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../../0-framework/0-foundation/tsdown-config
       '@types/bun':
         specifier: ^1.3.13
@@ -1207,16 +1207,16 @@ importers:
   packages/1-prisma-cloud/2-shared-modules/storage:
     dependencies:
       '@internal/core':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../../0-framework/1-core/core
       '@internal/node':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../../0-framework/2-authoring/node
       '@internal/prisma-cloud':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../1-extensions/target
       '@internal/s3-protocol':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../0-lowering/s3-protocol
     devDependencies:
       '@aws-sdk/client-s3':
@@ -1226,7 +1226,7 @@ importers:
         specifier: ^3.1085.0
         version: 3.1087.0
       '@internal/tsdown-config':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../../0-framework/0-foundation/tsdown-config
       '@types/bun':
         specifier: ^1.3.13
@@ -1247,16 +1247,16 @@ importers:
         specifier: 0.2.6
         version: 0.2.6
       '@internal/core':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../../0-framework/1-core/core
       '@internal/node':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../../0-framework/2-authoring/node
       '@internal/prisma-cloud':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../1-extensions/target
       '@internal/storage':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../storage
       '@prisma/streams-local':
         specifier: 0.1.11
@@ -1269,7 +1269,7 @@ importers:
         specifier: 0.2.3
         version: 0.2.3(@types/node@26.1.1)(vite@8.1.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))
       '@internal/tsdown-config':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../../0-framework/0-foundation/tsdown-config
       '@types/bun':
         specifier: ^1.3.13
@@ -1294,7 +1294,7 @@ importers:
         version: 1.1.0
       alchemy:
         specifier: 2.0.0-beta.59
-        version: 2.0.0-beta.59(@effect/platform-bun@4.0.0-beta.97(effect@4.0.0-beta.93))(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.93)(ioredis@5.11.1))(@types/node@25.9.5)(@types/react@19.2.17)(effect@4.0.0-beta.93)(vite@8.1.2(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))(vitest@4.1.10(@types/node@25.9.5)(vite@8.1.2(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0)))(workerd@1.20260617.1)(ws@8.21.1)
+        version: 2.0.0-beta.59(@effect/platform-bun@4.0.0-beta.97(effect@4.0.0-beta.93))(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.93)(ioredis@5.11.1))(@types/node@26.1.1)(@types/react@19.2.17)(effect@4.0.0-beta.93)(vite@8.1.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))(vitest@4.1.10(@types/node@26.1.1)(vite@8.1.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0)))(workerd@1.20260617.1)(ws@8.21.1)
       arktype:
         specifier: ^2.2.3
         version: 2.2.3
@@ -1315,35 +1315,35 @@ importers:
         version: 3.4.9
     devDependencies:
       '@internal/assemble':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../0-framework/3-tooling/assemble
       '@internal/cli':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../0-framework/3-tooling/cli
       '@internal/core':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../0-framework/1-core/core
       '@internal/foundation':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../0-framework/0-foundation/foundation
       '@internal/lowering':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../1-prisma-cloud/0-lowering/lowering
       '@internal/nextjs':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../0-framework/2-authoring/nextjs
       '@internal/node':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../0-framework/2-authoring/node
       '@internal/service-rpc':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../0-framework/2-authoring/service-rpc
       '@internal/tsdown-config':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../0-framework/0-foundation/tsdown-config
       '@types/node':
-        specifier: ^25.9.3
-        version: 25.9.5
+        specifier: ^26.0.1
+        version: 26.1.1
       tsdown:
         specifier: ^0.22.7
         version: 0.22.12(typescript@6.0.3)
@@ -1360,7 +1360,7 @@ importers:
         specifier: 4.0.0-beta.92
         version: 4.0.0-beta.92(effect@4.0.0-beta.93)(ioredis@5.11.1)
       '@internal/dev-emulators':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../1-prisma-cloud/0-lowering/dev-emulators
       '@prisma-next/cli':
         specifier: 0.16.0
@@ -1381,7 +1381,7 @@ importers:
         specifier: 0.16.0
         version: 0.16.0(typescript@6.0.3)
       '@prisma/composer':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../composer
       '@prisma/management-api-sdk':
         specifier: ^1.50.0
@@ -1391,7 +1391,7 @@ importers:
         version: 1.1.0
       alchemy:
         specifier: 2.0.0-beta.59
-        version: 2.0.0-beta.59(@effect/platform-bun@4.0.0-beta.97(effect@4.0.0-beta.93))(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.93)(ioredis@5.11.1))(@types/node@25.9.5)(@types/react@19.2.17)(effect@4.0.0-beta.93)(vite@8.1.2(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))(vitest@4.1.10(@types/node@25.9.5)(vite@8.1.2(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0)))(workerd@1.20260617.1)(ws@8.21.1)
+        version: 2.0.0-beta.59(@effect/platform-bun@4.0.0-beta.97(effect@4.0.0-beta.93))(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.93)(ioredis@5.11.1))(@types/node@26.1.1)(@types/react@19.2.17)(effect@4.0.0-beta.93)(vite@8.1.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))(vitest@4.1.10(@types/node@26.1.1)(vite@8.1.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0)))(workerd@1.20260617.1)(ws@8.21.1)
       arktype:
         specifier: ^2.2.3
         version: 2.2.3
@@ -1415,53 +1415,53 @@ importers:
         version: 0.22.12(typescript@6.0.3)
     devDependencies:
       '@internal/auth':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../1-prisma-cloud/2-shared-modules/auth
       '@internal/core':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../0-framework/1-core/core
       '@internal/cron':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../1-prisma-cloud/2-shared-modules/cron
       '@internal/email':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../1-prisma-cloud/2-shared-modules/email
       '@internal/foundation':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../0-framework/0-foundation/foundation
       '@internal/local-target':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../1-prisma-cloud/0-lowering/local-target
       '@internal/lowering':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../1-prisma-cloud/0-lowering/lowering
       '@internal/nextjs':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../0-framework/2-authoring/nextjs
       '@internal/node':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../0-framework/2-authoring/node
       '@internal/prisma-cloud':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../1-prisma-cloud/1-extensions/target
       '@internal/s3-protocol':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../1-prisma-cloud/0-lowering/s3-protocol
       '@internal/service-rpc':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../0-framework/2-authoring/service-rpc
       '@internal/storage':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../1-prisma-cloud/2-shared-modules/storage
       '@internal/streams':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../1-prisma-cloud/2-shared-modules/streams
       '@internal/tsdown-config':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../0-framework/0-foundation/tsdown-config
       '@types/node':
-        specifier: ^25.9.3
-        version: 25.9.5
+        specifier: ^26.0.1
+        version: 26.1.1
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -1472,23 +1472,23 @@ importers:
         specifier: ^3.1085.0
         version: 3.1087.0
       '@prisma/composer':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../packages/9-public/composer
       '@prisma/composer-prisma-cloud':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../packages/9-public/composer-prisma-cloud
       '@prisma/example-store':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../../examples/store
       '@types/bun':
         specifier: ^1.3.13
         version: 1.3.14
       '@types/node':
-        specifier: ^25.9.3
-        version: 25.9.5
+        specifier: ^26.0.1
+        version: 26.1.1
       alchemy:
         specifier: 2.0.0-beta.59
-        version: 2.0.0-beta.59(@effect/platform-bun@4.0.0-beta.97(effect@4.0.0-beta.97))(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.97)(ioredis@5.11.1))(@types/node@25.9.5)(@types/react@19.2.17)(effect@4.0.0-beta.97)(vite@8.1.2(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))(vitest@4.1.10(@types/node@25.9.5)(vite@8.1.2(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0)))(workerd@1.20260617.1)(ws@8.21.1)
+        version: 2.0.0-beta.59(@effect/platform-bun@4.0.0-beta.97(effect@4.0.0-beta.97))(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.97)(ioredis@5.11.1))(@types/node@26.1.1)(@types/react@19.2.17)(effect@4.0.0-beta.97)(vite@8.1.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))(vitest@4.1.10(@types/node@26.1.1)(vite@8.1.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0)))(workerd@1.20260617.1)(ws@8.21.1)
       prisma:
         specifier: 7.9.0
         version: 7.9.0(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@6.0.3)
@@ -1499,10 +1499,10 @@ importers:
   website:
     dependencies:
       '@prisma/composer':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../packages/9-public/composer
       '@prisma/composer-prisma-cloud':
-        specifier: workspace:0.2.0
+        specifier: workspace:0.3.0
         version: link:../packages/9-public/composer-prisma-cloud
       alchemy:
         specifier: 2.0.0-beta.59
@@ -1741,55 +1741,55 @@ packages:
   '@better-fetch/fetch@1.3.1':
     resolution: {integrity: sha512-ABkD1WhyfPZprKRQI3bhATjeiFuNWC9PXhfGWqL+sg/gKrM977oFrYkdb4msM3hgUGonr7KlOsOFT5TU2rht9g==}
 
-  '@biomejs/biome@2.5.3':
-    resolution: {integrity: sha512-MrJswFdei9EfDwwUy2tQrPDpK0AO+RmMFvBoaaJ6ayBc3sUbHdCE+XG5N8vp+5So41ZupZJQm0roHFFhMGVD7A==}
+  '@biomejs/biome@2.5.4':
+    resolution: {integrity: sha512-xy5FNE5kQJKyK5MR1gJy6ztXYx4WBAbYGlK04lMEgmyPRWKybY9NFwiG9yo0XdzOU8Xvhj41u034J1ywfoWfMw==}
     engines: {node: '>=14.21.3'}
     hasBin: true
 
-  '@biomejs/cli-darwin-arm64@2.5.3':
-    resolution: {integrity: sha512-QhYP9muVQ0nUO5zztFuPbEwi4+94sJWVjaZds9aMi1l/KNZBiUjdiSUrGHsTaMGDXrYl+r4AS2sUKfgH3w+V3g==}
+  '@biomejs/cli-darwin-arm64@2.5.4':
+    resolution: {integrity: sha512-4o3NFRobXHynkgcFVrlZsoDAFtF2ldlEGN8sORSws5ZQqyY4PXnPUIylu4ksfyHuwkfvDREuWh3JK+niRwGq3w==}
     engines: {node: '>=14.21.3'}
     cpu: [arm64]
     os: [darwin]
 
-  '@biomejs/cli-darwin-x64@2.5.3':
-    resolution: {integrity: sha512-NC1Ss13UaW7QZX+y8j44bF7AP0jSJdBl6iRhe0MAkvaSqZy+mWg3GaXsrb+eSoHoGDBtaXWEbMVV0iVN2cZ7cQ==}
+  '@biomejs/cli-darwin-x64@2.5.4':
+    resolution: {integrity: sha512-D32P5HkU2Y6PySuC/WsVDTOgsDwVFmujzhhhOQjajtATpVWFDXuVd3oRbsWNSEA+aaFzyzZm22szsyydBYlSyQ==}
     engines: {node: '>=14.21.3'}
     cpu: [x64]
     os: [darwin]
 
-  '@biomejs/cli-linux-arm64-musl@2.5.3':
-    resolution: {integrity: sha512-fccix0w6xp6csCXgxeC0dU/3ecgRQal0y+cv2SP9ajNlhe7Yrk2Ug7UDe2j9AT9ZDYitkXpvUKgZjjuoYeP4Vg==}
+  '@biomejs/cli-linux-arm64-musl@2.5.4':
+    resolution: {integrity: sha512-Rpm5/AT1m+DlJmUoYvS4/vXc+0tXJPJ2NQz25TGPyHVF5JrWy75PE0GH6kVxsKtQDuCH4OgzquZq0R4kj/wCVg==}
     engines: {node: '>=14.21.3'}
     cpu: [arm64]
     os: [linux]
 
-  '@biomejs/cli-linux-arm64@2.5.3':
-    resolution: {integrity: sha512-ksx1KWeyYW18ILL04msF/J4ZBtBDN33znYK8Z/aNv/vlBVxL9/g3mGP+omgHJKy4+KWbK87vcmmpmurfNjSgiA==}
+  '@biomejs/cli-linux-arm64@2.5.4':
+    resolution: {integrity: sha512-pSEfW7B8kTsXUjUxC1xVVK+y85Ht3C5XxZ9gclmC7/3Ku9Vqz8jmI7k0p/BNIjQ6t4sFERI2sFeH73ybiZl6YQ==}
     engines: {node: '>=14.21.3'}
     cpu: [arm64]
     os: [linux]
 
-  '@biomejs/cli-linux-x64-musl@2.5.3':
-    resolution: {integrity: sha512-O/yU9YKRUiHhmcjF2f38PSjseVk3G4VLWYc0G2HWpzdBVREV6G8IGWIVEFf7MFPfWIzNUIvPsEjeAZQIOgnLcQ==}
+  '@biomejs/cli-linux-x64-musl@2.5.4':
+    resolution: {integrity: sha512-aby/PohmmgbShcHqFsZVzG8H6D98+P+A6xRWRrQcLW1pCjabcov5UUlke4UqNQBYTkDQav+jB4zyyDDeKB2GaA==}
     engines: {node: '>=14.21.3'}
     cpu: [x64]
     os: [linux]
 
-  '@biomejs/cli-linux-x64@2.5.3':
-    resolution: {integrity: sha512-yMkJtilsgvILDcVkh187aVLTb64xYsrxYajx5kym+r1ULkO5HUOfu9AYKLGQbOVLwJtT2utNw7hhFNg+17mUYA==}
+  '@biomejs/cli-linux-x64@2.5.4':
+    resolution: {integrity: sha512-FNxojWJkL7EajAuzBgoLe0T2G0y112M4lBrDIFl/DomFTx8yqenYOIdsRLNXvOvBBofE8hJi85LjzLmBDpY7/Q==}
     engines: {node: '>=14.21.3'}
     cpu: [x64]
     os: [linux]
 
-  '@biomejs/cli-win32-arm64@2.5.3':
-    resolution: {integrity: sha512-cX5z+GYwRcqEok0AH3KSfQGgqYd0Nomfp6Fbe1uiTtELE38hdH2k842wQ9wLNaF/JJ7r4rjJQ4VR+ce+fRmQbw==}
+  '@biomejs/cli-win32-arm64@2.5.4':
+    resolution: {integrity: sha512-emoXexPZIPAZkz2RKmA95WJUqK3I5MJNYtwEbL5ESciRzhmFMMyekDhNG8hpeOaK+ZGRDxAU4wvGuA5IHQ0h0w==}
     engines: {node: '>=14.21.3'}
     cpu: [arm64]
     os: [win32]
 
-  '@biomejs/cli-win32-x64@2.5.3':
-    resolution: {integrity: sha512-ExSaJWi4/u6+GXCszlSKpWSjKNbDseAYqqkCznsCsZ/4uidZ/BEqsCc5/3ctlq6dfIubdIIRSVLC/PG9xPl70Q==}
+  '@biomejs/cli-win32-x64@2.5.4':
+    resolution: {integrity: sha512-U1jaluLw1qQc2Tx7/CeSoL9N5XcqIH+GWjpUAy1ouB5nVjSCMNO+NNHdY3RAs8zxNurLWAdj6pehQdCA2zyU+Q==}
     engines: {node: '>=14.21.3'}
     cpu: [x64]
     os: [win32]
@@ -7114,39 +7114,39 @@ snapshots:
 
   '@better-fetch/fetch@1.3.1': {}
 
-  '@biomejs/biome@2.5.3':
+  '@biomejs/biome@2.5.4':
     optionalDependencies:
-      '@biomejs/cli-darwin-arm64': 2.5.3
-      '@biomejs/cli-darwin-x64': 2.5.3
-      '@biomejs/cli-linux-arm64': 2.5.3
-      '@biomejs/cli-linux-arm64-musl': 2.5.3
-      '@biomejs/cli-linux-x64': 2.5.3
-      '@biomejs/cli-linux-x64-musl': 2.5.3
-      '@biomejs/cli-win32-arm64': 2.5.3
-      '@biomejs/cli-win32-x64': 2.5.3
+      '@biomejs/cli-darwin-arm64': 2.5.4
+      '@biomejs/cli-darwin-x64': 2.5.4
+      '@biomejs/cli-linux-arm64': 2.5.4
+      '@biomejs/cli-linux-arm64-musl': 2.5.4
+      '@biomejs/cli-linux-x64': 2.5.4
+      '@biomejs/cli-linux-x64-musl': 2.5.4
+      '@biomejs/cli-win32-arm64': 2.5.4
+      '@biomejs/cli-win32-x64': 2.5.4
 
-  '@biomejs/cli-darwin-arm64@2.5.3':
+  '@biomejs/cli-darwin-arm64@2.5.4':
     optional: true
 
-  '@biomejs/cli-darwin-x64@2.5.3':
+  '@biomejs/cli-darwin-x64@2.5.4':
     optional: true
 
-  '@biomejs/cli-linux-arm64-musl@2.5.3':
+  '@biomejs/cli-linux-arm64-musl@2.5.4':
     optional: true
 
-  '@biomejs/cli-linux-arm64@2.5.3':
+  '@biomejs/cli-linux-arm64@2.5.4':
     optional: true
 
-  '@biomejs/cli-linux-x64-musl@2.5.3':
+  '@biomejs/cli-linux-x64-musl@2.5.4':
     optional: true
 
-  '@biomejs/cli-linux-x64@2.5.3':
+  '@biomejs/cli-linux-x64@2.5.4':
     optional: true
 
-  '@biomejs/cli-win32-arm64@2.5.3':
+  '@biomejs/cli-win32-arm64@2.5.4':
     optional: true
 
-  '@biomejs/cli-win32-x64@2.5.3':
+  '@biomejs/cli-win32-x64@2.5.4':
     optional: true
 
   '@captchafox/react@1.13.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
@@ -7301,17 +7301,6 @@ snapshots:
       '@distilled.cloud/core': 0.27.0(effect@4.0.0-beta.97)
       effect: 4.0.0-beta.97
 
-  '@distilled.cloud/cloudflare-rolldown-plugin@0.11.3(rolldown@1.0.1)(vite@8.1.2(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))(workerd@1.20260617.1)':
-    dependencies:
-      '@cloudflare/unenv-preset': 2.16.1(unenv@2.0.0-rc.24)(workerd@1.20260617.1)
-      magic-string: 0.30.21
-      unenv: 2.0.0-rc.24
-    optionalDependencies:
-      rolldown: 1.0.1
-      vite: 8.1.2(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0)
-    transitivePeerDependencies:
-      - workerd
-
   '@distilled.cloud/cloudflare-rolldown-plugin@0.11.3(rolldown@1.0.1)(vite@8.1.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))(workerd@1.20260617.1)':
     dependencies:
       '@cloudflare/unenv-preset': 2.16.1(unenv@2.0.0-rc.24)(workerd@1.20260617.1)
@@ -7343,20 +7332,6 @@ snapshots:
       '@effect/platform-bun': 4.0.0-beta.97(effect@4.0.0-beta.97)
       '@effect/platform-node': 4.0.0-beta.92(effect@4.0.0-beta.97)(ioredis@5.11.1)
 
-  '@distilled.cloud/cloudflare-vite-plugin@0.11.3(@distilled.cloud/cloudflare-runtime@0.11.3(@distilled.cloud/cloudflare@0.27.0(effect@4.0.0-beta.93))(@effect/platform-bun@4.0.0-beta.97(effect@4.0.0-beta.93))(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.93)(ioredis@5.11.1))(effect@4.0.0-beta.93))(@distilled.cloud/cloudflare@0.27.0(effect@4.0.0-beta.93))(@effect/platform-bun@4.0.0-beta.97(effect@4.0.0-beta.93))(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.93)(ioredis@5.11.1))(effect@4.0.0-beta.93)(rolldown@1.0.1)(vite@8.1.2(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))(workerd@1.20260617.1)':
-    dependencies:
-      '@distilled.cloud/cloudflare': 0.27.0(effect@4.0.0-beta.93)
-      '@distilled.cloud/cloudflare-rolldown-plugin': 0.11.3(rolldown@1.0.1)(vite@8.1.2(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))(workerd@1.20260617.1)
-      '@distilled.cloud/cloudflare-runtime': 0.11.3(@distilled.cloud/cloudflare@0.27.0(effect@4.0.0-beta.93))(@effect/platform-bun@4.0.0-beta.97(effect@4.0.0-beta.93))(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.93)(ioredis@5.11.1))(effect@4.0.0-beta.93)
-      effect: 4.0.0-beta.93
-      vite: 8.1.2(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0)
-    optionalDependencies:
-      '@effect/platform-bun': 4.0.0-beta.97(effect@4.0.0-beta.93)
-      '@effect/platform-node': 4.0.0-beta.92(effect@4.0.0-beta.93)(ioredis@5.11.1)
-    transitivePeerDependencies:
-      - rolldown
-      - workerd
-
   '@distilled.cloud/cloudflare-vite-plugin@0.11.3(@distilled.cloud/cloudflare-runtime@0.11.3(@distilled.cloud/cloudflare@0.27.0(effect@4.0.0-beta.93))(@effect/platform-bun@4.0.0-beta.97(effect@4.0.0-beta.93))(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.93)(ioredis@5.11.1))(effect@4.0.0-beta.93))(@distilled.cloud/cloudflare@0.27.0(effect@4.0.0-beta.93))(@effect/platform-bun@4.0.0-beta.97(effect@4.0.0-beta.93))(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.93)(ioredis@5.11.1))(effect@4.0.0-beta.93)(rolldown@1.0.1)(vite@8.1.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))(workerd@1.20260617.1)':
     dependencies:
       '@distilled.cloud/cloudflare': 0.27.0(effect@4.0.0-beta.93)
@@ -7367,20 +7342,6 @@ snapshots:
     optionalDependencies:
       '@effect/platform-bun': 4.0.0-beta.97(effect@4.0.0-beta.93)
       '@effect/platform-node': 4.0.0-beta.92(effect@4.0.0-beta.93)(ioredis@5.11.1)
-    transitivePeerDependencies:
-      - rolldown
-      - workerd
-
-  '@distilled.cloud/cloudflare-vite-plugin@0.11.3(@distilled.cloud/cloudflare-runtime@0.11.3(@distilled.cloud/cloudflare@0.27.0(effect@4.0.0-beta.97))(@effect/platform-bun@4.0.0-beta.97(effect@4.0.0-beta.97))(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.97)(ioredis@5.11.1))(effect@4.0.0-beta.97))(@distilled.cloud/cloudflare@0.27.0(effect@4.0.0-beta.97))(@effect/platform-bun@4.0.0-beta.97(effect@4.0.0-beta.97))(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.97)(ioredis@5.11.1))(effect@4.0.0-beta.97)(rolldown@1.0.1)(vite@8.1.2(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))(workerd@1.20260617.1)':
-    dependencies:
-      '@distilled.cloud/cloudflare': 0.27.0(effect@4.0.0-beta.97)
-      '@distilled.cloud/cloudflare-rolldown-plugin': 0.11.3(rolldown@1.0.1)(vite@8.1.2(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))(workerd@1.20260617.1)
-      '@distilled.cloud/cloudflare-runtime': 0.11.3(@distilled.cloud/cloudflare@0.27.0(effect@4.0.0-beta.97))(@effect/platform-bun@4.0.0-beta.97(effect@4.0.0-beta.97))(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.97)(ioredis@5.11.1))(effect@4.0.0-beta.97)
-      effect: 4.0.0-beta.97
-      vite: 8.1.2(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0)
-    optionalDependencies:
-      '@effect/platform-bun': 4.0.0-beta.97(effect@4.0.0-beta.97)
-      '@effect/platform-node': 4.0.0-beta.92(effect@4.0.0-beta.97)(ioredis@5.11.1)
     transitivePeerDependencies:
       - rolldown
       - workerd
@@ -7526,20 +7487,10 @@ snapshots:
       - utf-8-validate
     optional: true
 
-  '@effect/vitest@4.0.0-beta.92(effect@4.0.0-beta.93)(vitest@4.1.10(@types/node@25.9.5)(vite@8.1.2(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0)))':
-    dependencies:
-      effect: 4.0.0-beta.93
-      vitest: 4.1.10(@types/node@25.9.5)(vite@8.1.2(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))
-
   '@effect/vitest@4.0.0-beta.92(effect@4.0.0-beta.93)(vitest@4.1.10(@types/node@26.1.1)(vite@8.1.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0)))':
     dependencies:
       effect: 4.0.0-beta.93
       vitest: 4.1.10(@types/node@26.1.1)(vite@8.1.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))
-
-  '@effect/vitest@4.0.0-beta.92(effect@4.0.0-beta.97)(vitest@4.1.10(@types/node@25.9.5)(vite@8.1.2(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0)))':
-    dependencies:
-      effect: 4.0.0-beta.97
-      vitest: 4.1.10(@types/node@25.9.5)(vite@8.1.2(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))
 
   '@effect/vitest@4.0.0-beta.92(effect@4.0.0-beta.97)(vitest@4.1.10(@types/node@26.1.1)(vite@8.1.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0)))':
     dependencies:
@@ -9976,11 +9927,11 @@ snapshots:
 
   '@types/nodemailer@8.0.1':
     dependencies:
-      '@types/node': 25.9.5
+      '@types/node': 26.1.1
 
   '@types/pg@8.20.0':
     dependencies:
-      '@types/node': 25.9.5
+      '@types/node': 26.1.1
       pg-protocol: 1.15.0
       pg-types: 2.2.0
 
@@ -10002,7 +9953,7 @@ snapshots:
 
   '@types/ws@8.18.1':
     dependencies:
-      '@types/node': 25.9.5
+      '@types/node': 26.1.1
 
   '@ungap/structured-clone@1.3.3': {}
 
@@ -10141,6 +10092,7 @@ snapshots:
       magic-string: 0.30.21
     optionalDependencies:
       vite: 8.1.2(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0)
+    optional: true
 
   '@vitest/mocker@4.1.10(vite@8.1.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))':
     dependencies:
@@ -10273,60 +10225,6 @@ snapshots:
       json-schema-traverse: 1.0.0
       require-from-string: 2.0.2
 
-  alchemy@2.0.0-beta.59(@effect/platform-bun@4.0.0-beta.97(effect@4.0.0-beta.93))(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.93)(ioredis@5.11.1))(@types/node@25.9.5)(@types/react@19.2.17)(effect@4.0.0-beta.93)(vite@8.1.2(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))(vitest@4.1.10(@types/node@25.9.5)(vite@8.1.2(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0)))(workerd@1.20260617.1)(ws@8.21.1):
-    dependencies:
-      '@alchemy.run/node-utils': 0.0.5
-      '@aws-sdk/credential-providers': 3.1077.0
-      '@clack/prompts': 0.11.0
-      '@distilled.cloud/aws': 0.27.0(effect@4.0.0-beta.93)
-      '@distilled.cloud/axiom': 0.27.0(effect@4.0.0-beta.93)
-      '@distilled.cloud/cloudflare': 0.27.0(effect@4.0.0-beta.93)
-      '@distilled.cloud/cloudflare-rolldown-plugin': 0.11.3(rolldown@1.0.1)(vite@8.1.2(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))(workerd@1.20260617.1)
-      '@distilled.cloud/cloudflare-runtime': 0.11.3(@distilled.cloud/cloudflare@0.27.0(effect@4.0.0-beta.93))(@effect/platform-bun@4.0.0-beta.97(effect@4.0.0-beta.93))(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.93)(ioredis@5.11.1))(effect@4.0.0-beta.93)
-      '@distilled.cloud/cloudflare-vite-plugin': 0.11.3(@distilled.cloud/cloudflare-runtime@0.11.3(@distilled.cloud/cloudflare@0.27.0(effect@4.0.0-beta.93))(@effect/platform-bun@4.0.0-beta.97(effect@4.0.0-beta.93))(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.93)(ioredis@5.11.1))(effect@4.0.0-beta.93))(@distilled.cloud/cloudflare@0.27.0(effect@4.0.0-beta.93))(@effect/platform-bun@4.0.0-beta.97(effect@4.0.0-beta.93))(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.93)(ioredis@5.11.1))(effect@4.0.0-beta.93)(rolldown@1.0.1)(vite@8.1.2(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))(workerd@1.20260617.1)
-      '@distilled.cloud/core': 0.27.0(effect@4.0.0-beta.93)
-      '@distilled.cloud/neon': 0.27.0(effect@4.0.0-beta.93)
-      '@distilled.cloud/planetscale': 0.27.0(effect@4.0.0-beta.93)
-      '@effect/vitest': 4.0.0-beta.92(effect@4.0.0-beta.93)(vitest@4.1.10(@types/node@25.9.5)(vite@8.1.2(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0)))
-      '@libsql/client': 0.17.4
-      '@octokit/rest': 22.0.1
-      '@octokit/webhooks': 14.2.0
-      '@smithy/node-config-provider': 4.5.4
-      '@smithy/shared-ini-file-loader': 4.6.4
-      '@smithy/types': 4.16.1
-      '@types/aws-lambda': 8.10.162
-      aws4fetch: 1.0.20
-      capnweb: 0.6.1
-      effect: 4.0.0-beta.93
-      fast-glob: 3.3.3
-      fast-xml-parser: 5.9.3
-      ink: 6.8.0(@types/react@19.2.17)(react@19.2.8)
-      jszip: 3.10.1
-      libsodium-wrappers: 0.8.4
-      magic-string: 0.30.21
-      mysql2: 3.22.5(@types/node@25.9.5)
-      pathe: 2.0.3
-      pg: 8.22.0
-      picomatch: 4.0.5
-      react: 19.2.8
-      rolldown: 1.0.1
-      undici: 7.28.0
-      yaml: 2.9.0
-    optionalDependencies:
-      '@effect/platform-bun': 4.0.0-beta.97(effect@4.0.0-beta.93)
-      '@effect/platform-node': 4.0.0-beta.92(effect@4.0.0-beta.93)(ioredis@5.11.1)
-      vite: 8.1.2(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0)
-      ws: 8.21.1
-    transitivePeerDependencies:
-      - '@types/node'
-      - '@types/react'
-      - bufferutil
-      - pg-native
-      - react-devtools-core
-      - utf-8-validate
-      - vitest
-      - workerd
-
   alchemy@2.0.0-beta.59(@effect/platform-bun@4.0.0-beta.97(effect@4.0.0-beta.93))(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.93)(ioredis@5.11.1))(@types/node@26.1.1)(@types/react@19.2.17)(effect@4.0.0-beta.93)(vite@8.1.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))(vitest@4.1.10(@types/node@26.1.1)(vite@8.1.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0)))(workerd@1.20260617.1)(ws@8.21.1):
     dependencies:
       '@alchemy.run/node-utils': 0.0.5
@@ -10370,60 +10268,6 @@ snapshots:
       '@effect/platform-bun': 4.0.0-beta.97(effect@4.0.0-beta.93)
       '@effect/platform-node': 4.0.0-beta.92(effect@4.0.0-beta.93)(ioredis@5.11.1)
       vite: 8.1.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0)
-      ws: 8.21.1
-    transitivePeerDependencies:
-      - '@types/node'
-      - '@types/react'
-      - bufferutil
-      - pg-native
-      - react-devtools-core
-      - utf-8-validate
-      - vitest
-      - workerd
-
-  alchemy@2.0.0-beta.59(@effect/platform-bun@4.0.0-beta.97(effect@4.0.0-beta.97))(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.97)(ioredis@5.11.1))(@types/node@25.9.5)(@types/react@19.2.17)(effect@4.0.0-beta.97)(vite@8.1.2(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))(vitest@4.1.10(@types/node@25.9.5)(vite@8.1.2(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0)))(workerd@1.20260617.1)(ws@8.21.1):
-    dependencies:
-      '@alchemy.run/node-utils': 0.0.5
-      '@aws-sdk/credential-providers': 3.1077.0
-      '@clack/prompts': 0.11.0
-      '@distilled.cloud/aws': 0.27.0(effect@4.0.0-beta.97)
-      '@distilled.cloud/axiom': 0.27.0(effect@4.0.0-beta.97)
-      '@distilled.cloud/cloudflare': 0.27.0(effect@4.0.0-beta.97)
-      '@distilled.cloud/cloudflare-rolldown-plugin': 0.11.3(rolldown@1.0.1)(vite@8.1.2(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))(workerd@1.20260617.1)
-      '@distilled.cloud/cloudflare-runtime': 0.11.3(@distilled.cloud/cloudflare@0.27.0(effect@4.0.0-beta.97))(@effect/platform-bun@4.0.0-beta.97(effect@4.0.0-beta.97))(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.97)(ioredis@5.11.1))(effect@4.0.0-beta.97)
-      '@distilled.cloud/cloudflare-vite-plugin': 0.11.3(@distilled.cloud/cloudflare-runtime@0.11.3(@distilled.cloud/cloudflare@0.27.0(effect@4.0.0-beta.97))(@effect/platform-bun@4.0.0-beta.97(effect@4.0.0-beta.97))(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.97)(ioredis@5.11.1))(effect@4.0.0-beta.97))(@distilled.cloud/cloudflare@0.27.0(effect@4.0.0-beta.97))(@effect/platform-bun@4.0.0-beta.97(effect@4.0.0-beta.97))(@effect/platform-node@4.0.0-beta.92(effect@4.0.0-beta.97)(ioredis@5.11.1))(effect@4.0.0-beta.97)(rolldown@1.0.1)(vite@8.1.2(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))(workerd@1.20260617.1)
-      '@distilled.cloud/core': 0.27.0(effect@4.0.0-beta.97)
-      '@distilled.cloud/neon': 0.27.0(effect@4.0.0-beta.97)
-      '@distilled.cloud/planetscale': 0.27.0(effect@4.0.0-beta.97)
-      '@effect/vitest': 4.0.0-beta.92(effect@4.0.0-beta.97)(vitest@4.1.10(@types/node@25.9.5)(vite@8.1.2(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0)))
-      '@libsql/client': 0.17.4
-      '@octokit/rest': 22.0.1
-      '@octokit/webhooks': 14.2.0
-      '@smithy/node-config-provider': 4.5.4
-      '@smithy/shared-ini-file-loader': 4.6.4
-      '@smithy/types': 4.16.1
-      '@types/aws-lambda': 8.10.162
-      aws4fetch: 1.0.20
-      capnweb: 0.6.1
-      effect: 4.0.0-beta.97
-      fast-glob: 3.3.3
-      fast-xml-parser: 5.9.3
-      ink: 6.8.0(@types/react@19.2.17)(react@19.2.8)
-      jszip: 3.10.1
-      libsodium-wrappers: 0.8.4
-      magic-string: 0.30.21
-      mysql2: 3.22.5(@types/node@25.9.5)
-      pathe: 2.0.3
-      pg: 8.22.0
-      picomatch: 4.0.5
-      react: 19.2.8
-      rolldown: 1.0.1
-      undici: 7.28.0
-      yaml: 2.9.0
-    optionalDependencies:
-      '@effect/platform-bun': 4.0.0-beta.97(effect@4.0.0-beta.97)
-      '@effect/platform-node': 4.0.0-beta.92(effect@4.0.0-beta.97)(ioredis@5.11.1)
-      vite: 8.1.2(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0)
       ws: 8.21.1
     transitivePeerDependencies:
       - '@types/node'
@@ -10629,7 +10473,7 @@ snapshots:
 
   bun-types@1.3.14:
     dependencies:
-      '@types/node': 25.9.5
+      '@types/node': 26.1.1
 
   c12@3.3.4:
     dependencies:
@@ -11573,6 +11417,7 @@ snapshots:
       lru.min: 1.1.4
       named-placeholders: 1.1.6
       sql-escaper: 1.3.3
+    optional: true
 
   mysql2@3.22.5(@types/node@26.1.1):
     dependencies:
@@ -12495,6 +12340,7 @@ snapshots:
       fsevents: 2.3.3
       jiti: 2.7.0
       yaml: 2.9.0
+    optional: true
 
   vite@8.1.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0):
     dependencies:
@@ -12536,6 +12382,7 @@ snapshots:
       '@types/node': 25.9.5
     transitivePeerDependencies:
       - msw
+    optional: true
 
   vitest@4.1.10(@types/node@26.1.1)(vite@8.1.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0)):
     dependencies:
