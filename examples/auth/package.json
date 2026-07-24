@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "dev": "bun scripts/dev.ts",
     "build": "rm -rf dist && bun build src/api/server.ts --target=bun --outfile dist/api/server.mjs && bun build src/ops/server.ts --target=bun --outfile dist/ops/server.mjs",
     "typecheck": "tsc --noEmit",
     "test": "bun test tests",

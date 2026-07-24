@@ -1,0 +1,6 @@
+@import "tailwindcss";
+@import "@daveyplate/better-auth-ui/css";
+
+body {
+  min-height: 100vh;
+}
