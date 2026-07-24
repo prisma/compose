@@ -222,7 +222,7 @@ this repo owns.
   unpacked artifacts, bucket objects, minted placeholders — lives under
   `.prisma-composer/dev/` (ADR-0004's tool-state rule), while the emulator
   daemons keep their own machine-global registry. `--fresh` is wholesale
-  local deletion through `dev.teardown` (every resource is a local file,
+  local deletion through `localTarget.teardown` (every resource is a local file,
   process, or emulator instance), never an `alchemy destroy`.
 - **Process supervision lives in the Compute emulator, not the CLI.** The
   framework owns a small, generic daemon layer (registry, stable ports,
@@ -230,7 +230,7 @@ this repo owns.
   policy; the dev command itself supervises nothing — it renders the
   `attach` hook's view.
 - **The strict secrets model is unchanged** (ADR-0029). Dev policy lives in
-  `dev.preflight`: a secret slot bound in the shell's environment is used; an
+  `localTarget.preflight`: a secret slot bound in the shell's environment is used; an
   unbound slot gets a minted, persisted placeholder and a printed warning. An
   env-sourced *param* (ADR-0032) with no shell value is a hard error instead —
   params feed schema validation at boot, so junk there produces a confusing

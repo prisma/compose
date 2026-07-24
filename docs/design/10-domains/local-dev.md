@@ -33,27 +33,30 @@ shorter name is a CLI-distribution question (Composer joining a unified
 Dev re-runs [deploy's pipeline](deploy-cli.md#the-pipeline) with these deltas:
 
 1. **Import + Load** — identical, same errors.
-2. **Config** — identical, except: every extension in the config must carry a
-   `localTarget` descriptor; a missing one fails naming the extension
-   ("`<id>` has no dev support — it declares no `localTarget` descriptor").
-   The extension factory must resolve **no** platform
-   environment on this path (no workspace id, no region, no token).
+2. **Config** — identical, except: every extension that owns resources must
+   carry a `localTarget` descriptor; a missing one fails naming the extension
+   ("extension `<id>` has no dev support — it declares no `localTarget`
+   descriptor (ADR-0041)"). A build-only extension (one whose nodes are all
+   `kind: 'build'`, declaring no providers/application/provisions/container)
+   has nothing to emulate and is exempt. The extension factory must resolve
+   **no** platform environment on this path (no workspace id, no region, no
+   token).
 3. **Assemble** — identical. Dev consumes the user's built output through the
    same adapters and produces the same bundles; missing output produces the
    same "run your build" error.
-4. **Containers + emulators** — the `dev.container` descriptor resolves a
+4. **Containers + emulators** — the `localTarget.container` descriptor resolves a
    stable local identity from the app name with no platform calls. Then the
-   `dev.emulators` hook inspects the loaded graph and ensures one emulator
+   `localTarget.emulators` hook inspects the loaded graph and ensures one emulator
    daemon per node kind the topology uses (Compute always; buckets when
    bucket resources exist; Postgres needs no pre-start — its instances are
    created at provision through the ORM CLI).
 5. **Lower + converge** — a dev-generated stack file (ADR-0007's pattern, at
    `.prisma-composer/dev/alchemy.run.ts`), driven with the extension's
-   `dev.providers()` layer and Alchemy's built-in `localState()` store, always
+   `localTarget.providers()` layer and Alchemy's built-in `localState()` store, always
    at Alchemy stage `dev`. Providers provision emulator instances (a running
    service, a database, a bucket) by talking to the emulators; converge
    terminates as always, and the Compute emulator keeps serving.
-6. **Attach** — new, dev-only: through `dev.attach`, render the front door
+6. **Attach** — new, dev-only: through `localTarget.attach`, render the front door
    (every service's endpoint), stream the merged logs, watch for rebuilds,
    loop. Ctrl-C stops the app's service instances through the attachment and
    exits; emulators and data persist.
@@ -272,8 +275,8 @@ gaps found during implementation.)
 (Settled since the first draft: Postgres runs one named `prisma dev` instance
 per `Database` resource; the front door prints every service URL ordered by
 address depth then name, shallowest first; port allocation and the remaining
-mechanics are pinned in the implementation spec. Restart latency is measured
-— see Known limitations.)
+mechanics are described in this document and [ADR-0041](../90-decisions/ADR-0041-local-dev-runs-the-deploy-pipeline-against-local-providers.md).
+Restart latency is measured — see Known limitations.)
 
 ## Proven against a real app
 
