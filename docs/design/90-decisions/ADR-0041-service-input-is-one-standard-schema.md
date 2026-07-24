@@ -63,15 +63,27 @@ the work:
 - **The binding is the traversable structure.** It is a plain object
   mirroring the schema's shape whose leaves are literals, `envParam(...)`,
   or `envSecret(...)` markers. A dumb recursive descent over it yields
-  everything provisioning needs: each `envSecret` leaf becomes a platform
-  secret and a pointer; everything else becomes config data. The node graph
-  itself is built from `deps`, which this ADR does not touch.
+  everything provisioning needs: each `envSecret` leaf becomes an in-memory
+  sentinel plus a pointer to the platform variable that holds its value;
+  everything else becomes config data. The walk mints no platform resource —
+  the sentinels live only long enough to be validated and then written into
+  the document as pointers, so a binding the schema later rejects (an
+  invalid conditional branch, say) leaves nothing behind: validation runs
+  before the one document row is written, and the platform variable a
+  pointer names is the operator's own, seeded by preflight, not something
+  this walk creates. The node graph itself is built from `deps`, which this
+  ADR does not touch.
 - **The schema is a black-box judge, invoked twice.** At deploy, the
   resolved binding — literals as-is, env params read from the deploy shell,
   each secret as an opaque `SecretString` sentinel, never the value — is
   passed to `validate`. `stripeEnabled: true` with a missing key fails right
   there, with the schema library's own error. At boot, the hydrated object
-  is validated again before the app sees it.
+  is validated again before the app sees it. Validation is synchronous both
+  times: a `validate` that returns a `Promise` (an async validator) is a
+  loud error, not awaited — deploy and boot judge on data already in hand,
+  so there is nothing to await. The typed object `service.input()` returns
+  is the schema's inferred output; a schema that carries no Standard Schema
+  type metadata still validates at runtime but is read as `unknown`.
 
 **The wire format is one self-describing document.** The deploy serializes
 the validated, defaults-applied object into a single env row
@@ -160,9 +172,16 @@ document instead of hand-writing the row protocol.
    would supersede this paragraph along with ADR-0031's separate channel.
 2. **Serializer change.** One JSON document row per service plus per-secret
    platform variables, replacing per-key config rows and per-slot pointer
-   rows. The `$secret` key is reserved: user data containing it is escaped
-   on write and unescaped on read, so the marker cannot be forged from
-   application values.
+   rows. A secret leaf serializes to exactly `{"$secret": "<VAR>"}` — an
+   object with the single key `$secret` and a string value, recognized only
+   in that exact shape. The marker is collision-free by escaping: on write,
+   any user key matching `/^\$+secret$/` gains one more leading `$`
+   (`$secret` → `$$secret`, `$$secret` → `$$$secret`); on read, one `$` is
+   stripped back off. So application data can carry a literal `$secret` key
+   and round-trip unchanged, while only the framework can place a
+   single-`$` marker — a forged pointer in user data is impossible.
+   Escaping and pointer-recognition apply at every level of the walk,
+   through nested objects and arrays alike.
 3. **Error quality is the schema library's.** Binding/schema drift surfaces
    at deploy-time validation with the library's message, one step later than
    a metadata-reading design would catch it. This is the price of
@@ -189,3 +208,28 @@ document instead of hand-writing the row protocol.
 - **An `optional` flag on secret slots** — solves only presence, not
   conditionality, and adds a framework concept the schema subsumes as an
   ordinary optional field. Rejected in favor of this design.
+
+## Related decisions
+
+This ADR replaces the read surface those earlier decisions established; the
+sourcing mechanics they introduced survive as binding leaves.
+
+- **[ADR-0021](ADR-0021-params-are-read-through-config-not-load.md)
+  (superseded).** Params read through `config()`, a namespace separate from
+  `load()`. `config()` and the `params` declaration are gone; configuration
+  is now fields of the one `input` schema, read through `service.input()`.
+  Dependencies still read through `load()`, so the two remain separate.
+- **[ADR-0029](ADR-0029-secrets-are-a-forwardable-slot.md) (partially
+  superseded).** The forwardable, nameless secret *need* (`secret()`,
+  `envSecret`) survives: a module still forwards a need without learning the
+  platform name, and a forwarded ref is a binding leaf. What is replaced is
+  the read surface (`secrets()` → a `SecretString` field of `input`) and the
+  per-slot pointer-row wire format (→ the one document row).
+- **[ADR-0032](ADR-0032-params-bind-at-provision-env-sourcing-is-a-target-source.md)
+  (partially superseded).** Binding a value at `provision()` and env
+  sourcing (`envParam('NAME')`) survive unchanged as binding mechanics. What
+  is replaced is the `config()` read and the per-key pointer rows.
+- **[ADR-0031](ADR-0031-provisioned-param-values-are-a-need-resolved-through-a-target-registry.md)
+  (untouched here, tracked separately).** The framework's own provider-param
+  channel (origin, service keys) still rides per-key rows; consequence 1
+  notes the project that would fold it onto a document like this one.
