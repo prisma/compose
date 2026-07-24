@@ -240,9 +240,11 @@ export default defineConfig({
 ## 5. Run it locally
 
 One command brings the whole app up on your machine — both services wired
-together, no cloud credentials:
+together, no cloud credentials. Like deploy, it runs your *built* output, so
+build first (the build is §6, just below):
 
 ```sh
+pnpm build
 prisma-composer dev module.ts
 ```
 
