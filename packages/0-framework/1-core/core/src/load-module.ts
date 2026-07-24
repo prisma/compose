@@ -176,12 +176,20 @@ function validateWiring(
  * Flattens a value into itself plus every nested object/array member value —
  * identity fodder for the ctx.secrets/ctx.params usage marking, which must
  * see a forwarded source wherever it sits inside an input binding (ADR-0042).
+ * A secret/param source is an opaque leaf: it is pushed (a forwarded ref IS
+ * such a source, so identity-matching still needs it) but never descended
+ * into, so a ref buried in an unrelated source's payload is not falsely seen
+ * as used. `seen` guards object cycles so a self-referential binding cannot
+ * recurse forever.
  */
-function deepValues(value: unknown, out: unknown[]): void {
+function deepValues(value: unknown, out: unknown[], seen: WeakSet<object> = new WeakSet()): void {
   out.push(value);
   if (typeof value !== 'object' || value === null) return;
+  if (isSecretSource(value) || isParamSource(value)) return;
+  if (seen.has(value)) return;
+  seen.add(value);
   const members = Array.isArray(value) ? value : Object.values(value);
-  for (const member of members) deepValues(member, out);
+  for (const member of members) deepValues(member, out, seen);
 }
 
 /** The (unvalidated) edges a `wiring` object implies — one dependency edge per entry; `validateWiring` does the real checking. */

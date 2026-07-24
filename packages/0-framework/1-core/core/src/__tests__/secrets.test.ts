@@ -112,6 +112,54 @@ describe('Load validates input bindings and secret forwarding', () => {
     ).not.toThrow();
   });
 
+  test('a cyclic input binding completes and the forwarded secret is still marked used', () => {
+    const inner = svcWithInput('inner');
+    const m = module('auth', { secrets: { key: secret() } }, ({ secrets, provision }) => {
+      const cyclic: Record<string, unknown> = { key: secrets.key };
+      cyclic['self'] = cyclic;
+      provision(inner, {
+        id: 'inner',
+        input: blindCast<
+          InputBinding,
+          'a deliberately self-referential binding to exercise the cycle guard'
+        >(cyclic),
+      });
+    });
+    const graph = Load(
+      module('root', ({ provision }) => {
+        provision(m, { id: 'auth', secrets: { key: secretSource('AUTH_KEY') } });
+      }),
+    );
+    expect(graph.inputBindings).toHaveLength(1);
+  });
+
+  test('a forwarded secret nested inside an unrelated source payload is not falsely marked used', () => {
+    const inner = svcWithInput('inner');
+    const m = module(
+      'auth',
+      { secrets: { a: secret(), b: secret() } },
+      ({ secrets, provision }) => {
+        // `a` is forwarded directly; `b` is buried in another source's opaque
+        // payload — core must treat that source as a leaf, so `b` never reaches a
+        // provision and is flagged unused.
+        provision(inner, {
+          id: 'inner',
+          input: blindCast<
+            InputBinding,
+            'nests a forwarded ref inside an opaque source payload to exercise the leaf boundary'
+          >({ a: secrets.a, other: secretSource({ nested: secrets.b }) }),
+        });
+      },
+    );
+    expect(() =>
+      Load(
+        module('root', ({ provision }) => {
+          provision(m, { id: 'auth', secrets: { a: secretSource('A'), b: secretSource('B') } });
+        }),
+      ),
+    ).toThrow(/declares secret "b" but never forwards/);
+  });
+
   test('a root module that declares its own secret slot fails — the root binds, it does not declare', () => {
     const root = module('root', { secrets: { key: secret() } }, () => {});
     expect(() => Load(root)).toThrow(/deployed as the root/);
