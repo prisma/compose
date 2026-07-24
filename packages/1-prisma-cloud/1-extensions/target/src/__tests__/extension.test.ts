@@ -642,6 +642,30 @@ describe('compute().origin()', () => {
   });
 });
 
+describe('compute().port()', () => {
+  test('returns the resolved service port after run() has stashed the config', async () => {
+    const app = compute({ name: 'ingest', deps: {}, build });
+    let seen: number | undefined;
+    await withEnv({ COMPOSER_INGEST_PORT: '8080', COMPOSER_PORT: '', PORT: '' }, () =>
+      app.run('ingest', async () => {
+        seen = app.port();
+      }),
+    );
+    expect(seen).toBe(8080);
+  });
+
+  test('returns the default port (3000) when none is configured', async () => {
+    const app = compute({ name: 'ingest', deps: {}, build });
+    let seen: number | undefined;
+    await withEnv({ COMPOSER_INGEST_PORT: '', COMPOSER_PORT: '', PORT: '' }, () =>
+      app.run('ingest', async () => {
+        seen = app.port();
+      }),
+    );
+    expect(seen).toBe(3000);
+  });
+});
+
 describe('the config pipeline over extension nodes', () => {
   test('configOf is semantic — owner/name/type, no platform keys', () => {
     const app = compute({

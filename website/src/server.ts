@@ -2,9 +2,10 @@
 // /guides/<slug> — everything pre-rendered into the bundle, nothing loaded at
 // runtime.
 import { guides } from './generated/content.ts';
+import service from './service.ts';
 import { guidePage, landingPage, notFoundPage } from './template.ts';
 
-const port = Number(process.env['PORT']); // set by run() (and bootstrapService) before boot (ADR-0041)
+const port = service.port();
 
 const bySlug = new Map(guides.map((g) => [g.slug, g]));
 

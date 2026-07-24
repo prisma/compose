@@ -9,7 +9,7 @@ import service from './service.ts';
 
 const { db } = service.load(); // db: PostgresConfig — the app owns its client
 const { signingKey } = service.input(); // signingKey: SecretString — redacts everywhere but expose() (ADR-0041)
-const port = Number(process.env['PORT']); // set by run() (and bootstrapService) before boot
+const port = service.port();
 
 // The E2E's KNOWN test marker for the secret the root binds to AUTH_SIGNING_SECRET
 // (matched by the value the deploy provisions — see .github/workflows/e2e-deploy.yml

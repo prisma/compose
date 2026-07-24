@@ -11,7 +11,7 @@
 import service from './service.ts';
 
 const { greeting } = service.input();
-const port = Number(process.env['PORT']); // set by run() (and bootstrapService) before boot (ADR-0041)
+const port = service.port();
 
 const logo = Bun.file(new URL('./assets/logo.svg', import.meta.url));
 

@@ -41,6 +41,9 @@ type ReservedParams = typeof reservedParams;
  *     platform var, validates with the declared schema, and memoizes (ADR-0041).
  *   · origin() — this service's platform-assigned public origin, read from the
  *     stash `run()` populates; memoized per process.
+ *   · port() — this service's resolved reserved port (the value `run()` routes
+ *     to and exports as PORT), read from that same stash via #processConfig();
+ *     defaults to 3000 when the platform binds none.
  *
  * The underlying node carries `extension: '@prisma/composer-prisma-cloud'` —
  * the control-plane registry key `prisma-composer deploy` resolves through the
@@ -131,6 +134,19 @@ export class ComputeService<
   origin(): string {
     this.#origin ??= readOrigin();
     return this.#origin;
+  }
+
+  /** This service's resolved reserved port — the value run() routes to and
+   *  exports as PORT — read the same way load() reads the stash. Defaults to
+   *  3000 when the platform binds none. */
+  port(): number {
+    const port = this.#processConfig().service['port'];
+    if (typeof port !== 'number') {
+      throw new Error(
+        `service "${this.name}" resolved a non-numeric port — the reserved port param is number({ default: 3000 }), so a stashed config always carries a number here.`,
+      );
+    }
+    return port;
   }
 }
 

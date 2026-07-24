@@ -14,7 +14,7 @@ const service = storageService();
 
 const { db, credentials } = service.load();
 const { bucket } = service.input();
-const port = Number(process.env['PORT']);
+const port = service.port();
 
 const store = await createPgStore(db.url);
 startStorageServer({ store, credentials, bucket, port });

@@ -20,7 +20,7 @@ const service = emailService();
 
 const { db } = service.load();
 const { deliveryMode, deliveryUrl, from, deliveryCredential } = service.input();
-const port = Number(process.env['PORT']);
+const port = service.port();
 
 const deliveryUrlError = checkDeliveryUrl(deliveryMode, deliveryUrl);
 if (deliveryUrlError !== null) throw new Error(deliveryUrlError);
