@@ -92,12 +92,17 @@ All on the post-#161 shape (`serializer.ts` input walk, `preflight.ts`
    `isGeneratedParamSource(value)` as a leaf BEFORE the param/secret source
    branches. A generated leaf resolves to a **pointer**, exactly parallel to
    the `$secret` pointer, with its own key: the document carries
-   `{"$generated": "<VAR>"}` where `<VAR> = generatedParamVarName(inputKey)`
-   = `COMPOSER_<addr>_<KEY>_GENERATED` (`<KEY>` = the input key path,
-   serializer-normalized the same way secret pointer names are). For schema
-   validation at deploy, the sentinel is: a `SecretString` box (`new
-   SecretBox('')`) when `redacted: true`; the empty string `''` when
-   `redacted: false`. The walk also appends to a new
+   `{"$generated": "<VAR>", "redacted": <bool>}` where `<VAR> =
+   generatedParamVarName(address, path)` = `COMPOSER_<addr>_<KEY>_GENERATED`
+   (`<KEY>` = the input key path, serializer-normalized the same way secret
+   pointer names are). **The pointer carries the `redacted` facet** — the
+   deploy knows it (from the leaf), boot must not, because boot is
+   schema-blind (a Standard Schema exposes only `validate`, never its field
+   types). Boot reads the facet off the pointer, not the schema (amended
+   2026-07-24, D1: the earlier "box when the schema field expects one" was
+   not implementable). For schema validation at deploy, the sentinel is: a
+   `SecretString` box (`new SecretBox('')`) when `redacted: true`; the empty
+   string `''` when `redacted: false`. The walk also appends to a new
    `ResolvedInputBinding.generated: readonly GeneratedLeaf[]` list:
    `{ varName: string; bytes: number; redacted: boolean; path: string }`.
    The walk itself creates NO resource — it stays pure; ADR-0041's
@@ -118,13 +123,18 @@ All on the post-#161 shape (`serializer.ts` input walk, `preflight.ts`
    skips generated leaves (`if (isGeneratedParamSource(v)) continue;`)
    — nothing for an operator to seed, nothing to check. Generated leaves
    never appear in the missing-bindings error.
-5. **Boot (`readInput`/`hydrateInputDocument`).** A `{"$generated": VAR}`
-   pointer hydrates from `process.env[VAR]`: wrapped in the redacting box
-   when the schema field expects one (the box type is how redaction is
-   expressed in the schema — § 6), plain string otherwise. A missing VAR at
-   boot is the same hard error a missing `$secret` var is, with a message
-   naming the var and "the deploy provisions this variable — its absence
-   means the deploy and the running service disagree".
+5. **Boot (`readInput`/`hydrateInputDocument`).** A
+   `{"$generated": VAR, "redacted": <bool>}` pointer hydrates from
+   `process.env[VAR]`, wrapping in the redacting box iff the pointer's
+   `redacted` is `true`, plain string otherwise. Boot reads the facet from
+   the POINTER, never the schema (§ 4.1). A `redacted: true` generated leaf
+   whose schema field is a plain string, or a `redacted: false` leaf whose
+   field is `secretString()`, is a wiring error the schema catches at
+   validation — the pointer and the schema agree by construction because the
+   same author writes both. A missing VAR at boot is the same hard error a
+   missing `$secret` var is, with a message naming the var and "the deploy
+   provisions this variable — its absence means the deploy and the running
+   service disagree".
 6. **Deploy report.** The input document prints as today; a generated leaf
    prints as its pointer (`{"$generated":"COMPOSER_…"}`), never a value —
    true for redacted AND unredacted generated params (the value is in

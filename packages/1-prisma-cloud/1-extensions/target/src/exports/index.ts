@@ -16,6 +16,8 @@ export type { PostgresConfig } from '../postgres.ts';
 export { postgres, postgresContract } from '../postgres.ts';
 export type { ProvisionedEdge } from '../provisioned-edges.ts';
 export { provisionedEdges } from '../provisioned-edges.ts';
+export type { RequiredPackHead, RequiredPackHeadCmp } from '../required-pack-head.ts';
+export { requiredPackHead, requiredPackHeadOf } from '../required-pack-head.ts';
 export type { CredentialsConfig, CredentialsContract } from '../s3-credentials.ts';
 export { credentialsContract, s3Credentials } from '../s3-credentials.ts';
 export { s3StoreService } from '../s3-store.ts';
