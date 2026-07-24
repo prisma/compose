@@ -30,12 +30,16 @@ export function authProxy(api: AuthProxyTarget): (request: Request) => Promise<R
     headers.set('x-forwarded-host', request.headers.get('host') ?? incoming.host);
     headers.set('x-forwarded-proto', incoming.protocol.replace(':', ''));
 
+    // GET/HEAD must not carry a body — fetch rejects the combination.
+    const hasBody = request.method !== 'GET' && request.method !== 'HEAD';
     try {
       const upstream = await fetch(target, {
         method: request.method,
         headers,
-        // GET/HEAD must not carry a body — fetch rejects the combination.
-        body: request.method === 'GET' || request.method === 'HEAD' ? undefined : request.body,
+        // A streamed request body needs `duplex: 'half'` under Node/undici
+        // (Bun tolerates its absence); set both together so the proxy forwards
+        // POST/PUT/PATCH bodies whether it runs on Bun or a Node/Next origin.
+        ...(hasBody ? { body: request.body, duplex: 'half' } : {}),
         redirect: 'manual',
       });
       return new Response(upstream.body, {
