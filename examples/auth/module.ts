@@ -1,9 +1,9 @@
+import apiService from '@example-auth/api';
 import { module } from '@prisma/composer';
 import { envParam, envSecret } from '@prisma/composer-prisma-cloud';
 import { auth } from '@prisma/composer-prisma-cloud/auth';
 import { email } from '@prisma/composer-prisma-cloud/email';
 import { pnPostgres } from '@prisma/composer-prisma-cloud/prisma-next';
-import apiService from './src/api/service.ts';
 import { appContract } from './src/contract.ts';
 import opsService from './src/ops/service.ts';
 
@@ -14,10 +14,14 @@ import opsService from './src/ops/service.ts';
  * magic-link delivery — the module-depends-on-module proof), and two
  * consumer services proving least-privilege wiring:
  *
- *   - `api` — the app origin: proxies `/api/auth/*` to the auth service,
- *     JWT-verifies `/me`, and answers session lookups. Holds the `api` +
- *     `session` ports and the verifier; CANNOT touch admin ops.
- *   - `ops` — the back office: holds ONLY the `admin` port.
+ *   - `api` — the browser front door: a Next.js app (standalone compute
+ *     service). Renders the Better Auth UI, proxies `/api/auth/*` to the auth
+ *     service (same-origin → first-party cookies), JWT-verifies `/me`, answers
+ *     session lookups, and reads the email module's `outbox` for the dev inbox
+ *     page. Holds the `api` + `verifier` + `session` + read-only `outbox`
+ *     ports; CANNOT touch admin ops.
+ *   - `ops` — the back office: holds ONLY the `admin` port (plus `outbox` for
+ *     the smoke's find-sent-email route).
  *
  * `baseUrl` is the PUBLIC origin browsers would see (the api service).
  * `deliveryMode`/`from` are the email module's own boundary params, bound to
@@ -48,7 +52,12 @@ export default module('auth-example', ({ provision }) => {
   });
   provision(apiService, {
     id: 'api',
-    deps: { authApi: identity.api, verifier: identity.api, session: identity.session },
+    deps: {
+      authApi: identity.api,
+      verifier: identity.api,
+      session: identity.session,
+      outbox: mail.outbox,
+    },
   });
   provision(opsService, { id: 'ops', deps: { admin: identity.admin, outbox: mail.outbox } });
 });

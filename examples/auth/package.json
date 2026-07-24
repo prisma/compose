@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "bun scripts/dev.ts",
-    "build": "rm -rf dist && bun build src/api/server.ts --target=bun --outfile dist/api/server.mjs && bun build src/ops/server.ts --target=bun --outfile dist/ops/server.mjs",
+    "dev:pipeline": "( set -a; . ./.env.dev; set +a; bun node_modules/.bin/prisma-composer dev module.ts )",
+    "build": "rm -rf dist && bun build src/ops/server.ts --target=bun --outfile dist/ops/server.mjs",
     "typecheck": "tsc --noEmit",
     "test": "bun test tests",
     "smoke:deployed": "( set -a; . \"${PRISMA_DEPLOY_ENV:-../../.env}\"; set +a; bun scripts/smoke.ts )",
@@ -13,6 +14,7 @@
     "destroy": "( set -a; . \"${PRISMA_DEPLOY_ENV:-../../.env}\"; set +a; bun node_modules/.bin/prisma-composer destroy module.ts --production ${AUTH_STACK_NAME:+--name \"$AUTH_STACK_NAME\"} )"
   },
   "dependencies": {
+    "@example-auth/api": "workspace:0.2.0",
     "@prisma-next/postgres": "0.16.0",
     "@prisma/composer": "workspace:0.3.0",
     "@prisma/composer-prisma-cloud": "workspace:0.3.0",

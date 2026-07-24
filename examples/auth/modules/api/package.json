@@ -10,8 +10,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "typecheck": "tsc --noEmit",
-    "test": "bun test app/page.integration.test.ts"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@daveyplate/better-auth-ui": "^3.4.0",

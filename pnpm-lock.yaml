@@ -41,6 +41,9 @@ importers:
 
   examples/auth:
     dependencies:
+      '@example-auth/api':
+        specifier: workspace:0.2.0
+        version: link:modules/api
       '@prisma-next/postgres':
         specifier: 0.16.0
         version: 0.16.0(typanion@3.14.0)(typescript@6.0.3)
