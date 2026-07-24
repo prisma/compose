@@ -416,10 +416,12 @@ const chat = compute({ name: 'chat', input: chatInput, /* ... */ });
 ```
 
 Every service also gets a reserved `port` (default 3000), outside the input
-schema; the framework exports it as the `PORT` environment variable before
-your entry runs — the near-universal convention servers already follow —
-so `Bun.serve({ port: Number(process.env['PORT']) })` listens where Compute
-routes.
+schema and read through its own typed accessor — `service.port()`, a sibling
+of `service.origin()` — so `Bun.serve({ port: service.port() })` listens
+where Compute routes, with no `process.env` in your code. (The framework
+also exports the resolved port as the `PORT` environment variable, but that
+is only for a server it does not write and cannot call — Next.js's
+standalone `server.js`, which binds `PORT` itself.)
 
 ### Binding the input at provision
 

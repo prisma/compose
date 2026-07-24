@@ -135,7 +135,7 @@ compile:
 import { serve } from '@prisma/composer/service-rpc';
 import service from './service.ts';
 
-const port = Number(process.env['PORT']); // set by the framework before boot
+const port = service.port(); // the reserved port, resolved (default 3000)
 
 const QUOTES = [
   'Simplicity is prerequisite for reliability.',
@@ -154,12 +154,12 @@ export default handler;
 Bun.serve({ port, hostname: '0.0.0.0', fetch: handler });
 ```
 
-Notice what's missing: no port constant, no URL of anything. Every service
-gets a port for free (default 3000), exported as the `PORT` environment
-variable before your entry runs; dependencies arrive through
-`service.load()`, and any configuration of your own through
-`service.input()` ([Building an app](building-an-app.md#service-input)) —
-that's the whole framework contract with your code.
+Notice what's missing: no URL of anything, no `process.env`. Every service
+gets a port for free (default 3000), read through `service.port()`;
+dependencies arrive through `service.load()`, and any configuration of your
+own through `service.input()`
+([Building an app](building-an-app.md#service-input)) — three typed
+accessors, and that's the whole framework contract with your code.
 
 ## 3. The gateway service
 
@@ -189,7 +189,7 @@ export default compute({
 import service from './service.ts';
 
 const { quotes } = service.load();
-const port = Number(process.env['PORT']);
+const port = service.port();
 
 Bun.serve({
   port,
@@ -247,8 +247,8 @@ connection param, for dependencies), uppercased — `COMPOSER_QUOTES_URL` for
 the `quotes` dependency's URL, and a `db` dependency would read
 `COMPOSER_DB_URL`. The input is one variable, `COMPOSER_INPUT`, holding one
 JSON document ([Building an app](building-an-app.md#what-travels)), and the
-port is plain `PORT`. A missing required value fails loudly at boot with the
-exact variable name it wanted.
+reserved port is `COMPOSER_PORT` (unset means the default 3000). A missing
+required value fails loudly at boot with the exact variable name it wanted.
 
 These are the same `COMPOSER_*` variables a deploy writes for the running
 service. Locally they're yours to set; in a deployed environment they belong
@@ -356,8 +356,8 @@ code you already have stays the server; you add the declaration around it.
 `compute({ name, deps, build: node({ module, entry }) })` pointing `entry` at
 your built server file, then make three changes to the server itself:
 
-1. Keep reading the port from `process.env.PORT` (the framework sets it),
-   and bind `0.0.0.0`.
+1. Read the port from `service.port()` (never `process.env`), and bind
+   `0.0.0.0`.
 2. Replace every other `process.env` read with what it really is: a field of
    the service's input schema for config and credentials, or a dependency
    for anything another service provides. If a value differs per stage — an

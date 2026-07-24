@@ -28,7 +28,8 @@ from exactly one place — the service node:
 - `service.load()` — dependencies (typed RPC clients, database bindings)
 - `service.input()` — the service's whole input, one schema-validated typed
   object; credentials in it are redacting `SecretString` boxes
-- `process.env.PORT` — the port to bind, set by the framework before boot
+- `service.port()` — the reserved port to bind (default 3000), typed; never
+  `process.env`
 
 The framework never bundles or transforms your code. You build your app with
 whatever bundler you like (`bun build`, `next build`); `prisma-composer deploy`
@@ -98,8 +99,8 @@ import { serve } from '@prisma/composer/service-rpc';
 import { SQL } from 'bun';
 import service from './service.ts';
 
-const { db } = service.load();            // { url } — you build your own client
-const port = Number(process.env['PORT']); // set by the framework before boot
+const { db } = service.load(); // { url } — you build your own client
+const port = service.port();   // the reserved port, resolved (default 3000)
 
 const sql = new SQL({ url: db.url, max: 1, idleTimeout: 10 });
 
@@ -462,8 +463,10 @@ Rules that bite:
   so (optional field, union arm). The deploy report prints the serialized
   input document (secret-free: secrets ride as `{"$secret":"VAR"}` pointers)
   and every key that resolved absent.
-- **The reserved `port` (default 3000) is outside the schema** — the
-  framework exports it as `process.env.PORT` before boot.
+- **The reserved `port` (default 3000) is outside the schema** — read it
+  through `service.port()` (a sibling of `service.origin()`), never
+  `process.env`. The framework also exports `PORT` for Next.js standalone,
+  which binds it itself.
 - A module forwards a secret need without learning the platform name
   (the auth Module above); the forwarded ref is a binding leaf.
 
