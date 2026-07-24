@@ -118,6 +118,31 @@ describe('renderDeployment', () => {
     );
   });
 
+  test('an empty details value emits no line — the common zero-absent case renders nothing spurious', () => {
+    const results = [
+      deployed('web', [
+        {
+          kind: 'compute-service',
+          id: 'cps_1',
+          url: 'https://a.example',
+          details: {
+            input: '{"greeting":"hello"}',
+            absent: '',
+          },
+        },
+      ]),
+    ];
+
+    expect(renderDeployment(result('app', results))).toBe(
+      [
+        'app',
+        '└─ web   compute-service cps_1',
+        '         https://a.example',
+        '         input {"greeting":"hello"}',
+      ].join('\n'),
+    );
+  });
+
   test('the app name alone when nothing deployed', () => {
     expect(renderDeployment(result('app', []))).toBe('app');
   });

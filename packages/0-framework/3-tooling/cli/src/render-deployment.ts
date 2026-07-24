@@ -104,6 +104,7 @@ export function renderDeployment(result: DeploymentResult): string {
         lines.push(`${pad(row.continuation, column)}${entity.url}`);
       }
       for (const [key, value] of Object.entries(entity.details ?? {})) {
+        if (value === '') continue;
         for (const line of value.split('\n')) {
           lines.push(`${pad(row.continuation, column)}${key} ${line}`);
         }
