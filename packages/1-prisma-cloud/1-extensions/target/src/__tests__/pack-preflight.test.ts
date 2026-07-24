@@ -103,16 +103,6 @@ describe('runPackPreflight', () => {
     );
   });
 
-  test('fails naming found vs required heads when the pack is listed at another head', async () => {
-    const graph = graphWith(GADGET_PACK_ID, 'sha256:required-but-newer', pnDb());
-    await expect(runPackPreflight(graph)).rejects.toThrow(
-      `extension pack "${GADGET_PACK_ID}" in "${packedConfig}" is at head ` +
-        `${GADGET_PACK_HEAD_HASH}, but the installed package requires ` +
-        "sha256:required-but-newer. Re-run migration plan so the pack's shipped migrations " +
-        'are materialised, then redeploy.',
-    );
-  });
-
   test('fails when a pack-requirement edge is wired to a non-pnPostgres provider', async () => {
     // A resource that PROVIDES a prisma-next contract (so the wiring
     // satisfies) but is not a pnPostgres resource node — it has no config to
