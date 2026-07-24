@@ -13,24 +13,17 @@
  *                                     module wiring against a real deploy.
  *   /health                        → 200
  */
-import type { Client } from '@prisma/composer/service-rpc';
-import type { authAdminContract } from '@prisma/composer-prisma-cloud/auth';
-import type { emailOutboxContract } from '@prisma/composer-prisma-cloud/email';
 import { type } from 'arktype';
 import { Hono } from 'hono';
+import type opsService from './service.ts';
 
 const findUserBody = type({ email: 'string' });
 const revokeBody = type({ userId: 'string' });
 const findSentEmailBody = type({ to: 'string', 'templateId?': 'string' });
 
-export interface OpsDeps {
-  /** The admin rpc port, typed straight off its contract — the same client shape `rpc(authAdminContract)` hydrates. */
-  readonly admin: Client<typeof authAdminContract>;
-  /** The email module's outbox port, read-only — this service never holds `send`. */
-  readonly outbox: Client<typeof emailOutboxContract>;
-}
-
-export function createOpsApp(deps: OpsDeps): (request: Request) => Promise<Response> {
+export function createOpsApp(
+  deps: ReturnType<typeof opsService.load>,
+): (request: Request) => Promise<Response> {
   const app = new Hono();
 
   app.post('/admin/find-user', async (c) => {

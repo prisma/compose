@@ -1,33 +1,27 @@
 /**
- * The api service's request handling, separated from service.load() so the
- * local integration test can drive it with bindings pointed at
- * `startLocalAuthServer` (the same shapes the framework hydrates). Routing
- * is Hono — the app brings its own HTTP framework (the email example's
- * pattern), and since Hono's handler is a plain `Request → Response`
- * function, the same app runs behind `Bun.serve` in the deployed service
- * and inside the integration test with no server.
+ * The api service's request handling, separated from `service.load()` so
+ * `createApiApp` is a pure function of its already-hydrated deps — typed as
+ * exactly what `service.load()` infers from `compute({ deps })`. Routing is
+ * Hono — the app brings its own HTTP framework (the email example's pattern),
+ * and since Hono's handler is a plain `Request → Response` function, the same
+ * app runs behind `Bun.serve` in the deployed service (server.ts) and, in the
+ * local integration test, behind that same entry booted by `bootstrapService`.
  *
  *   /api/auth/*  → authProxy(authApi)   (the browser golden path)
  *   /me          → Authorization: Bearer <jwt> verified STATELESSLY
  *   /session     → POST { token } → the session port's getSession
  *   /health      → 200
  */
-import type { Client } from '@prisma/composer/service-rpc';
-import type { AuthApiClient, JwtVerifier } from '@prisma/composer-prisma-cloud/auth';
-import { authProxy, type authSessionContract } from '@prisma/composer-prisma-cloud/auth';
+import { authProxy } from '@prisma/composer-prisma-cloud/auth';
 import { type } from 'arktype';
 import { Hono } from 'hono';
+import type apiService from './service.ts';
 
 const sessionBody = type({ token: 'string' });
 
-export interface ApiDeps {
-  readonly authApi: AuthApiClient;
-  readonly verifier: JwtVerifier;
-  /** The session rpc port, typed straight off its contract — the same client shape `rpc(authSessionContract)` hydrates. */
-  readonly session: Client<typeof authSessionContract>;
-}
-
-export function createApiApp(deps: ApiDeps): (request: Request) => Promise<Response> {
+export function createApiApp(
+  deps: ReturnType<typeof apiService.load>,
+): (request: Request) => Promise<Response> {
   const proxy = authProxy(deps.authApi);
   const app = new Hono();
 

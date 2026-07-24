@@ -1,32 +1,30 @@
 /**
- * The example's own wiring against `startLocalAuthServer` — the api and ops
- * apps driven with bindings shaped exactly as the framework hydrates them
- * (authApi client, jwtVerifier over the local JWKS, rpc clients), no cloud
+ * The example's own wiring against `startLocalAuthServer` / `startLocalEmailServer`,
+ * driven through the framework's integration seam. `bootstrapService` boots each
+ * service's real built entry (`dist/{api,ops}/server.mjs`) in-process with its
+ * dependency inputs pointed at the running local servers, so `service.load()`
+ * hydrates the same client shapes a deploy would — no hand-built deps, no cloud
  * credentials.
  *
  * `email` is wired to `startLocalEmailServer`'s outbox — the SAME
  * `emailSender(authTemplates).connection.hydrate(...)` call a deploy graph
  * produces, no full `Load` graph needed. Signup requires verification
- * (`requireEmailVerification: true`), so this test reads the verification
- * link back through the email module's outbox port (not the in-memory
- * `capturedEmails` capture) and follows it before logging in — the
+ * (`requireEmailVerification: true`), so this test reads the verification link
+ * back through the ops service's own find-sent-email route (onto the email
+ * module's outbox port) and follows it before logging in — the
  * module-depends-on-module proof this example exists to make.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { makeClient } from '@prisma/composer/service-rpc';
-import {
-  authAdminContract,
-  authSessionContract,
-  authTemplates,
-  jwtVerifier,
-} from '@prisma/composer-prisma-cloud/auth';
+import { authTemplates } from '@prisma/composer-prisma-cloud/auth';
 import type { LocalAuthServer } from '@prisma/composer-prisma-cloud/auth/testing';
 import { startLocalAuthServer } from '@prisma/composer-prisma-cloud/auth/testing';
-import { emailOutboxContract, emailSender } from '@prisma/composer-prisma-cloud/email';
+import { emailSender } from '@prisma/composer-prisma-cloud/email';
 import type { LocalEmailServer } from '@prisma/composer-prisma-cloud/email/testing';
 import { startLocalEmailServer } from '@prisma/composer-prisma-cloud/email/testing';
-import { createApiApp } from '../src/api/app.ts';
-import { createOpsApp } from '../src/ops/app.ts';
+import type { BootstrappedService } from '@prisma/composer-prisma-cloud/testing';
+import { bootstrapService } from '@prisma/composer-prisma-cloud/testing';
+import apiService from '../src/api/service.ts';
+import opsService from '../src/ops/service.ts';
 import {
   createTestDatabase,
   startTestPostgres,
@@ -45,17 +43,19 @@ if (pgServer === undefined) {
 
 const EMAIL = 'local@example.com';
 const PASSWORD = 'correct-horse-battery';
+const API_PORT = 4520;
+const OPS_PORT = 4521;
 
 describe.skipIf(pgServer === undefined)('the example wiring against startLocalAuthServer', () => {
   if (pgServer === undefined) return;
   let db: TestDatabase;
   let mailServer: LocalEmailServer;
   let auth: LocalAuthServer;
-  let apiApp: (request: Request) => Promise<Response>;
-  let opsApp: (request: Request) => Promise<Response>;
+  let apiApp: BootstrappedService;
+  let opsApp: BootstrappedService;
 
-  const call = (app: (request: Request) => Promise<Response>, path: string, init?: RequestInit) =>
-    app(new Request(`https://app.example${path}`, init));
+  const call = (app: BootstrappedService, path: string, init?: RequestInit) =>
+    app.fetch(new URL(path, app.url), init);
   const json = (body: unknown, headers: Record<string, string> = {}) => ({
     method: 'POST',
     headers: { 'content-type': 'application/json', ...headers },
@@ -68,15 +68,19 @@ describe.skipIf(pgServer === undefined)('the example wiring against startLocalAu
     const email = await emailSender(authTemplates).connection.hydrate({ url: mailServer.url });
     auth = await startLocalAuthServer({ databaseUrl: db.url, email });
 
-    // The same binding shapes the framework hydrates in the deployed app.
-    apiApp = createApiApp({
-      authApi: { url: auth.url, fetch: (path, init) => fetch(new URL(path, auth.url), init) },
-      verifier: await jwtVerifier().connection.hydrate({ url: auth.url }),
-      session: makeClient(authSessionContract, auth.url),
+    // Boot each service's real built entry with its inputs pointed at the local
+    // servers — the framework hydrates the same client shapes a deploy would.
+    apiApp = await bootstrapService(apiService, {
+      service: { port: API_PORT },
+      inputs: {
+        authApi: { url: auth.url },
+        verifier: { url: auth.url },
+        session: { url: auth.url },
+      },
     });
-    opsApp = createOpsApp({
-      admin: makeClient(authAdminContract, auth.url),
-      outbox: makeClient(emailOutboxContract, mailServer.url),
+    opsApp = await bootstrapService(opsService, {
+      service: { port: OPS_PORT },
+      inputs: { admin: { url: auth.url }, outbox: { url: mailServer.url } },
     });
   });
   afterAll(async () => {
