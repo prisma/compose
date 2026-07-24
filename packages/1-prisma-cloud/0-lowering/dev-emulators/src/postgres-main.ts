@@ -604,9 +604,9 @@ function main(): void {
     // DATABASE port is pinned regardless — endpoints in deploy state
     // reference it.
     const registryPorts = await registryClaimedPorts(internalState);
-    let dbPort =
-      existingRecord?.databasePort ??
-      (await smallestUnusedDatabasePort(MIN_DATABASE_PORT, registryPorts));
+    // Assigned inside the serialized section below; a persisted port is
+    // fixed here and never re-picked.
+    let dbPort = existingRecord?.databasePort ?? 0;
 
     const conflicted = new Set<number>();
     let alreadyRunningRetries = 0;
@@ -620,27 +620,42 @@ function main(): void {
       // once). Our pick both OS-probes (getPort) and excludes every
       // recorded claim, and a refusal of any of the four carries the
       // port, which the retry below turns into fresh candidates.
-      const auxExclude = new Set([...registryPorts, ...conflicted, dbPort]);
-      const pickAux = async (): Promise<number> => {
-        const port = await smallestUnusedDatabasePort(MIN_DATABASE_PORT, auxExclude);
-        auxExclude.add(port);
-        return port;
-      };
-      const httpPort = await pickAux();
-      const shadowPort = await pickAux();
-      const streamsPort = await pickAux();
-      const auxPorts = [httpPort, shadowPort, streamsPort];
+      //
+      // Picks happen INSIDE the serialized section, together with the
+      // start they feed: an app converges several databases at once, and
+      // a pick made outside the queue cannot see the ports a sibling's
+      // queued start is about to bind — both ensures would pick the same
+      // free candidates, and the loser's refusal leaks its name's lock
+      // (observed on CI as "already running" with the retry budget spent
+      // on clash-recover cycles).
+      const auxPorts: number[] = [];
       try {
-        const server = await serializeStart(() =>
-          prismaDev.startPrismaDevServer({
+        const server = await serializeStart(async () => {
+          if (isFreshAllocation) {
+            dbPort = await smallestUnusedDatabasePort(
+              MIN_DATABASE_PORT,
+              new Set([...registryPorts, ...conflicted]),
+            );
+          }
+          const auxExclude = new Set([...registryPorts, ...conflicted, dbPort]);
+          const pickAux = async (): Promise<number> => {
+            const port = await smallestUnusedDatabasePort(MIN_DATABASE_PORT, auxExclude);
+            auxExclude.add(port);
+            auxPorts.push(port);
+            return port;
+          };
+          const httpPort = await pickAux();
+          const shadowPort = await pickAux();
+          const streamsPort = await pickAux();
+          return prismaDev.startPrismaDevServer({
             name: instanceName,
             databasePort: dbPort,
             port: httpPort,
             shadowDatabasePort: shadowPort,
             streamsPort,
             persistenceMode: 'stateful',
-          }),
-        );
+          });
+        });
         const url = server.database.connectionString;
         leakedStartNames.delete(instanceName);
         runtimes.set(instanceName, server);
@@ -728,13 +743,9 @@ function main(): void {
             `postgres emulator failed to start database "${instanceName}" on port ${String(dbPort)}: ${maskCredentials(firstLine(reason))}`,
           );
         }
+        // The next attempt re-picks every non-pinned port inside the
+        // serialized section, skipping everything conflicted so far.
         conflicted.add(conflictPort);
-        if (conflictPort === dbPort) {
-          dbPort = await smallestUnusedDatabasePort(
-            dbPort + 1,
-            new Set([...conflicted, ...registryPorts]),
-          );
-        }
       }
     }
   }
